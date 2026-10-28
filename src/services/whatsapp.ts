@@ -94,9 +94,9 @@ export function startWhatsApp(): Client {
     waState.status = 'authenticated';
     waState.qr = null;
     readyTimer = setTimeout(() => {
-      console.error('Authenticated but not ready after 90s; restarting.');
+      console.error('Authenticated but not ready after 45s; restarting.');
       process.exit(1);
-    }, 90_000);
+    }, 45_000);
   });
   client.on('ready', () => {
     clearTimeout(readyTimer);
@@ -171,20 +171,15 @@ export function startWhatsApp(): Client {
   let polling = false;
   let pollErrLogged = false;
   setInterval(async () => {
-    if (waState.status !== 'ready' || polling || !client.pupPage) return;
+    if (waState.status !== 'ready' || polling) return;
     polling = true;
     const since = pollSince;
     pollSince = Math.floor(Date.now() / 1000) - 20; // overlap window
     try {
-      const ids: string[] = await client.pupPage.evaluate(
-        (t: number) =>
-          (globalThis as any).Store.Chat.getModelsArray()
-            .filter((c: any) => !c.isGroup && c.t >= t && /@(c\.us|lid)$/.test(c.id._serialized))
-            .map((c: any) => c.id._serialized),
-        since
+      const chats = (await client.getChats()).filter(
+        (c) => !c.isGroup && c.timestamp >= since && /@(c\.us|lid)$/.test(c.id._serialized)
       );
-      for (const id of ids) {
-        const chat = await client.getChatById(id);
+      for (const chat of chats) {
         for (const m of await chat.fetchMessages({ limit: 8 })) {
           if (!m.fromMe && m.timestamp >= since) await onIncoming(m);
         }
