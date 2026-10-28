@@ -85,11 +85,18 @@ export function startWhatsApp(): Client {
     console.log('Scan this QR with WhatsApp > Linked devices:');
     qrcodeTerminal.generate(qr, { small: true });
   });
+  // Known flaky case: session restores ("authenticated") but WhatsApp Web never reaches ready. Restart to recover.
+  let readyTimer: NodeJS.Timeout | undefined;
   client.on('authenticated', () => {
     waState.status = 'authenticated';
     waState.qr = null;
+    readyTimer = setTimeout(() => {
+      console.error('Authenticated but not ready after 90s; restarting.');
+      process.exit(1);
+    }, 90_000);
   });
   client.on('ready', () => {
+    clearTimeout(readyTimer);
     waState.status = 'ready';
     waState.qr = null;
     console.log('WhatsApp Web client is ready.');
