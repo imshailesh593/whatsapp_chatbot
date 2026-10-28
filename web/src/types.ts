@@ -44,3 +44,13 @@ export interface PatchBody {
   notes?: string;
   status?: Status;
 }
+
+export interface AdminUser {
+  id: string;
+  email: string;
+}
+
+export interface AdminRow extends AdminUser {
+  createdAt: string;
+  lastLoginAt: string | null;
+}

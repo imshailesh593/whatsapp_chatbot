@@ -1,4 +1,4 @@
-import type { ChatMessage, Contact, Overview, PatchBody } from './types';
+import type { AdminRow, AdminUser, ChatMessage, Contact, Overview, PatchBody } from './types';
 
 export class UnauthorizedError extends Error {}
 
@@ -6,7 +6,7 @@ async function request<T>(url: string, init?: RequestInit): Promise<T> {
   const res = await fetch(url, {
     credentials: 'same-origin',
     ...init,
-    headers: { 'Content-Type': 'application/json', ...(init?.headers ?? {}) }
+    headers: { ...(init?.body ? { 'Content-Type': 'application/json' } : {}), ...(init?.headers ?? {}) }
   });
   if (res.status === 401 && !url.endsWith('/login')) throw new UnauthorizedError('unauthorized');
   const data = await res.json().catch(() => ({}));
@@ -17,8 +17,12 @@ async function request<T>(url: string, init?: RequestInit): Promise<T> {
 const post = <T,>(url: string, body: unknown) => request<T>(url, { method: 'POST', body: JSON.stringify(body) });
 
 export const api = {
-  me: () => request<{ authed: boolean }>('/admin/api/me'),
-  login: (token: string) => post<{ ok: true }>('/admin/api/login', { token }),
+  me: () => request<{ authed: boolean; user?: AdminUser }>('/admin/api/me'),
+  login: (email: string, password: string) => post<{ ok: true; user: AdminUser }>('/admin/api/login', { email, password }),
+  changePassword: (current: string, next: string) => post<{ ok: true }>('/admin/api/password', { current, next }),
+  admins: () => request<{ admins: AdminRow[] }>('/admin/api/admins').then((r) => r.admins),
+  addAdmin: (email: string, password: string) => post<{ admin: AdminUser }>('/admin/api/admins', { email, password }),
+  removeAdmin: (id: string) => request<{ ok: true }>('/admin/api/admins/' + encodeURIComponent(id), { method: 'DELETE' }),
   logout: () => post<{ ok: true }>('/admin/api/logout', {}),
   overview: () => request<Overview>('/admin/api/overview'),
   contacts: (includeTest: boolean) =>

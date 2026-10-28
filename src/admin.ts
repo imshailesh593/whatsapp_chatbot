@@ -1,10 +1,21 @@
 import fs from 'fs';
 import path from 'path';
-import crypto from 'crypto';
 import { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import fastifyStatic from '@fastify/static';
 import { Prisma, SessionStage } from '@prisma/client';
 import { prisma } from './lib/prisma';
+import {
+  MIN_PASSWORD_LENGTH,
+  authConfigured,
+  bootstrapAdmin,
+  hashPassword,
+  isValidEmail,
+  normalizeEmail,
+  readSession,
+  signSession,
+  verifyAgainstDummy,
+  verifyPassword
+} from './lib/auth';
 import { QUESTION_BRANCHES, TOPMATE_URL } from './constants/questions';
 import { handleIncomingMessage } from './services/engine';
 import { captureReplies, sendTextMessage } from './services/transport';
@@ -22,11 +33,6 @@ const WEB_DIST = path.join(__dirname, '..', 'web', 'dist');
 
 type Status = 'IN_PROGRESS' | 'COMPLETED' | 'CONSULTATION_BOOKED' | 'FOLLOW_UP';
 
-const sign = (token: string) => crypto.createHmac('sha256', token).update('mns-admin-session').digest('hex');
-const safeEq = (a: string, b: string) => {
-  const x = Buffer.from(a), y = Buffer.from(b);
-  return x.length === y.length && crypto.timingSafeEqual(x, y);
-};
 function cookie(req: FastifyRequest, name: string): string | undefined {
   for (const part of (req.headers.cookie ?? '').split(';')) {
     const [k, ...v] = part.trim().split('=');
@@ -71,30 +77,68 @@ function toContact(s: SessionWithLead) {
 }
 
 export function registerAdmin(app: FastifyInstance, opts: { getWaStatus: () => string }): void {
-  const token = process.env.ADMIN_TOKEN;
+  const enabled = authConfigured();
   const attempts = new Map<string, { n: number; reset: number }>();
 
-  const authed = (req: FastifyRequest) => !!token && safeEq(cookie(req, 'mns_admin') ?? '', sign(token));
-  const guard = async (req: FastifyRequest, reply: FastifyReply) => {
-    if (!token) return reply.status(404).send();
-    if (!authed(req)) return reply.status(401).send({ error: 'unauthorized' });
+  // Accept an empty body with Content-Type: application/json (DELETE/POST without payload) instead of failing with 400
+  app.removeContentTypeParser('application/json');
+  app.addContentTypeParser('application/json', { parseAs: 'string' }, (_req, body, done) => {
+    if (!body) return done(null, {});
+    try {
+      done(null, JSON.parse(body as string));
+    } catch (err) {
+      (err as any).statusCode = 400;
+      done(err as Error, undefined);
+    }
+  });
+
+  bootstrapAdmin().catch((e) => console.error('[admin] bootstrap failed:', e));
+
+  const adminOf = async (req: FastifyRequest) => {
+    const uid = readSession(cookie(req, 'mns_admin'));
+    return uid ? prisma.adminUser.findUnique({ where: { id: uid } }) : null;
   };
+  const guard = async (req: FastifyRequest, reply: FastifyReply) => {
+    if (!enabled) return reply.status(404).send();
+    const admin = await adminOf(req);
+    if (!admin) return reply.status(401).send({ error: 'unauthorized' });
+    (req as any).admin = admin;
+  };
+  const me = (req: FastifyRequest) => (req as any).admin as { id: string; email: string };
   const secureFlag = (req: FastifyRequest) => (req.headers['x-forwarded-proto'] === 'https' ? '; Secure' : '');
+  const setSession = (req: FastifyRequest, reply: FastifyReply, userId: string) =>
+    reply.header('Set-Cookie', `mns_admin=${signSession(userId)}; HttpOnly; SameSite=Strict; Path=/admin; Max-Age=2592000${secureFlag(req)}`);
+
+  // Failed-login throttle per IP and per email (in memory; resets on restart)
+  const throttled = (k: string) => {
+    const a = attempts.get(k);
+    return !!a && a.reset > Date.now() && a.n >= 10;
+  };
+  const fail = (k: string) => {
+    const now = Date.now();
+    const a = attempts.get(k);
+    attempts.set(k, a && a.reset > now ? { n: a.n + 1, reset: a.reset } : { n: 1, reset: now + 15 * 60_000 });
+  };
 
   // ---- auth ----
   app.post('/admin/api/login', async (req, reply) => {
-    if (!token) return reply.status(404).send();
+    if (!enabled) return reply.status(404).send();
+    const email = normalizeEmail((req.body as any)?.email);
+    const password = String((req.body as any)?.password ?? '');
     const ip = String(req.headers['x-forwarded-for'] ?? req.ip).split(',')[0].trim();
-    const now = Date.now();
-    const a = attempts.get(ip);
-    if (a && a.reset > now && a.n >= 10) return reply.status(429).send({ error: 'Too many attempts. Try again later.' });
-    const given = String((req.body as any)?.token ?? '');
-    if (!safeEq(given, token)) {
-      attempts.set(ip, a && a.reset > now ? { n: a.n + 1, reset: a.reset } : { n: 1, reset: now + 15 * 60_000 });
-      return reply.status(401).send({ error: 'Wrong token' });
+    if (throttled(`ip:${ip}`) || throttled(`em:${email}`)) {
+      return reply.status(429).send({ error: 'Too many attempts. Try again in 15 minutes.' });
     }
-    reply.header('Set-Cookie', `mns_admin=${sign(token)}; HttpOnly; SameSite=Strict; Path=/admin; Max-Age=2592000${secureFlag(req)}`);
-    return { ok: true };
+    const user = email ? await prisma.adminUser.findUnique({ where: { email } }) : null;
+    const ok = user ? await verifyPassword(password, user.passwordHash) : await verifyAgainstDummy(password);
+    if (!user || !ok) {
+      fail(`ip:${ip}`);
+      fail(`em:${email}`);
+      return reply.status(401).send({ error: 'Wrong email or password' });
+    }
+    await prisma.adminUser.update({ where: { id: user.id }, data: { lastLoginAt: new Date() } });
+    setSession(req, reply, user.id);
+    return { ok: true, user: { id: user.id, email: user.email } };
   });
 
   app.post('/admin/api/logout', async (_req, reply) => {
@@ -103,8 +147,45 @@ export function registerAdmin(app: FastifyInstance, opts: { getWaStatus: () => s
   });
 
   app.get('/admin/api/me', async (req, reply) => {
-    if (!token) return reply.status(404).send();
-    return { authed: authed(req) };
+    if (!enabled) return reply.status(404).send();
+    const admin = await adminOf(req);
+    return admin ? { authed: true, user: { id: admin.id, email: admin.email } } : { authed: false };
+  });
+
+  app.post('/admin/api/password', { preHandler: guard }, async (req, reply) => {
+    const b = (req.body ?? {}) as { current?: string; next?: string };
+    const next = String(b.next ?? '');
+    if (next.length < MIN_PASSWORD_LENGTH) return reply.status(400).send({ error: `New password must be at least ${MIN_PASSWORD_LENGTH} characters` });
+    const user = await prisma.adminUser.findUnique({ where: { id: me(req).id } });
+    if (!user || !(await verifyPassword(String(b.current ?? ''), user.passwordHash))) {
+      return reply.status(403).send({ error: 'Current password is incorrect' });
+    }
+    await prisma.adminUser.update({ where: { id: user.id }, data: { passwordHash: await hashPassword(next) } });
+    return { ok: true };
+  });
+
+  // ---- admin users ----
+  app.get('/admin/api/admins', { preHandler: guard }, async () => {
+    const rows = await prisma.adminUser.findMany({ orderBy: { createdAt: 'asc' } });
+    return { admins: rows.map((a) => ({ id: a.id, email: a.email, createdAt: a.createdAt.toISOString(), lastLoginAt: a.lastLoginAt?.toISOString() ?? null })) };
+  });
+
+  app.post('/admin/api/admins', { preHandler: guard }, async (req, reply) => {
+    const b = (req.body ?? {}) as { email?: string; password?: string };
+    const email = normalizeEmail(b.email);
+    const password = String(b.password ?? '');
+    if (!isValidEmail(email)) return reply.status(400).send({ error: 'Enter a valid email address' });
+    if (password.length < MIN_PASSWORD_LENGTH) return reply.status(400).send({ error: `Password must be at least ${MIN_PASSWORD_LENGTH} characters` });
+    if (await prisma.adminUser.findUnique({ where: { email } })) return reply.status(409).send({ error: 'That email is already an admin' });
+    const a = await prisma.adminUser.create({ data: { email, passwordHash: await hashPassword(password) } });
+    return { admin: { id: a.id, email: a.email } };
+  });
+
+  app.delete('/admin/api/admins/:id', { preHandler: guard }, async (req, reply) => {
+    const { id } = req.params as { id: string };
+    if (id === me(req).id) return reply.status(400).send({ error: 'You cannot remove your own account' });
+    const r = await prisma.adminUser.deleteMany({ where: { id } });
+    return r.count ? { ok: true } : reply.status(404).send({ error: 'Admin not found' });
   });
 
   // ---- data ----

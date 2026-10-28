@@ -2,10 +2,12 @@
 import dotenv from 'dotenv';
 dotenv.config();
 process.env.ADMIN_TOKEN = 'testtoken';
+process.env.ADMIN_EMAIL = '';
 import Fastify from 'fastify';
 import { registerAdmin } from '../src/admin';
 import { setTransport } from '../src/services/transport';
 import { prisma } from '../src/lib/prisma';
+import { hashPassword } from '../src/lib/auth';
 import { QUESTION_BRANCHES } from '../src/constants/questions';
 import { handleIncomingMessage } from '../src/services/engine';
 
@@ -21,12 +23,39 @@ setTransport({ sendText: async (_to, text) => void sent.push(text) });
 
   let r = await app.inject('/admin/api/contacts');
   ok(r.statusCode === 401, 'API requires login');
-  r = await app.inject({ method: 'POST', url: '/admin/api/login', headers: J, payload: { token: 'wrong' } });
-  ok(r.statusCode === 401, 'wrong token rejected');
-  r = await app.inject({ method: 'POST', url: '/admin/api/login', headers: J, payload: { token: 'testtoken' } });
+  await prisma.adminUser.deleteMany({ where: { email: { endsWith: '@admin-test.local' } } });
+  await prisma.adminUser.create({ data: { email: 'boss@admin-test.local', passwordHash: await hashPassword('correct horse battery') } });
+  const login = (email: string, password: string) => app.inject({ method: 'POST', url: '/admin/api/login', headers: J, payload: { email, password } });
+  ok((await login('boss@admin-test.local', 'wrong password!!')).statusCode === 401, 'wrong password rejected');
+  ok((await login('nobody@admin-test.local', 'correct horse battery')).statusCode === 401, 'unknown email rejected');
+  ok((await app.inject({ method: 'POST', url: '/admin/api/login', headers: J, payload: { token: 'testtoken' } })).statusCode === 401, 'admin token no longer logs in');
+  r = await login('  BOSS@Admin-Test.local ', 'correct horse battery');
   const h = { cookie: String(r.headers['set-cookie']).split(';')[0], ...J };
-  ok(r.statusCode === 200, 'login sets cookie');
-  ok((await app.inject({ url: '/admin/api/me', headers: h })).json().authed === true, '/me reports authed');
+  ok(r.statusCode === 200 && r.json().user.email === 'boss@admin-test.local', 'login (email normalised) sets cookie');
+  ok((await app.inject({ url: '/admin/api/me', headers: h })).json().user.email === 'boss@admin-test.local', '/me returns the signed-in admin');
+  ok((await app.inject({ url: '/admin/api/contacts', headers: { cookie: 'mns_admin=forged.value' } })).statusCode === 401, 'forged cookie rejected');
+
+  // admin management
+  ok((await app.inject({ method: 'POST', url: '/admin/api/admins', headers: h, payload: { email: 'bad', password: 'long enough pw' } })).statusCode === 400, 'invalid email refused');
+  ok((await app.inject({ method: 'POST', url: '/admin/api/admins', headers: h, payload: { email: 'two@admin-test.local', password: 'short' } })).statusCode === 400, 'short password refused');
+  r = await app.inject({ method: 'POST', url: '/admin/api/admins', headers: h, payload: { email: 'two@admin-test.local', password: 'second admin pw 1' } });
+  const twoId = r.json().admin.id;
+  ok(r.statusCode === 200 && (await login('two@admin-test.local', 'second admin pw 1')).statusCode === 200, 'new admin can sign in');
+  ok((await app.inject({ method: 'POST', url: '/admin/api/admins', headers: h, payload: { email: 'two@admin-test.local', password: 'second admin pw 1' } })).statusCode === 409, 'duplicate admin refused');
+  ok((await app.inject({ method: 'GET', url: '/admin/api/admins', headers: h })).json().admins.length >= 2, 'admin list');
+  r = await app.inject({ method: 'POST', url: '/admin/api/password', headers: h, payload: { current: 'nope nope nope', next: 'brand new password' } });
+  ok(r.statusCode === 403, 'password change needs the current password');
+  r = await app.inject({ method: 'POST', url: '/admin/api/password', headers: h, payload: { current: 'correct horse battery', next: 'brand new password' } });
+  ok(r.statusCode === 200 && (await login('boss@admin-test.local', 'brand new password')).statusCode === 200 && (await login('boss@admin-test.local', 'correct horse battery')).statusCode === 401, 'password change works');
+  const bossId = (await prisma.adminUser.findUnique({ where: { email: 'boss@admin-test.local' } }))!.id;
+  ok((await app.inject({ method: 'DELETE', url: '/admin/api/admins/' + bossId, headers: h })).statusCode === 400, 'cannot remove yourself');
+  const two = await login('two@admin-test.local', 'second admin pw 1');
+  const h2 = { cookie: String(two.headers['set-cookie']).split(';')[0], ...J };
+  ok((await app.inject({ method: 'DELETE', url: '/admin/api/admins/' + twoId, headers: h })).statusCode === 200, 'admin removed');
+  ok((await app.inject({ url: '/admin/api/contacts', headers: h2 })).statusCode === 401, 'removed admin loses access immediately');
+  // throttling
+  for (let i = 0; i < 10; i++) await login('victim@admin-test.local', 'x');
+  ok((await login('victim@admin-test.local', 'x')).statusCode === 429, 'repeated failures are throttled');
 
   r = await app.inject({ url: '/admin/api/overview', headers: h });
   ok(r.json().services.length === 5 && r.json().whatsapp === 'ready', 'overview has 5 services + WA status');
@@ -91,6 +120,7 @@ setTransport({ sendText: async (_to, text) => void sent.push(text) });
   await app.inject({ method: 'POST', url: '/admin/api/simulate/reset', headers: h, payload: { id: 'tst' } });
   await prisma.webhookLog.deleteMany({ where: { phoneNumber: '910000000009' } });
   await prisma.session.delete({ where: { id: real.id } });
+  await prisma.adminUser.deleteMany({ where: { email: { endsWith: '@admin-test.local' } } });
   console.log('ADMIN API OK');
   process.exit(0);
 })().catch((e) => { console.error(e); process.exit(1); });

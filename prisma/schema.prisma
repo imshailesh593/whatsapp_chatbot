@@ -69,3 +69,13 @@ model WebhookLog {
   @@index([phoneNumber, createdAt])
   @@map("mns_webhook_logs")
 }
+
+model AdminUser {
+  id           String    @id @default(uuid())
+  email        String    @unique
+  passwordHash String    @map("password_hash")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  lastLoginAt  DateTime? @map("last_login_at")
+
+  @@map("mns_admin_users")
+}

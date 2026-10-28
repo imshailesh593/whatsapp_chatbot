@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Calendar, CheckCircle2, Clock, ExternalLink, Globe, LogOut, MessageSquare, ShieldCheck, Smartphone, Users } from 'lucide-react';
+import { Calendar, CheckCircle2, Clock, ExternalLink, Globe, MessageSquare, ShieldCheck, Smartphone, Users } from 'lucide-react';
 import { api, UnauthorizedError } from './api';
-import type { Contact, Overview } from './types';
+import type { AdminUser, Contact, Overview } from './types';
+import AccountMenu from './components/AccountMenu';
 import Login from './components/Login';
 import Crm from './components/Crm';
 import Simulator from './components/Simulator';
@@ -12,18 +13,18 @@ import Dossier from './components/Dossier';
 type Tab = 'crm' | 'simulator' | 'inbox' | 'config';
 
 export default function App() {
-  const [authed, setAuthed] = useState<boolean | null>(null);
+  const [user, setUser] = useState<AdminUser | null | undefined>(undefined);
 
   useEffect(() => {
-    api.me().then((r) => setAuthed(r.authed)).catch(() => setAuthed(false));
+    api.me().then((r) => setUser(r.authed && r.user ? r.user : null)).catch(() => setUser(null));
   }, []);
 
-  if (authed === null) return <div className="min-h-screen bg-slate-900" />;
-  if (!authed) return <Login onDone={() => setAuthed(true)} />;
-  return <Console onSignedOut={() => setAuthed(false)} />;
+  if (user === undefined) return <div className="min-h-screen bg-slate-900" />;
+  if (!user) return <Login onDone={setUser} />;
+  return <Console user={user} onSignedOut={() => setUser(null)} />;
 }
 
-function Console({ onSignedOut }: { onSignedOut: () => void }) {
+function Console({ user, onSignedOut }: { user: AdminUser; onSignedOut: () => void }) {
   const [tab, setTab] = useState<Tab>('crm');
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [overview, setOverview] = useState<Overview | null>(null);
@@ -130,13 +131,7 @@ function Console({ onSignedOut }: { onSignedOut: () => void }) {
                   <ExternalLink className="w-3.5 h-3.5" />
                 </a>
               )}
-              <button
-                onClick={() => api.logout().finally(onSignedOut)}
-                className="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg border border-slate-800 hover:bg-slate-900 text-slate-300 transition"
-              >
-                <LogOut className="w-3.5 h-3.5" />
-                <span className="hidden sm:inline">Sign out</span>
-              </button>
+              <AccountMenu user={user} onSignOut={() => api.logout().finally(onSignedOut)} />
             </div>
           </div>
 
@@ -172,7 +167,7 @@ function Console({ onSignedOut }: { onSignedOut: () => void }) {
         )}
         {tab === 'inbox' && <Inbox contacts={contacts} waReady={waReady} onChanged={replaceContact} />}
         {tab === 'simulator' && <Simulator onActivity={refresh} />}
-        {tab === 'config' && overview && <Settings overview={overview} />}
+        {tab === 'config' && overview && <Settings overview={overview} me={user} />}
       </main>
 
       {selectedContact && (

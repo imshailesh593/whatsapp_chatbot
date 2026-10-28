@@ -6,13 +6,19 @@ Slot-filling funnel: welcome → service (1-5) → one question at a time → le
 Spec: [mns_institute_whatsapp_automation_blueprint.md](mns_institute_whatsapp_automation_blueprint.md)
 
 ## Admin console (`/admin/`)
-Sign in with `ADMIN_TOKEN`. Everything runs on the live database:
+Sign in with an admin email and password (add or remove admins under *Questionnaires & Settings*, change your own password from the account menu). Everything runs on the live database:
 - **Leads CRM**: every contact, search/filter, funnel progress, status (qualified / Topmate booked / follow-up), notes, CSV export.
 - **Live Inbox & Human Takeover**: real message history; pause the bot for a chat and reply from the console (sent through the linked WhatsApp).
 - **Bot Simulator**: chat with the real bot logic; nothing is sent to WhatsApp. Test data is hidden from CRM/stats/export unless "Show simulator data" is ticked.
 - **Questionnaires & Settings**: the live question matrix, Topmate link, WhatsApp connection status.
 
 QR for linking WhatsApp: `/qr?token=<ADMIN_TOKEN>`.
+
+Create the first admin (or reset a forgotten password) on the server:
+```sh
+docker compose exec bot node dist/cli/adminUser.js you@example.com 'a-long-password'
+```
+(or set `ADMIN_EMAIL` + `ADMIN_PASSWORD` in `.env` before first start).
 
 ## Run locally
 ```sh
