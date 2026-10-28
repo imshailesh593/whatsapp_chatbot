@@ -1,6 +1,8 @@
 # Override for a server that already runs Coolify's Traefik proxy (network "coolify").
 # Usage: docker compose -p mnsbot -f docker-compose.yml -f docker-compose.vps.yml up -d --build
 # Requires BOT_DOMAIN in .env (e.g. chatbot.mnsinstitutejobs.com). No host ports are published.
+# Optional BOT_DOMAIN_ALT (e.g. 201-18-198-8.sslip.io) gets its own router/certificate so one
+# unresolvable hostname can't block the other's certificate.
 services:
   bot:
     ports: !reset []
@@ -8,15 +10,28 @@ services:
     labels:
       - traefik.enable=true
       - traefik.docker.network=coolify
+      - traefik.http.services.mnsbot.loadbalancer.server.port=3000
+      - traefik.http.middlewares.mnsbot-https.redirectscheme.scheme=https
+      # primary domain
       - traefik.http.routers.mnsbot.rule=Host(`${BOT_DOMAIN}`)
       - traefik.http.routers.mnsbot.entrypoints=https
       - traefik.http.routers.mnsbot.tls=true
       - traefik.http.routers.mnsbot.tls.certresolver=letsencrypt
+      - traefik.http.routers.mnsbot.service=mnsbot
       - traefik.http.routers.mnsbot-http.rule=Host(`${BOT_DOMAIN}`)
       - traefik.http.routers.mnsbot-http.entrypoints=http
       - traefik.http.routers.mnsbot-http.middlewares=mnsbot-https
-      - traefik.http.middlewares.mnsbot-https.redirectscheme.scheme=https
-      - traefik.http.services.mnsbot.loadbalancer.server.port=3000
+      - traefik.http.routers.mnsbot-http.service=mnsbot
+      # alternate domain
+      - traefik.http.routers.mnsbot-alt.rule=Host(`${BOT_DOMAIN_ALT:-no-alt.invalid}`)
+      - traefik.http.routers.mnsbot-alt.entrypoints=https
+      - traefik.http.routers.mnsbot-alt.tls=true
+      - traefik.http.routers.mnsbot-alt.tls.certresolver=letsencrypt
+      - traefik.http.routers.mnsbot-alt.service=mnsbot
+      - traefik.http.routers.mnsbot-alt-http.rule=Host(`${BOT_DOMAIN_ALT:-no-alt.invalid}`)
+      - traefik.http.routers.mnsbot-alt-http.entrypoints=http
+      - traefik.http.routers.mnsbot-alt-http.middlewares=mnsbot-https
+      - traefik.http.routers.mnsbot-alt-http.service=mnsbot
 
 networks:
   coolify:

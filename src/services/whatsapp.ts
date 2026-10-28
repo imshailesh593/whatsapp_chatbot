@@ -1,3 +1,5 @@
+import fs from 'fs';
+import path from 'path';
 import { Client, LocalAuth, Message } from 'whatsapp-web.js';
 import qrcodeTerminal from 'qrcode-terminal';
 import { handleIncomingMessage } from './engine';
@@ -38,9 +40,23 @@ async function phoneKey(msg: Message): Promise<string> {
   return msg.from.split('@')[0];
 }
 
+/** A recreated container gets a new hostname, so Chromium sees the saved profile as locked by another machine. */
+function clearStaleProfileLocks(dataPath: string): void {
+  const profile = path.join(dataPath, 'session');
+  for (const f of ['SingletonLock', 'SingletonCookie', 'SingletonSocket']) {
+    try {
+      fs.rmSync(path.join(profile, f), { force: true });
+    } catch {
+      // nothing to clear
+    }
+  }
+}
+
 export function startWhatsApp(): Client {
+  const dataPath = process.env.WA_SESSION_PATH || '.wwebjs_auth';
+  clearStaleProfileLocks(dataPath);
   const client = new Client({
-    authStrategy: new LocalAuth({ dataPath: process.env.WA_SESSION_PATH || '.wwebjs_auth' }),
+    authStrategy: new LocalAuth({ dataPath }),
     puppeteer: {
       headless: true,
       executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined,
