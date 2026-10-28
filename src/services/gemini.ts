@@ -1,7 +1,7 @@
 import { GoogleGenAI } from '@google/genai';
 import { TOPMATE_URL } from '../constants/questions';
 
-const MODEL = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
+const MODEL = process.env.GEMINI_MODEL || 'gemini-3.8-flash';
 
 const SYSTEM_PROMPT = `You are the WhatsApp assistant of MNS INSTITUTE & MNS INSTITUTE JOBS, a career-support company for healthcare and international-career professionals.
 Services: exam coaching (IELTS, OET, NCLEX, Prometric, PLAB, etc.), medical licensing (DHA, MOH, HAAD, SCFHS, NMC, QCHP, Dataflow), international job placement (UK, Ireland, Gulf, Germany, Canada, Australia), and Visa/PR guidance.
