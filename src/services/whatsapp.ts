@@ -32,7 +32,10 @@ function enqueue(key: string, task: () => Promise<void>): void {
 
 async function phoneKey(msg: Message): Promise<string> {
   try {
-    const contact = await msg.getContact();
+    const contact = await Promise.race([
+      msg.getContact(),
+      new Promise<never>((_, rej) => setTimeout(() => rej(new Error('getContact timeout')), 3000))
+    ]);
     if (contact.number) return contact.number;
   } catch {
     // fall through
@@ -113,7 +116,7 @@ export function startWhatsApp(): Client {
   });
 
   // Incoming messages from customers
-  client.on('message', async (msg) => {
+  const onIncoming = async (msg: Message) => {
     if (msg.fromMe || msg.isStatus) return;
     if (!/@(c\.us|lid)$/.test(msg.from)) return; // ignore groups, broadcasts, newsletters
 
@@ -123,6 +126,7 @@ export function startWhatsApp(): Client {
     if (seen.size > 5000) seen.delete(seen.values().next().value as string);
 
     const key = await phoneKey(msg);
+    console.log(`[wa] incoming ${msg.type} from ${msg.from} -> ${key}`);
     chatIds.set(key, msg.from);
     const name = (msg as any)._data?.notifyName as string | undefined;
 
@@ -136,11 +140,13 @@ export function startWhatsApp(): Client {
       }
       await handleIncomingMessage(key, name, msg.body);
     });
-  });
+  };
+  // Listen on both: some WhatsApp Web builds only emit message_create for certain chats. Dedupe is by message id.
+  client.on('message', onIncoming);
 
   // Owner takeover: typing !pause / !resume in a customer's chat from the linked phone
   client.on('message_create', async (msg) => {
-    if (!msg.fromMe) return;
+    if (!msg.fromMe) return void onIncoming(msg);
     const cmd = msg.body.trim().toLowerCase();
     if (cmd !== '!pause' && cmd !== '!resume') return;
     const key = [...chatIds.entries()].find(([, id]) => id === msg.to)?.[0] ?? msg.to.split('@')[0];
@@ -148,6 +154,24 @@ export function startWhatsApp(): Client {
     const r = await prisma.session.updateMany({ where: { phoneNumber: key }, data: { isAgentPaused: paused } });
     console.log(`[Takeover] ${key} ${paused ? 'paused' : 'resumed'} (${r.count} session)`);
   });
+
+  // Heartbeat: if the page lost its connection but never fired 'disconnected', restart instead of silently ignoring chats.
+  let bad = 0;
+  setInterval(async () => {
+    if (waState.status !== 'ready') return;
+    try {
+      const st = await Promise.race([client.getState(), new Promise<string>((r) => setTimeout(() => r('TIMEOUT'), 15_000))]);
+      bad = st === 'CONNECTED' ? 0 : bad + 1;
+      if (st !== 'CONNECTED') console.error('[wa] heartbeat state:', st);
+    } catch (err) {
+      bad++;
+      console.error('[wa] heartbeat error:', (err as Error).message);
+    }
+    if (bad >= 3) {
+      console.error('[wa] connection unhealthy; restarting.');
+      process.exit(1);
+    }
+  }, 60_000);
 
   client.initialize().catch((err) => {
     console.error('WhatsApp initialize failed:', err);
