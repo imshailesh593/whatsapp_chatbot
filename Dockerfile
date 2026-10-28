@@ -1,3 +1,11 @@
+# Build the admin dashboard (React) first
+FROM node:22-slim AS web
+WORKDIR /web
+COPY web/package*.json ./
+RUN npm ci
+COPY web ./
+RUN npm run build
+
 FROM node:22-slim
 
 # System Chromium for whatsapp-web.js (puppeteer's bundled download is skipped)
@@ -15,6 +23,7 @@ COPY prisma ./prisma
 RUN npx prisma generate
 COPY tsconfig.json ./
 COPY src ./src
+COPY --from=web /web/dist ./web/dist
 RUN npm run build && npm prune --omit=dev
 
 ENV WA_SESSION_PATH=/data/wwebjs_auth

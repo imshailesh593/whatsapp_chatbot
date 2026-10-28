@@ -22,12 +22,14 @@ async function main() {
     assert(resolveService(input) === want, `"${input}" -> ${want}`);
   }
 
+  const created: string[] = [];
   const services = ['COACHING', 'LICENSING', 'JOBS', 'VISA_PR', 'GENERAL'];
   const run = Date.now().toString().slice(-6);
 
   for (let i = 0; i < services.length; i++) {
     const svc = services[i];
     const phone = `9199${run}${i}`;
+    created.push(phone);
     const qs = QUESTION_BRANCHES[svc];
     console.log(`\n[${svc}] ${phone}`);
 
@@ -82,6 +84,9 @@ async function main() {
   await handleIncomingMessage(sp, 'Test', 'anyone there?');
   assert(replies(sp).length === n, 'paused session gets no bot reply');
 
+  const mine = [...created, sp];
+  await prisma.webhookLog.deleteMany({ where: { phoneNumber: { in: mine } } });
+  await prisma.session.deleteMany({ where: { phoneNumber: { in: mine } } });
   console.log('\nALL E2E CHECKS PASSED');
 }
 

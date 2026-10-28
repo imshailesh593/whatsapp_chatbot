@@ -6,3 +6,5 @@ dist
 .git
 scripts
 *.md
+web/node_modules
+web/dist

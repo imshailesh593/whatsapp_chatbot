@@ -49,6 +49,7 @@ model Lead {
   serviceCategory ServiceCategory @map("service_category")
   collectedData   Json            @map("collected_data")
   isBookedTopmate Boolean         @default(false) @map("is_booked_topmate")
+  followUp        Boolean         @default(false) @map("follow_up")
   counsellorNotes String?         @map("counsellor_notes")
   createdAt       DateTime        @default(now()) @map("created_at")
   updatedAt       DateTime        @updatedAt @map("updated_at")
@@ -65,5 +66,6 @@ model WebhookLog {
   payload     Json
   createdAt   DateTime @default(now()) @map("created_at")
 
+  @@index([phoneNumber, createdAt])
   @@map("mns_webhook_logs")
 }

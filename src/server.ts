@@ -3,10 +3,13 @@ import dotenv from 'dotenv';
 import QRCode from 'qrcode';
 import { startWhatsApp, waState } from './services/whatsapp';
 import { prisma } from './lib/prisma';
+import { registerAdmin } from './admin';
 
 dotenv.config();
 
 const app = Fastify({ logger: true });
+
+registerAdmin(app, { getWaStatus: () => waState.status });
 
 app.get('/health', async () => ({ ok: true, whatsapp: waState.status }));
 

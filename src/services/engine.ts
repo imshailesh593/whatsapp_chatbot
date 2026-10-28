@@ -11,7 +11,7 @@ import {
   BOOKED_CONFIRMATION_MESSAGE
 } from '../constants/questions';
 import { prisma } from '../lib/prisma';
-import { sendTextMessage as send } from './transport';
+import { sendTextMessage as send, logMessage, isCapturing } from './transport';
 import { answerFreeform } from './gemini';
 
 const RESET_COMMANDS = ['reset', 'menu', 'restart', 'start'];
@@ -42,6 +42,7 @@ export async function handleIncomingMessage(
 ): Promise<void> {
   const text = incomingText.trim();
   if (!text) return;
+  if (!isCapturing()) await logMessage(phoneNumber, 'INBOUND', text);
   const lower = text.toLowerCase();
 
   // 1. Fetch or create session

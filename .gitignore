@@ -3,3 +3,5 @@ dist
 .env
 .wwebjs_auth
 .wwebjs_cache
+web/node_modules
+web/dist
