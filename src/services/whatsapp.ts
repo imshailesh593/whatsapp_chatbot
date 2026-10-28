@@ -138,14 +138,24 @@ export function startWhatsApp(): Client {
         }
         return;
       }
-      await handleIncomingMessage(key, name, msg.body);
+      // Persistent dedupe (events + poller + restarts can all deliver the same message)
+      const dup = await prisma.webhookLog.findFirst({
+        where: { direction: 'INBOUND', payload: { path: ['wamid'], equals: id } },
+        select: { id: true }
+      });
+      if (dup) return;
+      await handleIncomingMessage(key, name, msg.body, id);
     });
   };
   // Listen on both: some WhatsApp Web builds only emit message_create for certain chats. Dedupe is by message id.
-  client.on('message', onIncoming);
+  client.on('message', (msg) => {
+    console.log('[wa:raw] message', msg.type, msg.from, 'fromMe=' + msg.fromMe, msg.id._serialized);
+    void onIncoming(msg);
+  });
 
   // Owner takeover: typing !pause / !resume in a customer's chat from the linked phone
   client.on('message_create', async (msg) => {
+    console.log('[wa:raw] message_create', msg.type, msg.from, 'fromMe=' + msg.fromMe, msg.id._serialized);
     if (!msg.fromMe) return void onIncoming(msg);
     const cmd = msg.body.trim().toLowerCase();
     if (cmd !== '!pause' && cmd !== '!resume') return;
@@ -154,6 +164,38 @@ export function startWhatsApp(): Client {
     const r = await prisma.session.updateMany({ where: { phoneNumber: key }, data: { isAgentPaused: paused } });
     console.log(`[Takeover] ${key} ${paused ? 'paused' : 'resumed'} (${r.count} session)`);
   });
+
+  // Poller: events from WhatsApp Web were observed to stop for a chat after the first message, so also check
+  // recently active 1:1 chats every few seconds. Dedupe (in-memory + DB by message id) makes this safe.
+  let pollSince = Math.floor(Date.now() / 1000) - 120;
+  let polling = false;
+  let pollErrLogged = false;
+  setInterval(async () => {
+    if (waState.status !== 'ready' || polling || !client.pupPage) return;
+    polling = true;
+    const since = pollSince;
+    pollSince = Math.floor(Date.now() / 1000) - 20; // overlap window
+    try {
+      const ids: string[] = await client.pupPage.evaluate(
+        (t: number) =>
+          (globalThis as any).Store.Chat.getModelsArray()
+            .filter((c: any) => !c.isGroup && c.t >= t && /@(c\.us|lid)$/.test(c.id._serialized))
+            .map((c: any) => c.id._serialized),
+        since
+      );
+      for (const id of ids) {
+        const chat = await client.getChatById(id);
+        for (const m of await chat.fetchMessages({ limit: 8 })) {
+          if (!m.fromMe && m.timestamp >= since) await onIncoming(m);
+        }
+      }
+    } catch (err) {
+      if (!pollErrLogged) console.error('[wa] poll error:', (err as Error).message);
+      pollErrLogged = true;
+    } finally {
+      polling = false;
+    }
+  }, 4000);
 
   // Heartbeat: if the page lost its connection but never fired 'disconnected', restart instead of silently ignoring chats.
   let bad = 0;

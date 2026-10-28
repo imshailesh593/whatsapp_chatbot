@@ -23,9 +23,9 @@ export async function captureReplies(fn: () => Promise<void>): Promise<string[]>
   return buf;
 }
 
-export async function logMessage(phone: string, direction: 'INBOUND' | 'OUTBOUND', text: string): Promise<void> {
+export async function logMessage(phone: string, direction: 'INBOUND' | 'OUTBOUND', text: string, wamid?: string): Promise<void> {
   try {
-    await prisma.webhookLog.create({ data: { phoneNumber: phone, direction, payload: { text } } });
+    await prisma.webhookLog.create({ data: { phoneNumber: phone, direction, payload: wamid ? { text, wamid } : { text } } });
   } catch (err) {
     console.error('[log] failed to store message:', (err as Error).message);
   }

@@ -38,11 +38,12 @@ const looksLikeQuestion = (t: string) => t.includes('?') && t.length > 3;
 export async function handleIncomingMessage(
   phoneNumber: string,
   contactName: string | undefined,
-  incomingText: string
+  incomingText: string,
+  messageId?: string
 ): Promise<void> {
   const text = incomingText.trim();
   if (!text) return;
-  if (!isCapturing()) await logMessage(phoneNumber, 'INBOUND', text);
+  if (!isCapturing()) await logMessage(phoneNumber, 'INBOUND', text, messageId);
   const lower = text.toLowerCase();
 
   // 1. Fetch or create session
