@@ -50,12 +50,13 @@ export const SERVICE_SELECTION_MAP: Record<string, string> = {
   "5": "GENERAL"
 };
 
-export const SERVICE_MENU: { id: string; title: string }[] = [
-  { id: "1", title: "Coaching & Exam Prep" },
-  { id: "2", title: "Medical Licensing" },
-  { id: "3", title: "International Jobs" },
-  { id: "4", title: "Visa & PR" },
-  { id: "5", title: "Other Enquiry" }
+/** Keyword fallbacks so "ielts coaching" or "visa" also selects a branch. Order matters (first match wins). */
+export const SERVICE_KEYWORDS: [RegExp, string][] = [
+  [/\bcoaching\b/, 'COACHING'],
+  [/\blicen[sc]/, 'LICENSING'],
+  [/\bjobs?\b/, 'JOBS'],
+  [/\bvisa\b|\bpr\b|\bpermanent residen/, 'VISA_PR'],
+  [/\bother\b|\bgeneral\b/, 'GENERAL']
 ];
 
 export const TOPMATE_URL = process.env.TOPMATE_URL || "https://topmate.io/mnsinstitute/";
@@ -94,3 +95,9 @@ export const CONSULTATION_REMINDER_MESSAGE = `You can schedule your one-to-one c
 
 export const POST_COMPLETION_MESSAGE =
   "Thank you for your message! Our team has received your application details and a counsellor will reach out shortly.\n\nTo restart the service menu, type *MENU*.";
+
+export const BOOKED_CONFIRMATION_MESSAGE =
+  "Thank you for confirming! 🙌 Our counsellor will connect with you shortly regarding your booked consultation.";
+
+export const UNSUPPORTED_MEDIA_MESSAGE =
+  "Sorry, I can only read text messages right now. Please type your reply. 🙏";

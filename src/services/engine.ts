@@ -2,25 +2,38 @@ import { SessionStage, ServiceCategory } from '@prisma/client';
 import {
   QUESTION_BRANCHES,
   SERVICE_SELECTION_MAP,
+  SERVICE_KEYWORDS,
   WELCOME_MESSAGE,
   INVALID_SELECTION_MESSAGE,
   COMPLETION_MESSAGE,
   CONSULTATION_REMINDER_MESSAGE,
-  POST_COMPLETION_MESSAGE
+  POST_COMPLETION_MESSAGE,
+  BOOKED_CONFIRMATION_MESSAGE
 } from '../constants/questions';
 import { prisma } from '../lib/prisma';
-import { sendTextMessage, sendServiceList } from './whatsapp';
+import { sendTextMessage as send } from './transport';
+import { answerFreeform } from './gemini';
 
 const RESET_COMMANDS = ['reset', 'menu', 'restart', 'start'];
+const BOOKED_RE = /already\s+booked|i\s+(have\s+)?booked|booking\s+done|booked\s+(a\s+)?(slot|consultation)/i;
 
-async function sendWelcome(phoneNumber: string): Promise<void> {
-  try {
-    await sendServiceList(phoneNumber, WELCOME_MESSAGE);
-  } catch {
-    // Interactive messages can fail on unsupported clients; fall back to plain text.
-    await sendTextMessage(phoneNumber, WELCOME_MESSAGE);
-  }
+/** Maps "3", "3.", "option 3", "3️⃣" or "international jobs" to a branch key. */
+export function resolveService(text: string): string | undefined {
+  const digit = text.match(/^\D*([1-5])\D*$/);
+  if (digit) return SERVICE_SELECTION_MAP[digit[1]];
+  const lower = text.toLowerCase();
+  return SERVICE_KEYWORDS.find(([re]) => re.test(lower))?.[1];
 }
+
+/** Answer a side question via Gemini. Returns false if Gemini had nothing (not configured / failed). */
+async function tryAnswer(to: string, question: string): Promise<boolean> {
+  const answer = await answerFreeform(question);
+  if (!answer) return false;
+  await send(to, answer);
+  return true;
+}
+
+const looksLikeQuestion = (t: string) => t.includes('?') && t.length > 3;
 
 export async function handleIncomingMessage(
   phoneNumber: string,
@@ -28,6 +41,7 @@ export async function handleIncomingMessage(
   incomingText: string
 ): Promise<void> {
   const text = incomingText.trim();
+  if (!text) return;
   const lower = text.toLowerCase();
 
   // 1. Fetch or create session
@@ -57,7 +71,7 @@ export async function handleIncomingMessage(
         answers: {}
       }
     });
-    await sendWelcome(phoneNumber);
+    await send(phoneNumber, WELCOME_MESSAGE);
     return;
   }
 
@@ -68,14 +82,18 @@ export async function handleIncomingMessage(
         where: { phoneNumber },
         data: { stage: SessionStage.AWAITING_SERVICE_SELECTION }
       });
-      await sendWelcome(phoneNumber);
+      await send(phoneNumber, WELCOME_MESSAGE);
       break;
     }
 
     case SessionStage.AWAITING_SERVICE_SELECTION: {
-      const branchKey = SERVICE_SELECTION_MAP[text];
+      const branchKey = resolveService(text);
       if (!branchKey) {
-        await sendTextMessage(phoneNumber, INVALID_SELECTION_MESSAGE);
+        if (looksLikeQuestion(text) && (await tryAnswer(phoneNumber, text))) {
+          await send(phoneNumber, 'To get started, please reply with the option number (1-5) for the service you need. 😊');
+        } else {
+          await send(phoneNumber, INVALID_SELECTION_MESSAGE);
+        }
         return;
       }
 
@@ -88,7 +106,7 @@ export async function handleIncomingMessage(
           answers: {}
         }
       });
-      await sendTextMessage(phoneNumber, QUESTION_BRANCHES[branchKey][0].question);
+      await send(phoneNumber, QUESTION_BRANCHES[branchKey][0].question);
       break;
     }
 
@@ -106,11 +124,18 @@ export async function handleIncomingMessage(
             answers: {}
           }
         });
-        await sendWelcome(phoneNumber);
+        await send(phoneNumber, WELCOME_MESSAGE);
         return;
       }
 
       const step = session.currentStep;
+
+      // A side question mid-flow: answer it, then repeat the pending question (answer not consumed)
+      if (looksLikeQuestion(text) && (await tryAnswer(phoneNumber, text))) {
+        await send(phoneNumber, questions[step].question);
+        return;
+      }
+
       const updatedAnswers = {
         ...(session.answers as Record<string, string>),
         [questions[step].key]: text
@@ -122,7 +147,7 @@ export async function handleIncomingMessage(
           where: { phoneNumber },
           data: { currentStep: nextStep, answers: updatedAnswers }
         });
-        await sendTextMessage(phoneNumber, questions[nextStep].question);
+        await send(phoneNumber, questions[nextStep].question);
       } else {
         await prisma.$transaction([
           prisma.session.update({
@@ -140,27 +165,24 @@ export async function handleIncomingMessage(
             }
           })
         ]);
-        await sendTextMessage(phoneNumber, COMPLETION_MESSAGE);
+        await send(phoneNumber, COMPLETION_MESSAGE);
       }
       break;
     }
 
     case SessionStage.COMPLETED: {
-      if (/already\s+booked|i\s+(have\s+)?booked|booking\s+done|booked\s+(a\s+)?(slot|consultation)/i.test(text)) {
+      if (BOOKED_RE.test(text)) {
         await prisma.lead.updateMany({ where: { phoneNumber }, data: { isBookedTopmate: true } });
-        await sendTextMessage(
-          phoneNumber,
-          'Thank you for confirming! 🙌 Our counsellor will connect with you shortly regarding your booked consultation.'
-        );
+        await send(phoneNumber, BOOKED_CONFIRMATION_MESSAGE);
       } else if (/consultation|book|fee/.test(lower)) {
-        await sendTextMessage(phoneNumber, CONSULTATION_REMINDER_MESSAGE);
-      } else {
-        await sendTextMessage(phoneNumber, POST_COMPLETION_MESSAGE);
+        await send(phoneNumber, CONSULTATION_REMINDER_MESSAGE);
+      } else if (!(await tryAnswer(phoneNumber, text))) {
+        await send(phoneNumber, POST_COMPLETION_MESSAGE);
       }
       break;
     }
 
     default:
-      await sendWelcome(phoneNumber);
+      await send(phoneNumber, WELCOME_MESSAGE);
   }
 }

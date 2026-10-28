@@ -1,59 +1,134 @@
-import axios from 'axios';
-import dotenv from 'dotenv';
-import { SERVICE_MENU } from '../constants/questions';
-dotenv.config();
+import { Client, LocalAuth, Message } from 'whatsapp-web.js';
+import qrcodeTerminal from 'qrcode-terminal';
+import { handleIncomingMessage } from './engine';
+import { setTransport, sendTextMessage } from './transport';
+import { prisma } from '../lib/prisma';
+import { UNSUPPORTED_MEDIA_MESSAGE } from '../constants/questions';
 
-const TOKEN = process.env.WHATSAPP_API_TOKEN;
-const PHONE_ID = process.env.WHATSAPP_PHONE_NUMBER_ID;
-const VERSION = process.env.GRAPH_API_VERSION || 'v21.0';
+export type WaStatus = 'starting' | 'qr' | 'authenticated' | 'ready' | 'disconnected';
 
-const client = axios.create({
-  baseURL: `${process.env.GRAPH_API_BASE_URL || "https://graph.facebook.com"}/${VERSION}/${PHONE_ID}`,
-  headers: {
-    Authorization: `Bearer ${TOKEN}`,
-    'Content-Type': 'application/json'
-  },
-  timeout: 10000
-});
+export const waState: { status: WaStatus; qr: string | null } = { status: 'starting', qr: null };
 
-async function post(to: string, body: Record<string, unknown>): Promise<void> {
-  try {
-    await client.post('/messages', {
-      messaging_product: 'whatsapp',
-      recipient_type: 'individual',
-      to,
-      ...body
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+// phone number (our session key) -> WhatsApp chat id we last heard from (handles @c.us and @lid)
+const chatIds = new Map<string, string>();
+// per-chat promise chain keeps replies in order and prevents interleaved state updates
+const chains = new Map<string, Promise<void>>();
+const seen = new Set<string>();
+
+function enqueue(key: string, task: () => Promise<void>): void {
+  const prev = chains.get(key) ?? Promise.resolve();
+  const next = prev
+    .then(task)
+    .catch((err) => console.error(`[Worker Error] ${key}:`, err))
+    .finally(() => {
+      if (chains.get(key) === next) chains.delete(key);
     });
-  } catch (error: any) {
-    console.error(`[WhatsApp API Error] Failed to send message to ${to}:`, error.response?.data || error.message);
-    throw error;
+  chains.set(key, next);
+}
+
+async function phoneKey(msg: Message): Promise<string> {
+  try {
+    const contact = await msg.getContact();
+    if (contact.number) return contact.number;
+  } catch {
+    // fall through
   }
+  return msg.from.split('@')[0];
 }
 
-export async function sendTextMessage(to: string, message: string): Promise<void> {
-  await post(to, { type: 'text', text: { body: message, preview_url: true } });
-}
-
-/** Interactive list for service selection. Row ids "1".."5" match SERVICE_SELECTION_MAP. */
-export async function sendServiceList(to: string, bodyText: string): Promise<void> {
-  await post(to, {
-    type: 'interactive',
-    interactive: {
-      type: 'list',
-      header: { type: 'text', text: 'MNS Career Services' },
-      body: { text: bodyText.slice(0, 1024) },
-      action: {
-        button: 'Select Service',
-        sections: [{ title: 'Services', rows: SERVICE_MENU }]
-      }
+export function startWhatsApp(): Client {
+  const client = new Client({
+    authStrategy: new LocalAuth({ dataPath: process.env.WA_SESSION_PATH || '.wwebjs_auth' }),
+    puppeteer: {
+      headless: true,
+      executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined,
+      args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--disable-gpu']
     }
   });
-}
 
-export async function markAsRead(messageId: string): Promise<void> {
-  try {
-    await client.post('/messages', { messaging_product: 'whatsapp', status: 'read', message_id: messageId });
-  } catch {
-    // non-critical
-  }
+  setTransport({
+    async sendText(to, text) {
+      const chatId = chatIds.get(to) ?? `${to}@c.us`;
+      // Small human-like pause; also eases WhatsApp's anti-automation heuristics
+      try {
+        const chat = await client.getChatById(chatId);
+        await chat.sendStateTyping();
+      } catch {
+        // typing indicator is cosmetic
+      }
+      await sleep(600 + Math.random() * 900);
+      await client.sendMessage(chatId, text);
+    }
+  });
+
+  client.on('qr', (qr) => {
+    waState.status = 'qr';
+    waState.qr = qr;
+    console.log('Scan this QR with WhatsApp > Linked devices:');
+    qrcodeTerminal.generate(qr, { small: true });
+  });
+  client.on('authenticated', () => {
+    waState.status = 'authenticated';
+    waState.qr = null;
+  });
+  client.on('ready', () => {
+    waState.status = 'ready';
+    waState.qr = null;
+    console.log('WhatsApp Web client is ready.');
+  });
+  client.on('auth_failure', (m) => {
+    console.error('WhatsApp auth failure:', m);
+    waState.status = 'disconnected';
+  });
+  client.on('disconnected', (reason) => {
+    console.error('WhatsApp disconnected:', reason);
+    waState.status = 'disconnected';
+    // Exit so the process manager (docker restart policy / pm2) brings up a fresh session
+    setTimeout(() => process.exit(1), 1000);
+  });
+
+  // Incoming messages from customers
+  client.on('message', async (msg) => {
+    if (msg.fromMe || msg.isStatus) return;
+    if (!/@(c\.us|lid)$/.test(msg.from)) return; // ignore groups, broadcasts, newsletters
+
+    const id = msg.id._serialized;
+    if (seen.has(id)) return;
+    seen.add(id);
+    if (seen.size > 5000) seen.delete(seen.values().next().value as string);
+
+    const key = await phoneKey(msg);
+    chatIds.set(key, msg.from);
+    const name = (msg as any)._data?.notifyName as string | undefined;
+
+    enqueue(key, async () => {
+      if (msg.type !== 'chat') {
+        const s = await prisma.session.findUnique({ where: { phoneNumber: key } });
+        if (!s?.isAgentPaused) {
+          await sendTextMessage(key, UNSUPPORTED_MEDIA_MESSAGE);
+        }
+        return;
+      }
+      await handleIncomingMessage(key, name, msg.body);
+    });
+  });
+
+  // Owner takeover: typing !pause / !resume in a customer's chat from the linked phone
+  client.on('message_create', async (msg) => {
+    if (!msg.fromMe) return;
+    const cmd = msg.body.trim().toLowerCase();
+    if (cmd !== '!pause' && cmd !== '!resume') return;
+    const key = [...chatIds.entries()].find(([, id]) => id === msg.to)?.[0] ?? msg.to.split('@')[0];
+    const paused = cmd === '!pause';
+    const r = await prisma.session.updateMany({ where: { phoneNumber: key }, data: { isAgentPaused: paused } });
+    console.log(`[Takeover] ${key} ${paused ? 'paused' : 'resumed'} (${r.count} session)`);
+  });
+
+  client.initialize().catch((err) => {
+    console.error('WhatsApp initialize failed:', err);
+    process.exit(1);
+  });
+  return client;
 }

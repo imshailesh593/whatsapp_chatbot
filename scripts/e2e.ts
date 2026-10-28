@@ -1,59 +1,15 @@
-// End-to-end smoke test. Requires: server running (npm run dev) with GRAPH_API_BASE_URL=http://127.0.0.1:4010
-// Usage: npx tsx scripts/e2e.ts
-import http from 'http';
-import crypto from 'crypto';
+// Engine-level end-to-end test against the real database with a fake WhatsApp transport.
+// Usage: npx tsx scripts/e2e.ts   (needs DATABASE_URL; GEMINI_API_KEY optional)
 import dotenv from 'dotenv';
-import { PrismaClient } from '@prisma/client';
+dotenv.config();
+import { prisma } from '../src/lib/prisma';
+import { setTransport } from '../src/services/transport';
+import { handleIncomingMessage, resolveService } from '../src/services/engine';
 import { QUESTION_BRANCHES } from '../src/constants/questions';
 
-dotenv.config();
-const prisma = new PrismaClient();
-const SECRET = process.env.WHATSAPP_APP_SECRET!;
-const BASE = `http://127.0.0.1:${process.env.PORT || 3000}`;
-
-const sent: { to: string; body: any }[] = [];
-const mock = http.createServer((req, res) => {
-  let data = '';
-  req.on('data', (c) => (data += c));
-  req.on('end', () => {
-    const body = JSON.parse(data || '{}');
-    if (body.to) sent.push({ to: body.to, body });
-    res.setHeader('content-type', 'application/json');
-    res.end('{"messages":[{"id":"ok"}]}');
-  });
-});
-
-let n = 0;
-async function inbound(from: string, text: string, interactive = false) {
-  const message: any = { id: `wamid.${Date.now()}.${n++}`, from, timestamp: '1' };
-  if (interactive) {
-    message.type = 'interactive';
-    message.interactive = { type: 'list_reply', list_reply: { id: text, title: 'x' } };
-  } else {
-    message.type = 'text';
-    message.text = { body: text };
-  }
-  const payload = JSON.stringify({
-    object: 'whatsapp_business_account',
-    entry: [{ changes: [{ field: 'messages', value: { contacts: [{ wa_id: from, profile: { name: 'Test' } }], messages: [message] } }] }]
-  });
-  const sig = 'sha256=' + crypto.createHmac('sha256', SECRET).update(payload).digest('hex');
-  const r = await fetch(`${BASE}/api/v1/whatsapp/webhook`, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json', 'x-hub-signature-256': sig },
-    body: payload
-  });
-  if (r.status !== 200) throw new Error(`webhook ${r.status}`);
-}
-
-const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
-async function waitFor(from: string, count: number) {
-  for (let i = 0; i < 60; i++) {
-    if (sent.filter((s) => s.to === from).length >= count) return;
-    await sleep(100);
-  }
-  throw new Error(`timeout waiting for ${count} replies to ${from}, got ${sent.filter((s) => s.to === from).length}`);
-}
+const sent: { to: string; text: string }[] = [];
+setTransport({ sendText: async (to, text) => void sent.push({ to, text }) });
+const replies = (to: string) => sent.filter((s) => s.to === to).map((s) => s.text);
 
 function assert(c: any, msg: string) {
   if (!c) throw new Error('ASSERT FAILED: ' + msg);
@@ -61,82 +17,75 @@ function assert(c: any, msg: string) {
 }
 
 async function main() {
-  await new Promise<void>((r) => mock.listen(4010, r));
-
-  // Security: bad signature / bad verify token
-  const bad = await fetch(`${BASE}/api/v1/whatsapp/webhook`, {
-    method: 'POST', headers: { 'content-type': 'application/json', 'x-hub-signature-256': 'sha256=00' }, body: '{}'
-  });
-  assert(bad.status === 401, 'bad signature rejected (401)');
-  const v = await fetch(`${BASE}/api/v1/whatsapp/webhook?hub.mode=subscribe&hub.verify_token=${process.env.WHATSAPP_VERIFY_TOKEN}&hub.challenge=abc123`);
-  assert((await v.text()) === 'abc123', 'GET verification echoes challenge');
-  const v2 = await fetch(`${BASE}/api/v1/whatsapp/webhook?hub.mode=subscribe&hub.verify_token=nope&hub.challenge=x`);
-  assert(v2.status === 403, 'wrong verify token rejected (403)');
+  console.log('[service resolution]');
+  for (const [input, want] of [['3', 'JOBS'], ['3.', 'JOBS'], ['option 2', 'LICENSING'], ['1️⃣', 'COACHING'], ['I need a visa', 'VISA_PR'], ['PR', 'VISA_PR'], ['I want to prepare', undefined], ['7', undefined], ['hello', undefined]] as const) {
+    assert(resolveService(input) === want, `"${input}" -> ${want}`);
+  }
 
   const services = ['COACHING', 'LICENSING', 'JOBS', 'VISA_PR', 'GENERAL'];
   const run = Date.now().toString().slice(-6);
+
   for (let i = 0; i < services.length; i++) {
     const svc = services[i];
     const phone = `9199${run}${i}`;
-    console.log(`\n[${svc}] ${phone}`);
-    await prisma.session.deleteMany({ where: { phoneNumber: phone } });
-
-    await inbound(phone, 'Hi');
-    await waitFor(phone, 1);
-    assert(sent.find((s) => s.to === phone)!.body.type === 'interactive', 'welcome sent as interactive list');
-
-    await inbound(phone, 'banana');
-    await waitFor(phone, 2);
-    assert(/valid number/.test(sent.filter((s) => s.to === phone)[1].body.text.body), 'invalid selection re-prompted');
-
-    await inbound(phone, String(i + 1), i % 2 === 0); // alternate list-reply vs typed
     const qs = QUESTION_BRANCHES[svc];
-    let expected = 3;
-    await waitFor(phone, expected);
-    assert(sent.filter((s) => s.to === phone)[2].body.text.body === qs[0].question, 'first question sent');
+    console.log(`\n[${svc}] ${phone}`);
+
+    await handleIncomingMessage(phone, 'Test', 'Hi');
+    assert(replies(phone)[0].includes('Welcome to MNS INSTITUTE'), 'welcome sent');
+
+    await handleIncomingMessage(phone, 'Test', 'banana');
+    assert(/valid number/.test(replies(phone)[1]), 'invalid selection re-prompted');
+
+    await handleIncomingMessage(phone, 'Test', String(i + 1));
+    assert(replies(phone)[2] === qs[0].question, 'first question sent');
 
     for (let q = 0; q < qs.length; q++) {
-      await inbound(phone, `answer-${q}`);
-      expected++;
-      await waitFor(phone, expected);
+      await handleIncomingMessage(phone, 'Test', `answer-${q}`);
+      if (q < qs.length - 1) assert(replies(phone).at(-1) === qs[q + 1].question, `Q${q + 2} follows answer ${q + 1}`);
     }
-    const last = sent.filter((s) => s.to === phone).at(-1)!.body.text.body as string;
-    assert(last.includes('https://topmate.io/mnsinstitute/'), 'completion message with Topmate link');
+    assert(replies(phone).at(-1)!.includes('https://topmate.io/mnsinstitute/'), 'completion message with Topmate link');
 
     const lead = await prisma.lead.findFirst({ where: { phoneNumber: phone } });
     assert(lead?.serviceCategory === svc, 'lead saved with correct category');
     const data = lead!.collectedData as Record<string, string>;
-    assert(qs.every((q, k) => data[q.key] === `answer-${k}`), `all ${qs.length} answers stored under correct keys`);
+    assert(qs.every((q, k) => data[q.key] === `answer-${k}`), `all ${qs.length} answers stored`);
 
-    // post-completion behaviour
-    await inbound(phone, 'I have already booked');
-    await waitFor(phone, expected + 1);
-    const lead2 = await prisma.lead.findFirst({ where: { phoneNumber: phone } });
-    assert(lead2?.isBookedTopmate === true, 'booked confirmation flips isBookedTopmate');
+    await handleIncomingMessage(phone, 'Test', 'how much is the fee');
+    assert(replies(phone).at(-1)!.includes('topmate.io'), 'fee question -> consultation link');
+
+    await handleIncomingMessage(phone, 'Test', 'I have already booked');
+    assert((await prisma.lead.findFirst({ where: { phoneNumber: phone } }))?.isBookedTopmate === true, 'booking flips isBookedTopmate');
+
+    await handleIncomingMessage(phone, 'Test', 'menu');
+    assert(replies(phone).at(-1)!.includes('Welcome to MNS INSTITUTE'), 'menu restarts the funnel');
   }
 
-  // dedupe: same wamid delivered twice -> one reply
-  console.log('\n[dedupe]');
-  const dp = `9188${run}0`;
-  const msg = { id: 'wamid.DUP.' + run, from: dp, type: 'text', text: { body: 'hello' } };
-  const payload = JSON.stringify({ object: 'whatsapp_business_account', entry: [{ changes: [{ field: 'messages', value: { messages: [msg] } }] }] });
-  const sig = 'sha256=' + crypto.createHmac('sha256', SECRET).update(payload).digest('hex');
-  for (let k = 0; k < 2; k++) {
-    await fetch(`${BASE}/api/v1/whatsapp/webhook`, { method: 'POST', headers: { 'content-type': 'application/json', 'x-hub-signature-256': sig }, body: payload });
+  console.log('\n[side question mid-flow]');
+  const sp = `9177${run}0`;
+  await handleIncomingMessage(sp, 'Test', 'hi');
+  await handleIncomingMessage(sp, 'Test', '1');
+  const before = replies(sp).length;
+  await handleIncomingMessage(sp, 'Test', 'What is OET?');
+  const after = replies(sp).slice(before);
+  const s1 = await prisma.session.findUnique({ where: { phoneNumber: sp } });
+  if (process.env.GEMINI_API_KEY) {
+    assert(s1!.currentStep === 0, 'side question did not consume the answer');
+    assert(after.length === 2 && after[1] === QUESTION_BRANCHES.COACHING[0].question, `Gemini answered then re-asked Q1: "${after[0].slice(0, 60)}…"`);
+  } else {
+    console.log('  (no GEMINI_API_KEY: treated as plain answer, Gemini path skipped)');
   }
-  await sleep(2500);
-  assert(sent.filter((s) => s.to === dp).length === 1, 'duplicate delivery produced a single reply');
 
-  // agent takeover silences bot
   console.log('\n[agent takeover]');
-  await prisma.session.update({ where: { phoneNumber: dp }, data: { isAgentPaused: true } });
-  await inbound(dp, 'anyone there?');
-  await sleep(1500);
-  assert(sent.filter((s) => s.to === dp).length === 1, 'paused session gets no bot reply');
+  await prisma.session.update({ where: { phoneNumber: sp }, data: { isAgentPaused: true } });
+  const n = replies(sp).length;
+  await handleIncomingMessage(sp, 'Test', 'anyone there?');
+  assert(replies(sp).length === n, 'paused session gets no bot reply');
 
   console.log('\nALL E2E CHECKS PASSED');
 }
 
 main()
+  .then(() => prisma.$disconnect())
   .then(() => process.exit(0))
   .catch((e) => { console.error(e); process.exit(1); });
