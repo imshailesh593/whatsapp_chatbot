@@ -1,0 +1,23 @@
+# Override for a server that already runs Coolify's Traefik proxy (network "coolify").
+# Usage: docker compose -p mnsbot -f docker-compose.yml -f docker-compose.vps.yml up -d --build
+# Requires BOT_DOMAIN in .env (e.g. chatbot.mnsinstitutejobs.com). No host ports are published.
+services:
+  bot:
+    ports: !reset []
+    networks: [default, coolify]
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=coolify
+      - traefik.http.routers.mnsbot.rule=Host(`${BOT_DOMAIN}`)
+      - traefik.http.routers.mnsbot.entrypoints=https
+      - traefik.http.routers.mnsbot.tls=true
+      - traefik.http.routers.mnsbot.tls.certresolver=letsencrypt
+      - traefik.http.routers.mnsbot-http.rule=Host(`${BOT_DOMAIN}`)
+      - traefik.http.routers.mnsbot-http.entrypoints=http
+      - traefik.http.routers.mnsbot-http.middlewares=mnsbot-https
+      - traefik.http.middlewares.mnsbot-https.redirectscheme.scheme=https
+      - traefik.http.services.mnsbot.loadbalancer.server.port=3000
+
+networks:
+  coolify:
+    external: true
