@@ -5,3 +5,4 @@ dist
 .wwebjs_cache
 web/node_modules
 web/dist
+.wa_auth

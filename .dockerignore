@@ -8,3 +8,4 @@ scripts
 *.md
 web/node_modules
 web/dist
+.wa_auth

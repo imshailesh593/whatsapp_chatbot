@@ -1,6 +1,6 @@
 # MNS Institute WhatsApp Bot
 
-WhatsApp **Web** (`whatsapp-web.js`, QR-linked number) + PostgreSQL (Prisma) + Gemini for free-form questions,
+WhatsApp linked-device protocol via **Baileys** (no browser; QR-linked number) + PostgreSQL (Prisma) + Gemini for free-form questions,
 with a React admin console at `/admin/`.
 Slot-filling funnel: welcome → service (1-5) → one question at a time → lead saved → Topmate CTA.
 Spec: [mns_institute_whatsapp_automation_blueprint.md](mns_institute_whatsapp_automation_blueprint.md)
@@ -32,8 +32,8 @@ Tests (need DATABASE_URL): `npx tsx scripts/e2e.ts` (full funnel), `npx tsx scri
 cp .env.example .env          # fill GEMINI_API_KEY, ADMIN_TOKEN, POSTGRES_PASSWORD
 docker compose up -d --build  # behind Coolify/Traefik also add: -f docker-compose.vps.yml (needs BOT_DOMAIN in .env)
 ```
-Scan the QR once; the login lives in the `wa_session` volume so redeploys don't need a new scan.
-Health check: `GET /health` returns `{ok, whatsapp: "ready"}`. The process exits if WhatsApp disconnects (or authenticates but never becomes ready) and Docker restarts it.
+Scan the QR once; the login lives in the `wa_session` volume (`/data/wa_auth`) so redeploys don't need a new scan.
+Health check: `GET /health` returns `{ok, whatsapp: "ready"}`. The bot reconnects on its own; if the phone logs the device out, a new QR is generated.
 
 ## Behaviour
 - `menu` / `reset` restarts the funnel. "3", "option 3", "jobs", "visa" all select a service.

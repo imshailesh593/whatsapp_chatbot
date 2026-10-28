@@ -30,7 +30,7 @@ const client = startWhatsApp();
 
 const shutdown = async () => {
   await app.close();
-  await client.destroy().catch(() => undefined);
+  await client.stop();
   await prisma.$disconnect();
   process.exit(0);
 };

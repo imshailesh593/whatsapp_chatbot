@@ -21,11 +21,9 @@ services:
     env_file: .env
     environment:
       DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD:-password}@db:5432/mns_bot?schema=public
-      WA_SESSION_PATH: /data/wwebjs_auth
-      PUPPETEER_EXECUTABLE_PATH: /usr/bin/chromium
+      WA_SESSION_PATH: /data/wa_auth
     volumes:
       - wa_session:/data
-    shm_size: "1gb"
     ports:
       - "3000:3000"
 

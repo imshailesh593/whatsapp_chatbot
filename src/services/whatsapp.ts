@@ -1,6 +1,5 @@
 import fs from 'fs';
-import path from 'path';
-import { Client, LocalAuth, Message } from 'whatsapp-web.js';
+import pino from 'pino';
 import qrcodeTerminal from 'qrcode-terminal';
 import { handleIncomingMessage } from './engine';
 import { setTransport, sendTextMessage } from './transport';
@@ -13,8 +12,11 @@ export const waState: { status: WaStatus; qr: string | null } = { status: 'start
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-// phone number (our session key) -> WhatsApp chat id we last heard from (handles @c.us and @lid)
-const chatIds = new Map<string, string>();
+// Baileys 7 is ESM-only. A real dynamic import is needed because TypeScript rewrites import() to require() in CommonJS output.
+const dynamicImport = new Function('m', 'return import(m)') as (m: string) => Promise<any>;
+
+// phone number (our session key) -> WhatsApp JID we last heard from (@s.whatsapp.net or @lid)
+const jids = new Map<string, string>();
 // per-chat promise chain keeps replies in order and prevents interleaved state updates
 const chains = new Map<string, Promise<void>>();
 const seen = new Set<string>();
@@ -30,189 +32,183 @@ function enqueue(key: string, task: () => Promise<void>): void {
   chains.set(key, next);
 }
 
-async function phoneKey(msg: Message): Promise<string> {
-  try {
-    const contact = await Promise.race([
-      msg.getContact(),
-      new Promise<never>((_, rej) => setTimeout(() => rej(new Error('getContact timeout')), 3000))
-    ]);
-    if (contact.number) return contact.number;
-  } catch {
-    // fall through
+const MEDIA_KEYS = ['imageMessage', 'videoMessage', 'audioMessage', 'documentMessage', 'stickerMessage', 'contactMessage', 'locationMessage'];
+
+/** Unwraps ephemeral/view-once wrappers and returns the inner message object. */
+function unwrap(message: any): any {
+  let m = message;
+  for (let i = 0; i < 4; i++) {
+    const inner = m?.ephemeralMessage?.message ?? m?.viewOnceMessage?.message ?? m?.viewOnceMessageV2?.message ?? m?.documentWithCaptionMessage?.message;
+    if (!inner) break;
+    m = inner;
   }
-  return msg.from.split('@')[0];
+  return m;
 }
 
-/** A recreated container gets a new hostname, so Chromium sees the saved profile as locked by another machine. */
-function clearStaleProfileLocks(dataPath: string): void {
-  const profile = path.join(dataPath, 'session');
-  for (const f of ['SingletonLock', 'SingletonCookie', 'SingletonSocket']) {
-    try {
-      fs.rmSync(path.join(profile, f), { force: true });
-    } catch {
-      // nothing to clear
-    }
-  }
+function extractText(message: any): string {
+  const m = unwrap(message);
+  return (
+    m?.conversation ??
+    m?.extendedTextMessage?.text ??
+    m?.buttonsResponseMessage?.selectedButtonId ??
+    m?.listResponseMessage?.singleSelectReply?.selectedRowId ??
+    m?.templateButtonReplyMessage?.selectedId ??
+    ''
+  );
 }
 
-export function startWhatsApp(): Client {
-  const dataPath = process.env.WA_SESSION_PATH || '.wwebjs_auth';
-  clearStaleProfileLocks(dataPath);
-  const client = new Client({
-    authStrategy: new LocalAuth({ dataPath }),
-    puppeteer: {
-      headless: true,
-      executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined,
-      args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--disable-gpu']
-    }
-  });
+const userPart = (jid: string) => jid.split('@')[0].split(':')[0];
+
+/** Our session key: the real phone number when WhatsApp reveals it, otherwise the anonymous (LID) id. */
+function phoneKey(key: any): string {
+  const pn = [key.remoteJid, key.remoteJidAlt, key.senderPn, key.participantPn].find(
+    (j: unknown) => typeof j === 'string' && j.endsWith('@s.whatsapp.net')
+  ) as string | undefined;
+  return userPart(pn ?? key.remoteJid);
+}
+
+export function startWhatsApp(): { stop(): Promise<void> } {
+  const authDir = process.env.WA_SESSION_PATH || '.wa_auth';
+  let sock: any = null;
+  let stopped = false;
+  let attempt = 0;
 
   setTransport({
     async sendText(to, text) {
-      const chatId = chatIds.get(to) ?? `${to}@c.us`;
-      // Small human-like pause; also eases WhatsApp's anti-automation heuristics
+      if (!sock || waState.status !== 'ready') throw new Error('WhatsApp is not connected');
+      const jid = jids.get(to) ?? `${to}@s.whatsapp.net`;
+      // Short "typing…" pause: feels human and eases WhatsApp's anti-automation heuristics
       try {
-        const chat = await client.getChatById(chatId);
-        await chat.sendStateTyping();
+        await sock.presenceSubscribe(jid);
+        await sock.sendPresenceUpdate('composing', jid);
       } catch {
-        // typing indicator is cosmetic
+        // cosmetic
       }
       await sleep(600 + Math.random() * 900);
-      await client.sendMessage(chatId, text);
+      await sock.sendMessage(jid, { text });
+      try {
+        await sock.sendPresenceUpdate('paused', jid);
+      } catch {
+        // cosmetic
+      }
     }
   });
 
-  client.on('qr', (qr) => {
-    waState.status = 'qr';
-    waState.qr = qr;
-    console.log('Scan this QR with WhatsApp > Linked devices:');
-    qrcodeTerminal.generate(qr, { small: true });
-  });
-  // Known flaky case: session restores ("authenticated") but WhatsApp Web never reaches ready. Restart to recover.
-  let readyTimer: NodeJS.Timeout | undefined;
-  client.on('authenticated', () => {
-    waState.status = 'authenticated';
-    waState.qr = null;
-    readyTimer = setTimeout(() => {
-      console.error('Authenticated but not ready after 45s; restarting.');
-      process.exit(1);
-    }, 45_000);
-  });
-  client.on('ready', () => {
-    clearTimeout(readyTimer);
-    waState.status = 'ready';
-    waState.qr = null;
-    console.log('WhatsApp Web client is ready.');
-  });
-  client.on('auth_failure', (m) => {
-    console.error('WhatsApp auth failure:', m);
-    waState.status = 'disconnected';
-  });
-  client.on('disconnected', (reason) => {
-    console.error('WhatsApp disconnected:', reason);
-    waState.status = 'disconnected';
-    // Exit so the process manager (docker restart policy / pm2) brings up a fresh session
-    setTimeout(() => process.exit(1), 1000);
-  });
+  async function onMessage(m: any, type: string): Promise<void> {
+    const jid: string | undefined = m.key?.remoteJid;
+    if (!jid || !m.message) return;
+    if (jid.endsWith('@g.us') || jid.endsWith('@broadcast') || jid.endsWith('@newsletter')) return; // 1:1 chats only
+    const text = extractText(m.message).trim();
 
-  // Incoming messages from customers
-  const onIncoming = async (msg: Message) => {
-    if (msg.fromMe || msg.isStatus) return;
-    if (!/@(c\.us|lid)$/.test(msg.from)) return; // ignore groups, broadcasts, newsletters
+    // Owner takeover: typing !pause / !resume in a customer's chat from the linked phone
+    if (m.key.fromMe) {
+      const cmd = text.toLowerCase();
+      if (cmd !== '!pause' && cmd !== '!resume') return;
+      const key = [...jids.entries()].find(([, j]) => j === jid)?.[0] ?? phoneKey(m.key);
+      const paused = cmd === '!pause';
+      const r = await prisma.session.updateMany({ where: { phoneNumber: key }, data: { isAgentPaused: paused } });
+      console.log(`[Takeover] ${key} ${paused ? 'paused' : 'resumed'} (${r.count} session)`);
+      return;
+    }
+    if (type !== 'notify') return; // history/append sync is not a new customer message
 
-    const id = msg.id._serialized;
-    if (seen.has(id)) return;
+    const id: string | undefined = m.key.id;
+    if (!id || seen.has(id)) return;
     seen.add(id);
     if (seen.size > 5000) seen.delete(seen.values().next().value as string);
 
-    const key = await phoneKey(msg);
-    console.log(`[wa] incoming ${msg.type} from ${msg.from} -> ${key}`);
-    chatIds.set(key, msg.from);
-    const name = (msg as any)._data?.notifyName as string | undefined;
+    const key = phoneKey(m.key);
+    jids.set(key, jid);
+    const name: string | undefined = m.pushName || undefined;
+    console.log(`[wa] incoming from ${jid} -> ${key}`);
+    try {
+      await sock.readMessages([m.key]);
+    } catch {
+      // blue ticks are cosmetic
+    }
+
+    const isMedia = MEDIA_KEYS.some((k) => unwrap(m.message)?.[k]);
 
     enqueue(key, async () => {
-      if (msg.type !== 'chat') {
-        const s = await prisma.session.findUnique({ where: { phoneNumber: key } });
-        if (!s?.isAgentPaused) {
-          await sendTextMessage(key, UNSUPPORTED_MEDIA_MESSAGE);
-        }
-        return;
-      }
-      // Persistent dedupe (events + poller + restarts can all deliver the same message)
+      // Persistent dedupe: WhatsApp redelivers unacked messages after a restart
       const dup = await prisma.webhookLog.findFirst({
         where: { direction: 'INBOUND', payload: { path: ['wamid'], equals: id } },
         select: { id: true }
       });
       if (dup) return;
-      await handleIncomingMessage(key, name, msg.body, id);
-    });
-  };
-  // Listen on both: some WhatsApp Web builds only emit message_create for certain chats. Dedupe is by message id.
-  client.on('message', (msg) => {
-    console.log('[wa:raw] message', msg.type, msg.from, 'fromMe=' + msg.fromMe, msg.id._serialized);
-    void onIncoming(msg);
-  });
-
-  // Owner takeover: typing !pause / !resume in a customer's chat from the linked phone
-  client.on('message_create', async (msg) => {
-    console.log('[wa:raw] message_create', msg.type, msg.from, 'fromMe=' + msg.fromMe, msg.id._serialized);
-    if (!msg.fromMe) return void onIncoming(msg);
-    const cmd = msg.body.trim().toLowerCase();
-    if (cmd !== '!pause' && cmd !== '!resume') return;
-    const key = [...chatIds.entries()].find(([, id]) => id === msg.to)?.[0] ?? msg.to.split('@')[0];
-    const paused = cmd === '!pause';
-    const r = await prisma.session.updateMany({ where: { phoneNumber: key }, data: { isAgentPaused: paused } });
-    console.log(`[Takeover] ${key} ${paused ? 'paused' : 'resumed'} (${r.count} session)`);
-  });
-
-  // Poller: events from WhatsApp Web were observed to stop for a chat after the first message, so also check
-  // recently active 1:1 chats every few seconds. Dedupe (in-memory + DB by message id) makes this safe.
-  let pollSince = Math.floor(Date.now() / 1000) - 120;
-  let polling = false;
-  let pollErrLogged = false;
-  setInterval(async () => {
-    if (waState.status !== 'ready' || polling) return;
-    polling = true;
-    const since = pollSince;
-    pollSince = Math.floor(Date.now() / 1000) - 20; // overlap window
-    try {
-      const chats = (await client.getChats()).filter(
-        (c) => !c.isGroup && c.timestamp >= since && /@(c\.us|lid)$/.test(c.id._serialized)
-      );
-      for (const chat of chats) {
-        for (const m of await chat.fetchMessages({ limit: 8 })) {
-          if (!m.fromMe && m.timestamp >= since) await onIncoming(m);
+      if (!text) {
+        if (isMedia) {
+          const s = await prisma.session.findUnique({ where: { phoneNumber: key } });
+          if (!s?.isAgentPaused) await sendTextMessage(key, UNSUPPORTED_MEDIA_MESSAGE);
         }
+        return;
       }
-    } catch (err) {
-      if (!pollErrLogged) console.error('[wa] poll error:', (err as Error).message);
-      pollErrLogged = true;
-    } finally {
-      polling = false;
-    }
-  }, 4000);
+      await handleIncomingMessage(key, name, text, id);
+    });
+  }
 
-  // Heartbeat: if the page lost its connection but never fired 'disconnected', restart instead of silently ignoring chats.
-  let bad = 0;
-  setInterval(async () => {
-    if (waState.status !== 'ready') return;
-    try {
-      const st = await Promise.race([client.getState(), new Promise<string>((r) => setTimeout(() => r('TIMEOUT'), 15_000))]);
-      bad = st === 'CONNECTED' ? 0 : bad + 1;
-      if (st !== 'CONNECTED') console.error('[wa] heartbeat state:', st);
-    } catch (err) {
-      bad++;
-      console.error('[wa] heartbeat error:', (err as Error).message);
-    }
-    if (bad >= 3) {
-      console.error('[wa] connection unhealthy; restarting.');
-      process.exit(1);
-    }
-  }, 60_000);
+  async function connect(): Promise<void> {
+    waState.status = 'starting';
+    const baileys = await dynamicImport('@whiskeysockets/baileys');
+    const makeWASocket = typeof baileys.default === 'function' ? baileys.default : baileys.makeWASocket;
+    const { state, saveCreds } = await baileys.useMultiFileAuthState(authDir);
+    const latest = await baileys.fetchLatestBaileysVersion().catch(() => ({ version: undefined }));
 
-  client.initialize().catch((err) => {
+    sock = makeWASocket({
+      auth: state,
+      version: latest.version,
+      logger: pino({ level: 'silent' }),
+      browser: baileys.Browsers.ubuntu('MNS Bot'),
+      markOnlineOnConnect: false,
+      syncFullHistory: false
+    });
+
+    sock.ev.on('creds.update', saveCreds);
+
+    sock.ev.on('connection.update', (u: any) => {
+      const { connection, lastDisconnect, qr } = u;
+      if (qr) {
+        waState.status = 'qr';
+        waState.qr = qr;
+        console.log('Scan this QR with WhatsApp > Linked devices:');
+        qrcodeTerminal.generate(qr, { small: true });
+      }
+      if (connection === 'open') {
+        waState.status = 'ready';
+        waState.qr = null;
+        attempt = 0;
+        console.log('WhatsApp connected (Baileys).');
+      }
+      if (connection === 'close') {
+        waState.status = 'disconnected';
+        if (stopped) return;
+        const code = lastDisconnect?.error?.output?.statusCode;
+        const loggedOut = code === baileys.DisconnectReason.loggedOut;
+        console.error(`WhatsApp connection closed (code ${code ?? 'n/a'})${loggedOut ? ': logged out from the phone, new QR needed' : ', reconnecting'}`);
+        if (loggedOut) fs.rmSync(authDir, { recursive: true, force: true });
+        const delay = loggedOut ? 1000 : Math.min(30_000, 2000 * ++attempt);
+        setTimeout(() => connect().catch((e) => console.error('reconnect failed:', e)), delay);
+      }
+    });
+
+    sock.ev.on('messages.upsert', ({ messages, type }: { messages: any[]; type: string }) => {
+      for (const m of messages) onMessage(m, type).catch((e) => console.error('[wa] message handler error:', e));
+    });
+  }
+
+  connect().catch((err) => {
     console.error('WhatsApp initialize failed:', err);
     process.exit(1);
   });
-  return client;
+
+  return {
+    async stop() {
+      stopped = true;
+      try {
+        sock?.end(undefined);
+      } catch {
+        // already closed
+      }
+    }
+  };
 }
