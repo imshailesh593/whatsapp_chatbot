@@ -8,7 +8,7 @@ const PHONE_ID = process.env.WHATSAPP_PHONE_NUMBER_ID;
 const VERSION = process.env.GRAPH_API_VERSION || 'v21.0';
 
 const client = axios.create({
-  baseURL: `https://graph.facebook.com/${VERSION}/${PHONE_ID}`,
+  baseURL: `${process.env.GRAPH_API_BASE_URL || "https://graph.facebook.com"}/${VERSION}/${PHONE_ID}`,
   headers: {
     Authorization: `Bearer ${TOKEN}`,
     'Content-Type': 'application/json'

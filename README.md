@@ -17,7 +17,7 @@ npm run dev
 ngrok http 3000             # set https://<ngrok>/api/v1/whatsapp/webhook in Meta, subscribe to "messages"
 ```
 
-`npm test` runs unit tests; `npm run build && npm start` for production.
+`npm test` runs unit tests; `npx tsx scripts/e2e.ts` runs an end-to-end check against a running server (set `GRAPH_API_BASE_URL=http://127.0.0.1:4010` in `.env` so replies go to the built-in mock instead of Meta); `npm run build && npm start` for production.
 
 ## Notes
 - POST webhook verifies `X-Hub-Signature-256` using `WHATSAPP_APP_SECRET` (requests without it are rejected).
