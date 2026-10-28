@@ -27,7 +27,13 @@ export async function answerFreeform(question: string): Promise<string | null> {
     const res = await ai.models.generateContent({
       model: MODEL,
       contents: question.slice(0, 1000),
-      config: { systemInstruction: SYSTEM_PROMPT, temperature: 0.4, maxOutputTokens: 400 }
+      // thinkingBudget 0: the model otherwise spends the output budget on hidden reasoning and truncates the reply
+      config: {
+        systemInstruction: SYSTEM_PROMPT,
+        temperature: 0.4,
+        maxOutputTokens: 600,
+        thinkingConfig: { thinkingBudget: 0 }
+      }
     });
     const text = res.text?.trim();
     return text || null;
