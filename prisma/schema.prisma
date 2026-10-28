@@ -1,0 +1,69 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum ServiceCategory {
+  COACHING
+  LICENSING
+  JOBS
+  VISA_PR
+  GENERAL
+}
+
+enum SessionStage {
+  WELCOME
+  AWAITING_SERVICE_SELECTION
+  IN_QUESTIONNAIRE
+  COMPLETED
+  AGENT_TAKEOVER
+}
+
+model Session {
+  id                String           @id @default(uuid())
+  phoneNumber       String           @unique @map("phone_number")
+  contactName       String?          @map("contact_name")
+  stage             SessionStage     @default(WELCOME)
+  selectedService   ServiceCategory? @map("selected_service")
+  currentStep       Int              @default(0) @map("current_step")
+  answers           Json             @default("{}")
+  isAgentPaused     Boolean          @default(false) @map("is_agent_paused")
+  lastInteractionAt DateTime         @default(now()) @map("last_interaction_at")
+  createdAt         DateTime         @default(now()) @map("created_at")
+  updatedAt         DateTime         @updatedAt @map("updated_at")
+  lead              Lead?
+
+  @@index([stage])
+  @@map("mns_sessions")
+}
+
+model Lead {
+  id              String          @id @default(uuid())
+  sessionId       String          @unique @map("session_id")
+  session         Session         @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  phoneNumber     String          @map("phone_number")
+  serviceCategory ServiceCategory @map("service_category")
+  collectedData   Json            @map("collected_data")
+  isBookedTopmate Boolean         @default(false) @map("is_booked_topmate")
+  counsellorNotes String?         @map("counsellor_notes")
+  createdAt       DateTime        @default(now()) @map("created_at")
+  updatedAt       DateTime        @updatedAt @map("updated_at")
+
+  @@index([phoneNumber])
+  @@index([serviceCategory])
+  @@map("mns_leads")
+}
+
+model WebhookLog {
+  id          String   @id @default(uuid())
+  phoneNumber String?  @map("phone_number")
+  direction   String // INBOUND or OUTBOUND
+  payload     Json
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@map("mns_webhook_logs")
+}
