@@ -3,8 +3,15 @@ import dotenv from 'dotenv';
 dotenv.config();
 process.env.ADMIN_TOKEN = 'testtoken';
 process.env.ADMIN_EMAIL = '';
-process.env.GEMINI_API_KEY = ''; // onboarding assistant must degrade gracefully
+process.env.GEMINI_API_KEY = '';
+process.env.STRIPE_WEBHOOK_SECRET = 'whsec_test';
+process.env.RAZORPAY_WEBHOOK_SECRET = 'rzp_test';
+process.env.STRIPE_SECRET_KEY = '';
+process.env.RAZORPAY_KEY_ID = ''; // onboarding assistant must degrade gracefully
+import crypto from 'crypto';
 import Fastify from 'fastify';
+import { accessState } from '../src/plans';
+import { invalidateConfig } from '../src/services/botConfig';
 import { registerAdmin } from '../src/admin';
 import { setTransport } from '../src/services/transport';
 import { waFor } from '../src/services/whatsapp';
@@ -18,6 +25,8 @@ const sent: string[] = [];
 const DOMAIN = '@admin-test.local';
 
 async function cleanup() {
+  await prisma.auditLog.deleteMany({ where: { actor: { endsWith: DOMAIN } } });
+  await prisma.billingEvent.deleteMany({ where: { OR: [{ id: { startsWith: 'stripe:evt_' } }, { id: { startsWith: 'razorpay:rz_' } }] } });
   await prisma.workspace.deleteMany({ where: { adminUsers: { some: { email: { endsWith: DOMAIN } } } } });
   await prisma.adminUser.deleteMany({ where: { email: { endsWith: DOMAIN } } });
 }
@@ -126,11 +135,25 @@ async function cleanup() {
   ok(!r.json().contacts.some((c: any) => c.phone.startsWith('SIM-')), 'test contacts hidden by default');
   r = await call(hA, 'GET', '/admin/api/contacts?test=1');
   const c = r.json().contacts.find((x: any) => x.phone === 'SIM-tst');
-  ok(c && c.status === 'COMPLETED' && c.hasLead && c.progress === 100 && c.isTest && c.serviceTitle === 'Braces' && c.answers.age === '34', 'test contact listed as a completed lead with service title + answers');
+  ok(c && c.pipeline === 'new' && c.hasLead && c.progress === 100 && c.isTest && c.serviceTitle === 'Braces' && c.answers.age === '34', 'test contact listed as a completed lead with service title + answers');
   const patch = (payload: any) => call(hA, 'PATCH', '/admin/api/contacts/SIM-tst', payload);
-  r = await patch({ status: 'CONSULTATION_BOOKED', notes: '=1+1 call back' });
-  ok(r.json().contact.status === 'CONSULTATION_BOOKED' && r.json().contact.notes === '=1+1 call back', 'status + notes saved');
-  ok((await patch({ status: 'FOLLOW_UP' })).json().contact.status === 'FOLLOW_UP', 'follow-up status');
+  r = await patch({ stage: 'booked', notes: '=1+1 call back' });
+  ok(r.json().contact.pipeline === 'booked' && r.json().contact.notes === '=1+1 call back', 'stage + notes saved');
+  ok((await patch({ stage: 'follow_up' })).json().contact.pipeline === 'follow_up', 'follow-up stage');
+  ok((await patch({ stage: 'nonsense' })).statusCode === 400, 'unknown stage refused');
+
+  // ---- pipeline editor ----
+  r = await call(hA, 'GET', '/admin/api/stages');
+  ok(r.json().stages.map((s: any) => s.key).join() === 'new,contacted,follow_up,booked,won,lost', 'default pipeline');
+  ok((await call(hA, 'PUT', '/admin/api/stages', { stages: [{ label: 'Only' }] })).statusCode === 400, 'pipeline needs two stages');
+  ok((await call(hA, 'PUT', '/admin/api/stages', { stages: [{ key: 'new', label: 'New' }, { key: 'won', label: 'Won' }] })).statusCode === 400, 'the Booked stage cannot be removed');
+  ok((await call(hA, 'PUT', '/admin/api/stages', { stages: [{ key: 'contacted', label: 'Contacted' }, { key: 'new', label: 'New' }, { key: 'booked', label: 'Booked' }] })).statusCode === 400, 'New lead must stay first');
+  r = await call(hA, 'PUT', '/admin/api/stages', { stages: [{ key: 'new', label: 'Fresh' }, { label: 'Site visit', color: 'cyan' }, { key: 'booked', label: 'Booked' }, { label: 'Closed deal', kind: 'won' }] });
+  ok(r.statusCode === 200 && r.json().stages[1].key === 'site_visit' && r.json().stages[3].kind === 'won', 'pipeline saved with a custom stage');
+  ok((await prisma.lead.findFirst({ where: { workspaceId: wsA, phoneNumber: 'SIM-tst' } }))?.stageKey === 'new', 'leads in a removed stage fall back to New lead');
+  ok((await patch({ stage: 'site_visit' })).json().contact.pipeline === 'site_visit', 'custom stage can be assigned');
+  ok((await call(hB, 'GET', '/admin/api/stages')).json().stages.length === 6, "other workspaces keep their own pipeline");
+  await patch({ stage: 'new' });
   ok((await patch({ paused: true })).json().contact.botActive === false, 'bot paused');
   o = await sim(hA, 'anyone there?');
   ok(o.replies.length === 0, 'paused simulator session gets no reply');
@@ -169,12 +192,175 @@ async function cleanup() {
   ok(r.headers['content-type']?.toString().startsWith('text/csv') && !r.body.includes('SIM-tst'), 'CSV excludes simulator contacts');
   ok((await app.inject('/admin/api/export.csv')).statusCode === 401, 'CSV requires login');
 
+  // ---- billing ----
+  r = await call(hA, 'GET', '/admin/api/billing');
+  ok(r.json().plan === 'trial' && r.json().status === 'trialing' && r.json().active && r.json().limits.conversations === 1500 && r.json().providers.stripe === false, 'billing: new workspace is on a 14-day trial with Growth limits, no providers configured');
+  ok(r.json().plans.length === 3 && !!r.json().trialEndsAt, 'billing: plans and trial end listed');
+  ok((await call(hA, 'POST', '/admin/api/billing/checkout', { plan: 'growth', provider: 'stripe' })).statusCode === 400, 'checkout refused while the provider is not configured');
+  await call(hA, 'POST', '/admin/api/admins', { email: `agent2${DOMAIN}`, password: 'agent password 2', role: 'agent' });
+  const hAg2 = cookieOf(await login(`agent2${DOMAIN}`, 'agent password 2'));
+  ok((await call(hAg2, 'GET', '/admin/api/billing')).statusCode === 200 && (await call(hAg2, 'POST', '/admin/api/billing/checkout', { plan: 'growth', provider: 'stripe' })).statusCode === 403, 'only the owner can start checkout');
+  ok((await call(hAg2, 'POST', '/admin/api/billing/cancel')).statusCode === 403, 'only the owner can cancel');
+
+  const stripeEvent = (id: string, type: string, object: any, secret = 'whsec_test', ts = Math.floor(Date.now() / 1000)) => {
+    const raw = JSON.stringify({ id, type, data: { object } });
+    const sig = crypto.createHmac('sha256', secret).update(`${ts}.${raw}`).digest('hex');
+    return app.inject({ method: 'POST', url: '/webhooks/stripe', headers: { 'content-type': 'application/json', 'stripe-signature': `t=${ts},v1=${sig}` }, payload: raw });
+  };
+  const wsRow = () => prisma.workspace.findUniqueOrThrow({ where: { id: wsA } });
+  const future = Math.floor(Date.now() / 1000) + 30 * 86400;
+  ok((await stripeEvent('evt_bad', 'invoice.paid', {}, 'wrong-secret')).statusCode === 400, 'stripe webhook: bad signature rejected');
+  ok((await stripeEvent('evt_old', 'invoice.paid', {}, 'whsec_test', Math.floor(Date.now() / 1000) - 3600)).statusCode === 400, 'stripe webhook: stale timestamp rejected');
+  ok((await stripeEvent('evt_1', 'checkout.session.completed', { client_reference_id: wsA, customer: 'cus_1', subscription: 'sub_1', metadata: {} })).statusCode === 200, 'stripe: checkout completed');
+  ok((await wsRow()).providerSubscriptionId === 'sub_1' && (await wsRow()).planStatus === 'active', 'stripe: subscription linked, workspace active');
+  await stripeEvent('evt_2', 'customer.subscription.updated', { object: 'subscription', id: 'sub_1', customer: 'cus_1', status: 'active', metadata: { workspaceId: wsA, plan: 'starter' }, current_period_end: future, cancel_at_period_end: false });
+  let w = await wsRow();
+  ok(w.plan === 'starter' && w.planStatus === 'active' && Math.abs(w.currentPeriodEnd!.getTime() / 1000 - future) < 2, 'stripe: plan + period end applied');
+  ok((await stripeEvent('evt_2', 'customer.subscription.updated', { object: 'subscription', id: 'sub_1', metadata: { workspaceId: wsA, plan: 'scale' } })).body === 'duplicate' && (await wsRow()).plan === 'starter', 'stripe: replayed event is ignored');
+  await stripeEvent('evt_3', 'invoice.paid', { id: 'in_1', subscription: 'sub_1', customer: 'cus_1', amount_paid: 99900, currency: 'inr', lines: { data: [{ metadata: { plan: 'starter' }, period: { end: future } }] } });
+  ok((await prisma.payment.count({ where: { workspaceId: wsA } })) === 1, 'stripe: payment recorded once');
+  r = await call(hA, 'GET', '/admin/api/billing');
+  ok(r.json().payments[0].amount === 99900 && r.json().planName === 'Starter' && r.json().limits.seats === 2, 'billing: starter limits and payment history shown');
+  await stripeEvent('evt_4', 'invoice.payment_failed', { subscription: 'sub_1', customer: 'cus_1' });
+  w = await wsRow();
+  ok(w.planStatus === 'past_due' && accessState(w).active, 'stripe: payment failure -> past_due, still active during the grace period');
+  await stripeEvent('evt_5', 'customer.subscription.deleted', { object: 'subscription', id: 'sub_1', customer: 'cus_1', metadata: { workspaceId: wsA } });
+  w = await wsRow();
+  ok(w.planStatus === 'canceled' && !accessState(w).active, 'stripe: subscription deleted -> access ends');
+
+  const rzp = (id: string, type: string, payload: any, secret = 'rzp_test') => {
+    const raw = JSON.stringify({ event: type, payload });
+    return app.inject({ method: 'POST', url: '/webhooks/razorpay', headers: { 'content-type': 'application/json', 'x-razorpay-signature': crypto.createHmac('sha256', secret).update(raw).digest('hex'), 'x-razorpay-event-id': id }, payload: raw });
+  };
+  const rzpBody = { subscription: { entity: { id: 'sub_rz', notes: { workspaceId: wsA, plan: 'growth' }, current_end: future } }, payment: { entity: { id: 'pay_1', amount: 299900, currency: 'INR' } } };
+  ok((await rzp('rz_bad', 'subscription.charged', rzpBody, 'nope')).statusCode === 400, 'razorpay webhook: bad signature rejected');
+  ok((await rzp('rz_1', 'subscription.charged', rzpBody)).statusCode === 200, 'razorpay: charged');
+  w = await wsRow();
+  ok(w.plan === 'growth' && w.planStatus === 'active' && w.billingProvider === 'razorpay' && accessState(w).active, 'razorpay: reactivated on Growth');
+  ok((await prisma.payment.count({ where: { workspaceId: wsA, provider: 'razorpay' } })) === 1, 'razorpay: payment recorded');
+  await rzp('rz_2', 'subscription.halted', rzpBody);
+  ok((await wsRow()).planStatus === 'past_due', 'razorpay: halted -> past_due');
+  await rzp('rz_3', 'subscription.cancelled', rzpBody);
+  ok((await wsRow()).planStatus === 'canceled', 'razorpay: cancelled');
+
+  // seats follow the plan (starter = 2): owner + agent + agent2 already exist, so the next one is refused
+  await prisma.workspace.update({ where: { id: wsA }, data: { plan: 'starter', planStatus: 'active', currentPeriodEnd: new Date(Date.now() + 86400000) } });
+  invalidateConfig(wsA);
+  ok((await call(hA, 'POST', '/admin/api/admins', { email: `s2${DOMAIN}`, password: 'seat password 1', role: 'agent' })).statusCode === 402, 'seat limit of the plan is enforced');
+
+  // ---- broadcasts API ----
+  const lead = await prisma.session.create({ data: { workspaceId: wsA, phoneNumber: '910000000077', contactName: 'Zed Lead', selectedService: 'CHECK_UP' } });
+  await prisma.lead.create({ data: { workspaceId: wsA, sessionId: lead.id, phoneNumber: '910000000077', serviceCategory: 'CHECK_UP', collectedData: {} } });
+  ok((await call(hAg2, 'GET', '/admin/api/broadcasts')).statusCode === 403, 'agents cannot see broadcasts');
+  r = await call(hA, 'POST', '/admin/api/broadcasts/audience', { filters: {} });
+  ok(r.json().count === 1 && r.json().sample[0].phone === '910000000077', 'audience preview counts finished leads only (no simulator contacts)');
+  ok((await call(hB, 'POST', '/admin/api/broadcasts/audience', { filters: {} })).json().count === 0, "another workspace's customers are never in the audience");
+  ok((await call(hA, 'POST', '/admin/api/broadcasts', { name: '', text: 'x' })).statusCode === 400, 'broadcast needs a name');
+  ok((await call(hA, 'POST', '/admin/api/broadcasts', { name: 'N', text: 'x'.repeat(1001) })).statusCode === 400, 'overlong message refused');
+  r = await call(hA, 'POST', '/admin/api/broadcasts', { name: 'Promo', text: 'Hi {name}!' });
+  const bid = r.json().broadcast.id;
+  ok(r.statusCode === 200 && r.json().broadcast.status === 'draft' && r.json().broadcast.total === 1, 'draft created');
+  ok((await call(hB, 'GET', '/admin/api/broadcasts/' + bid)).statusCode === 404 && (await call(hB, 'POST', '/admin/api/broadcasts/' + bid + '/start')).statusCode === 400, "other workspaces cannot read or start it");
+  ok((await call(hA, 'POST', '/admin/api/broadcasts/' + bid + '/pause')).statusCode === 400, 'cannot pause a draft');
+  ok((await call(hA, 'POST', '/admin/api/broadcasts/' + bid + '/start')).json().broadcast.status === 'sending', 'start');
+  ok((await call(hA, 'POST', '/admin/api/broadcasts/' + bid + '/cancel')).json().broadcast.status === 'canceled', 'cancel');
+  r = await call(hA, 'GET', '/admin/api/broadcasts/' + bid);
+  ok(r.json().recipients.length === 1 && r.json().recipients[0].status === 'skipped', 'detail lists recipients');
+  ok((await call(hA, 'PUT', '/admin/api/workspace', { timezone: 'Mars/Phobos' })).statusCode === 400 && (await call(hA, 'PUT', '/admin/api/workspace', { timezone: 'Asia/Kolkata' })).statusCode === 200, 'time zone is validated');
+
+  // ---- integrations API ----
+  ok((await call(hA, 'POST', '/admin/api/webhooks', { url: 'https://8.8.8.8/hook' })).statusCode === 402, 'Starter plan: webhooks are not included');
+  ok((await call(hA, 'POST', '/admin/api/api-keys', { name: 'x' })).statusCode === 402, 'Starter plan: API keys are not included');
+  await prisma.workspace.update({ where: { id: wsA }, data: { plan: 'growth' } });
+  invalidateConfig(wsA);
+  ok((await call(hA, 'POST', '/admin/api/webhooks', { url: 'https://127.0.0.1/hook' })).statusCode === 400, 'webhook to a private address refused');
+  ok((await call(hA, 'POST', '/admin/api/webhooks', { url: 'http://8.8.8.8/hook' })).statusCode === 400, 'plain http refused');
+  r = await call(hA, 'POST', '/admin/api/webhooks', { url: 'https://8.8.8.8/hook', events: ['lead.created'] });
+  const hookId = r.json().webhook.id;
+  ok(r.statusCode === 200 && r.json().webhook.secret.startsWith('whsec_'), 'webhook created');
+  ok((await call(hA, 'GET', '/admin/api/integrations')).json().webhooks.length === 1 && (await call(hB, 'GET', '/admin/api/integrations')).json().webhooks.length === 0, 'webhooks are per workspace');
+  ok((await call(hB, 'DELETE', '/admin/api/webhooks/' + hookId)).statusCode === 404 && (await call(hB, 'POST', '/admin/api/webhooks/' + hookId + '/test')).statusCode === 404, "another workspace cannot touch the webhook");
+  ok((await call(hAg2, 'GET', '/admin/api/integrations')).statusCode === 403, 'agents cannot see integrations');
+  r = await call(hA, 'POST', '/admin/api/api-keys', { name: 'CRM' });
+  ok(/^lk_[a-f0-9]{48}$/.test(r.json().key) && r.json().apiKey.prefix === r.json().key.slice(0, 9), 'API key created and returned once');
+  ok(!JSON.stringify((await call(hA, 'GET', '/admin/api/integrations')).json()).includes(r.json().key), 'the full key is never listed again');
+  ok((await call(hA, 'POST', '/admin/api/chat-link/qr', { url: 'https://evil.example/x' })).statusCode === 400 && (await call(hA, 'POST', '/admin/api/chat-link/qr', { url: 'https://wa.me/919000000000?text=hi' })).json().qr.startsWith('data:image/png'), 'QR only for WhatsApp links');
+  ok((await call(hA, 'DELETE', '/admin/api/webhooks/' + hookId)).statusCode === 200, 'webhook deleted');
+
+  // ---- analytics ----
+  r = await call(hA, 'GET', '/admin/api/analytics?days=7');
+  ok(r.statusCode === 200 && r.json().series.length === 7 && r.json().totals.started >= 2 && r.json().totals.leads >= 1, 'analytics: totals and a 7-day series (simulator chats excluded)');
+  ok(r.json().totals.completionRate > 0 && r.json().byStage.some((x: any) => x.key === 'new' && x.count >= 1) && r.json().byService.length > 0, 'analytics: completion rate, stage and service breakdowns');
+  ok((await call(hA, 'GET', '/admin/api/analytics?days=999')).json().series.length === 30, 'analytics: unknown ranges fall back to 30 days');
+  ok((await call(hB, 'GET', '/admin/api/analytics')).json().totals.started === 0, "analytics: another workspace's data is not included");
+  ok((await call(hAg2, 'GET', '/admin/api/analytics')).statusCode === 403, 'agents cannot open analytics');
+
+  // ---- CRM: owner, tags, follow-ups, timeline ----
+  const crm = (payload: any) => call(hA, 'PATCH', '/admin/api/contacts/910000000077', payload);
+  r = await crm({ ownerId: ownerId, tags: ['VIP', ' hot lead ', 'vip', ''], followUpAt: new Date(Date.now() + 86400000).toISOString() });
+  ok(r.statusCode === 200 && r.json().contact.ownerEmail === `a${DOMAIN}` && r.json().contact.tags.join() === 'vip,hot-lead' && !!r.json().contact.followUpAt, 'owner, cleaned tags and follow-up saved');
+  ok((await crm({ ownerId: 'not-a-user' })).statusCode === 400, 'owner must be a team member of this workspace');
+  ok((await crm({ tags: Array.from({ length: 11 }, (_, i) => 't' + i) })).statusCode === 400, 'at most 10 tags');
+  ok((await crm({ followUpAt: 'tomorrow-ish' })).statusCode === 400, 'bad follow-up date refused');
+  const agentId2 = (await prisma.adminUser.findUnique({ where: { email: `agent2${DOMAIN}` } }))!.id;
+  ok((await call(hB, 'PATCH', '/admin/api/contacts/910000000077', { ownerId: agentId2 })).statusCode === 404, "another workspace cannot assign someone else's lead");
+  ok((await crm({ stage: 'site_visit', notes: 'called once' })).statusCode === 200, 'stage and notes saved with CRM fields');
+  await new Promise((res) => setTimeout(res, 300));
+  r = await call(hA, 'GET', '/admin/api/contacts/910000000077/events');
+  const types = r.json().events.map((e: any) => e.type);
+  ok(['owner', 'tags', 'follow_up', 'stage', 'note'].every((t) => types.includes(t)) && r.json().events.every((e: any) => e.actor === `a${DOMAIN}`), 'timeline records every change with who made it');
+  ok((await call(hB, 'GET', '/admin/api/contacts/910000000077/events')).json().events.length === 0, 'timeline is private to the workspace');
+  ok((await crm({ followUpAt: null })).json().contact.followUpAt === null, 'follow-up can be cleared');
+  // reminder worker
+  const { followUpTick } = await import('../src/services/crm');
+  await prisma.workspace.update({ where: { id: wsA }, data: { notifyPhone: '919000000555', plan: 'growth', planStatus: 'active', currentPeriodEnd: new Date(Date.now() + 86400000) } });
+  invalidateConfig(wsA);
+  setTransport(wsA, { sendText: async (to, text) => void sent.push(`${to}|${text}`), ready: () => true });
+  await crm({ followUpAt: new Date(Date.now() - 1000).toISOString() });
+  const before = sent.length;
+  ok((await followUpTick()) === 1 && sent.slice(before).some((t) => t.startsWith('919000000555|') && t.includes('Follow-up due: Zed Lead')), 'a due follow-up sends one reminder');
+  ok((await followUpTick()) === 0, 'and only one');
+
   // ---- platform admin ----
   await prisma.adminUser.create({ data: { email: `root${DOMAIN}`, passwordHash: await hashPassword('platform admin pw 1'), workspaceId: wsB, role: 'owner', isSuperAdmin: true } });
   const hRoot = cookieOf(await login(`root${DOMAIN}`, 'platform admin pw 1'));
   r = await call(hRoot, 'GET', '/admin/api/super/workspaces');
   ok(r.statusCode === 200 && r.json().workspaces.some((w: any) => w.id === wsA) && r.json().workspaces.some((w: any) => w.id === wsB), 'platform admin lists all workspaces');
   ok((await call(hRoot, 'POST', `/admin/api/super/workspaces/${wsA}/bot`, { enabled: false })).statusCode === 200 && (await prisma.workspace.findUnique({ where: { id: wsA } }))!.botEnabled === false, 'platform admin can suspend a bot');
+
+  // ---- platform admin tools ----
+  r = await call(hRoot, 'GET', '/admin/api/super/dashboard?days=7');
+  ok(r.statusCode === 200 && r.json().revenueDaily.length === 7 && r.json().monthlyRevenue.length === 12 && r.json().kpi.totalClients >= 2 && typeof r.json().kpi.mrr === 'number', 'platform dashboard: KPIs and chart series');
+  ok((await call(hRoot, 'GET', '/admin/api/super/dashboard?days=5')).json().period === 30, 'dashboard: unknown period falls back to 30');
+  ok((await call(hRoot, 'GET', '/admin/api/super/payments')).json().payments.length >= 2 && (await call(hRoot, 'GET', '/admin/api/super/subscriptions')).statusCode === 200 && (await call(hRoot, 'GET', '/admin/api/super/plans')).json().plans.length === 3, 'payments, subscriptions and plans lists');
+  ok((await call(hA, 'GET', '/admin/api/super/dashboard')).statusCode === 403 && (await call(hA, 'PUT', '/admin/api/super/settings', { platformSender: true })).statusCode === 403, 'tenants cannot open platform dashboards or settings');
+  ok((await call(hRoot, 'GET', '/admin/api/super/settings')).json().platformSender === false, 'platform sender is off by default');
+  ok((await call(hRoot, 'PUT', '/admin/api/super/settings', { platformSender: true })).json().platformSender === true && (await call(hRoot, 'PUT', '/admin/api/super/settings', { platformSender: false })).json().platformSender === false, 'platform sender can be switched on and off');
+  r = await call(hRoot, 'GET', '/admin/api/super/overview');
+  ok(r.statusCode === 200 && r.json().businesses >= 2 && typeof r.json().mrrInr === 'number', 'platform overview: counts and revenue');
+  ok((await call(hA, 'GET', '/admin/api/super/overview')).statusCode === 403 && (await call(hA, 'POST', '/admin/api/super/workspaces', {})).statusCode === 403, 'tenants cannot use platform tools');
+  ok((await call(hRoot, 'POST', '/admin/api/super/workspaces', { businessName: 'X', email: 'bad', password: 'long enough pw' })).statusCode === 400 && (await call(hRoot, 'POST', '/admin/api/super/workspaces', { businessName: 'X', email: `root${DOMAIN}`, password: 'long enough pw' })).statusCode === 409, 'creating a business validates the owner email');
+  r = await call(hRoot, 'POST', '/admin/api/super/workspaces', { businessName: 'Created By Root', email: `made${DOMAIN}`, password: 'temporary password 1', plan: 'starter', days: 45 });
+  const madeId = r.json().id;
+  ok(r.statusCode === 200 && !!madeId, 'platform admin creates a business with an owner');
+  const madeLogin = await login(`made${DOMAIN}`, 'temporary password 1');
+  ok(madeLogin.statusCode === 200 && madeLogin.json().user.role === 'owner' && madeLogin.json().user.workspace.botEnabled === false, 'the new owner can sign in; the bot starts paused');
+  r = await call(hRoot, 'GET', '/admin/api/super/workspaces/' + madeId);
+  ok(r.json().plan === 'starter' && r.json().planStatus === 'active' && r.json().users.length === 1 && r.json().limits.conversations === 300, 'detail shows plan, limits and people');
+  const madeUserId = r.json().users[0].id;
+  ok((await call(hRoot, 'POST', '/admin/api/super/users/' + madeUserId + '/password', { password: 'short' })).statusCode === 400, 'password reset needs 10+ characters');
+  ok((await call(hRoot, 'POST', '/admin/api/super/users/' + madeUserId + '/password', { password: 'brand new owner pw' })).statusCode === 200 && (await login(`made${DOMAIN}`, 'brand new owner pw')).statusCode === 200 && (await login(`made${DOMAIN}`, 'temporary password 1')).statusCode === 401, 'owner password reset by the platform admin');
+  r = await call(hRoot, 'POST', '/admin/api/super/workspaces/' + madeId + '/impersonate');
+  const imp = cookieOf(r);
+  ok(r.statusCode === 200 && (await call(imp, 'GET', '/admin/api/me')).json().user.email === `made${DOMAIN}`, 'sign in as owner switches the session to that business');
+  ok((await call(hRoot, 'POST', '/admin/api/super/workspaces/' + madeId + '/delete', { confirm: 'wrong name' })).statusCode === 400, 'delete needs the exact business name');
+  ok((await call(hRoot, 'POST', '/admin/api/super/workspaces/' + wsB + '/delete', { confirm: 'Bravo Test' })).statusCode === 400, 'cannot delete your own business');
+  ok((await call(hRoot, 'POST', '/admin/api/super/workspaces/default-workspace/delete', { confirm: 'x' })).statusCode === 400, 'the default workspace cannot be deleted');
+  ok((await call(hRoot, 'POST', '/admin/api/super/workspaces/' + madeId + '/delete', { confirm: 'Created By Root' })).statusCode === 200, 'platform admin deletes a business');
+  ok((await login(`made${DOMAIN}`, 'brand new owner pw')).statusCode === 401 && (await prisma.workspace.count({ where: { id: madeId } })) === 0, 'its users and data are gone');
+  r = await call(hRoot, 'GET', '/admin/api/super/audit');
+  const acts = r.json().entries.map((e: any) => e.action);
+  ok(['workspace.create', 'user.password_reset', 'impersonate', 'workspace.delete'].every((a) => acts.includes(a)), 'every operator action is in the audit log');
 
   for (let i = 0; i < 10; i++) await login(`victim${DOMAIN}`, 'x');
   ok((await login(`victim${DOMAIN}`, 'x')).statusCode === 429, 'repeated failures are throttled');

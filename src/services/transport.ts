@@ -4,6 +4,8 @@ import { prisma } from '../lib/prisma';
 /** Thin seam between the conversation engine and whatever actually delivers messages (a WhatsApp link per workspace, or a fake in tests). */
 export interface Transport {
   sendText(to: string, text: string): Promise<void>;
+  /** Is the underlying connection usable right now? */
+  ready?(): boolean;
 }
 
 const transports = new Map<string, Transport>();
@@ -38,6 +40,16 @@ export async function logMessage(
   } catch (err) {
     console.error('[log] failed to store message:', (err as Error).message);
   }
+}
+
+/** Is a delivery channel connected for this workspace? */
+export const transportReady = (workspaceId: string) => !!transports.get(workspaceId)?.ready?.();
+
+/** Sends without writing to the customer chat log (owner alerts, which are not part of any customer conversation). */
+export async function sendRaw(workspaceId: string, to: string, text: string): Promise<void> {
+  const t = transports.get(workspaceId);
+  if (!t) throw new Error('WhatsApp is not connected for this workspace');
+  await t.sendText(to, text);
 }
 
 export async function sendTextMessage(workspaceId: string, to: string, text: string): Promise<void> {

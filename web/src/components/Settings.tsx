@@ -3,6 +3,9 @@ import Admins from './Admins';
 import WhatsAppLink from './WhatsAppLink';
 import BusinessProfile from './BusinessProfile';
 import BotBuilder from './BotBuilder';
+import Billing from './Billing';
+import PipelineEditor from './PipelineEditor';
+import Integrations from './Integrations';
 
 export default function Settings({ overview, me, onChanged }: { overview: Overview; me: AdminUser; onChanged: () => void }) {
   return (
@@ -10,6 +13,9 @@ export default function Settings({ overview, me, onChanged }: { overview: Overvi
       <WhatsAppLink onChanged={onChanged} />
       <BusinessProfile workspace={overview.workspace} onSaved={onChanged} />
       <BotBuilder overview={overview} onSaved={onChanged} />
+      <PipelineEditor stages={overview.stages} onSaved={onChanged} />
+      <Integrations />
+      <Billing me={me} />
       <Admins me={me} />
     </div>
   );

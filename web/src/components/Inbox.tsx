@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ExternalLink, Phone, Send, UserCheck, Zap } from 'lucide-react';
 import { api } from '../api';
 import type { ChatMessage, Contact } from '../types';
-import { serviceStyle, STATUS_STYLE, ago, displayPhone, humanize, waLink } from '../config';
+import { serviceStyle, stageBadge, ago, displayPhone, humanize, waLink } from '../config';
 
 const CANNED = [
   'Hello! I am a team member taking over this conversation from the assistant.',
@@ -18,8 +18,10 @@ interface Props {
 }
 
 import { useBrand } from '../brand';
+import { useStages } from '../stages';
 export default function Inbox({ contacts, waReady, onChanged }: Props) {
   const brand = useBrand();
+  const stages = useStages();
   const list = useMemo(() => contacts.filter((c) => !c.isTest), [contacts]);
   const [activePhone, setActivePhone] = useState<string | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -211,7 +213,7 @@ export default function Inbox({ contacts, waReady, onChanged }: Props) {
             <div><span className="text-slate-500 text-[10px] block">Target destination</span><span className="font-semibold text-slate-200">{active.targetCountry || '—'}</span></div>
             <div>
               <span className="text-slate-500 text-[10px] block">Pipeline status</span>
-              <span className={`inline-block mt-0.5 px-2 py-0.5 rounded-full text-[10px] font-semibold border ${STATUS_STYLE[active.status].cls}`}>{STATUS_STYLE[active.status].label}</span>
+              <span className={`inline-block mt-0.5 px-2 py-0.5 rounded-full text-[10px] font-semibold border ${stageBadge(stages, active.pipeline).cls}`}>{stageBadge(stages, active.pipeline).label}</span>
             </div>
             {Object.entries(active.answers).map(([k, v]) => (
               <div key={k}><span className="text-slate-500 text-[10px] block capitalize">{humanize(k)}</span><span className="text-slate-300 break-words">{v}</span></div>

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Building2, Calendar, CheckCircle2, Clock, ExternalLink, Globe, MessageSquare, ShieldCheck, Smartphone, Users } from 'lucide-react';
+import { BarChart3, Building2, Megaphone, Calendar, CheckCircle2, Clock, ExternalLink, Globe, MessageSquare, ShieldCheck, Smartphone, Users } from 'lucide-react';
 import { api, UnauthorizedError } from './api';
-import type { AdminUser, Contact, Overview } from './types';
+import type { AdminRow, AdminUser, BillingInfo, Contact, Overview } from './types';
 import AccountMenu from './components/AccountMenu';
 import Login from './components/Login';
 import Crm from './components/Crm';
@@ -10,13 +10,23 @@ import Inbox from './components/Inbox';
 import Settings from './components/Settings';
 import Dossier from './components/Dossier';
 import Onboarding from './components/Onboarding';
-import Platform from './components/Platform';
+import PlatformShell from './components/PlatformShell';
+import Broadcasts from './components/Broadcasts';
+import Analytics from './components/Analytics';
 import { BrandContext } from './brand';
+import { StagesContext } from './stages';
 
-type Tab = 'crm' | 'simulator' | 'inbox' | 'config' | 'platform';
+type Tab = 'crm' | 'simulator' | 'inbox' | 'broadcasts' | 'analytics' | 'config';
+
+type Mode = 'platform' | 'business';
 
 export default function App() {
   const [user, setUser] = useState<AdminUser | null | undefined>(undefined);
+  const [mode, setMode] = useState<Mode>(() => (localStorage.getItem('mode') === 'business' ? 'business' : 'platform'));
+  const switchMode = (m: Mode) => {
+    localStorage.setItem('mode', m);
+    setMode(m);
+  };
 
   useEffect(() => {
     api.me().then((r) => setUser(r.authed && r.user ? r.user : null)).catch(() => setUser(null));
@@ -25,7 +35,11 @@ export default function App() {
   if (user === undefined) return <div className="min-h-screen bg-slate-900" />;
   if (!user) return <Login onDone={setUser} />;
   const signOut = () => api.logout().finally(() => setUser(null));
+  const platformMode = user.isSuperAdmin && mode === 'platform';
   const reloadUser = () => api.me().then((r) => setUser(r.authed && r.user ? r.user : null)).catch(() => undefined);
+  if (platformMode) {
+    return <PlatformShell user={user} onBusiness={() => switchMode('business')} onSignOut={signOut} />;
+  }
   if (user.workspace && !user.workspace.onboardingCompleted) {
     return user.role === 'agent' ? (
       <div className="min-h-screen bg-slate-900 text-slate-200 flex flex-col items-center justify-center gap-3 p-6 text-center">
@@ -36,22 +50,28 @@ export default function App() {
       <Onboarding user={user} onDone={reloadUser} onSignOut={signOut} />
     );
   }
-  return <Console user={user} onSignedOut={() => setUser(null)} />;
+  return <Console user={user} onSignedOut={() => setUser(null)} onPlatform={user.isSuperAdmin ? () => switchMode('platform') : undefined} />;
 }
 
-function Console({ user, onSignedOut }: { user: AdminUser; onSignedOut: () => void }) {
+const daysLeft = (iso: string | null) => (iso ? Math.max(0, Math.ceil((new Date(iso).getTime() - Date.now()) / 86_400_000)) : 0);
+
+function Console({ user, onSignedOut, onPlatform }: { user: AdminUser; onSignedOut: () => void; onPlatform?: () => void }) {
   const [tab, setTab] = useState<Tab>('crm');
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [overview, setOverview] = useState<Overview | null>(null);
+  const [billing, setBilling] = useState<BillingInfo | null>(null);
+  const [team, setTeam] = useState<AdminRow[]>([]);
+  useEffect(() => { api.admins().then(setTeam).catch(() => undefined); }, []);
   const [includeTest, setIncludeTest] = useState(false);
   const [selected, setSelected] = useState<string | null>(null);
   const [loadError, setLoadError] = useState('');
 
   const refresh = useCallback(async () => {
     try {
-      const [c, o] = await Promise.all([api.contacts(includeTest), api.overview()]);
+      const [c, o, bl] = await Promise.all([api.contacts(includeTest), api.overview(), api.billing().catch(() => null)]);
       setContacts(c);
       setOverview(o);
+      setBilling(bl);
       setLoadError('');
     } catch (err) {
       if (err instanceof UnauthorizedError) onSignedOut();
@@ -72,7 +92,7 @@ function Console({ user, onSignedOut }: { user: AdminUser; onSignedOut: () => vo
     return {
       total: real.length,
       qualified: real.filter((c) => c.hasLead).length,
-      booked: real.filter((c) => c.status === 'CONSULTATION_BOOKED').length,
+      booked: real.filter((c) => c.pipeline === 'booked').length,
       inProgress: real.filter((c) => !c.hasLead).length
     };
   }, [contacts]);
@@ -109,6 +129,7 @@ function Console({ user, onSignedOut }: { user: AdminUser; onSignedOut: () => vo
 
   return (
     <BrandContext.Provider value={brand}>
+    <StagesContext.Provider value={overview?.stages ?? []}>
     <div className="min-h-screen bg-slate-900 text-slate-100 flex flex-col font-sans">
       <header className="bg-slate-950 border-b border-slate-800 sticky top-0 z-40">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -151,6 +172,7 @@ function Console({ user, onSignedOut }: { user: AdminUser; onSignedOut: () => vo
                   <ExternalLink className="w-3.5 h-3.5" />
                 </a>
               )}
+              {onPlatform && <button onClick={onPlatform} className="hidden md:flex items-center space-x-1.5 text-xs font-semibold text-emerald-300 bg-emerald-950/40 border border-emerald-800/60 px-3 py-1.5 rounded-lg hover:bg-emerald-900/40"><Building2 className="w-3.5 h-3.5" /><span>Platform admin</span></button>}
               <AccountMenu user={user} onSignOut={() => api.logout().finally(onSignedOut)} />
             </div>
           </div>
@@ -163,8 +185,9 @@ function Console({ user, onSignedOut }: { user: AdminUser; onSignedOut: () => vo
             {tabBtn('simulator', <Smartphone className="w-4 h-4 text-emerald-400" />, 'Bot Simulator', (
               <span className="ml-1 px-1.5 rounded text-[9px] bg-emerald-500/20 text-emerald-300 font-bold">TEST</span>
             ))}
+            {!isAgent && tabBtn('analytics', <BarChart3 className="w-4 h-4" />, 'Analytics')}
+            {!isAgent && tabBtn('broadcasts', <Megaphone className="w-4 h-4" />, 'Broadcasts')}
             {!isAgent && tabBtn('config', <ShieldCheck className="w-4 h-4" />, 'Bot & Settings')}
-            {user.isSuperAdmin && tabBtn('platform', <Building2 className="w-4 h-4" />, 'All businesses')}
           </div>
         </div>
       </header>
@@ -173,6 +196,19 @@ function Console({ user, onSignedOut }: { user: AdminUser; onSignedOut: () => vo
         {loadError && (
           <div className="mb-4 p-3 rounded-lg bg-rose-950/50 border border-rose-800/60 text-rose-300 text-xs">
             Could not load data: {loadError}
+          </div>
+        )}
+
+        {billing && billing.plan !== 'internal' && (!billing.active || billing.status === 'past_due' || (billing.status === 'trialing' && daysLeft(billing.trialEndsAt) <= 3)) && (
+          <div className={`mb-4 p-3 rounded-lg border text-xs flex flex-wrap items-center justify-between gap-2 ${billing.active ? 'bg-amber-950/40 border-amber-800/60 text-amber-200' : 'bg-rose-950/50 border-rose-800/60 text-rose-200'}`}>
+            <span>
+              {!billing.active
+                ? 'Your bot has stopped replying to new customers: ' + (billing.reason === 'trial_expired' ? 'the free trial has ended.' : 'the subscription has ended.')
+                : billing.status === 'past_due'
+                  ? 'Your last payment failed. Update your payment method to keep the bot running.'
+                  : `Your free trial ends in ${daysLeft(billing.trialEndsAt)} day(s).`}
+            </span>
+            {!isAgent && <button onClick={() => setTab('config')} className="font-semibold underline">Choose a plan</button>}
           </div>
         )}
 
@@ -191,23 +227,26 @@ function Console({ user, onSignedOut }: { user: AdminUser; onSignedOut: () => vo
         </div>
 
         {tab === 'crm' && (
-          <Crm contacts={contacts} includeTest={includeTest} onIncludeTest={setIncludeTest} onOpen={setSelected} onChanged={replaceContact} />
+          <Crm contacts={contacts} includeTest={includeTest} onIncludeTest={setIncludeTest} onOpen={setSelected} onChanged={replaceContact} team={team} meId={user.id} />
         )}
         {tab === 'inbox' && <Inbox contacts={contacts} waReady={waReady} onChanged={replaceContact} />}
         {tab === 'simulator' && <Simulator onActivity={refresh} />}
+        {tab === 'analytics' && !isAgent && <Analytics />}
+        {tab === 'broadcasts' && !isAgent && overview && <Broadcasts overview={overview} waReady={waReady} />}
         {tab === 'config' && !isAgent && overview && <Settings overview={overview} me={user} onChanged={refresh} />}
-        {tab === 'platform' && user.isSuperAdmin && <Platform />}
       </main>
 
       {selectedContact && (
         <Dossier
           contact={selectedContact}
           bookingUrl={overview?.workspace.bookingUrl ?? ''}
+          team={team}
           onClose={() => setSelected(null)}
           onChanged={replaceContact}
         />
       )}
     </div>
+    </StagesContext.Provider>
     </BrandContext.Provider>
   );
 }

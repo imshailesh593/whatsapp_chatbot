@@ -40,7 +40,17 @@ model Workspace {
   onboardingCompleted Boolean  @default(false) @map("onboarding_completed")
   /// False until the owner presses "Go live"; a paused workspace never auto-replies
   botEnabled          Boolean  @default(true) @map("bot_enabled")
-  createdAt           DateTime @default(now()) @map("created_at")
+  /// trial | starter | growth | scale | internal (unlimited, for the operator's own business)
+  plan                   String    @default("trial")
+  /// trialing | active | past_due | canceled
+  planStatus             String    @default("trialing") @map("plan_status")
+  trialEndsAt            DateTime? @map("trial_ends_at")
+  currentPeriodEnd       DateTime? @map("current_period_end")
+  cancelAtPeriodEnd      Boolean   @default(false) @map("cancel_at_period_end")
+  billingProvider        String?   @map("billing_provider")
+  providerCustomerId     String?   @map("provider_customer_id")
+  providerSubscriptionId String?   @map("provider_subscription_id")
+  createdAt          DateTime @default(now()) @map("created_at")
   updatedAt           DateTime @updatedAt @map("updated_at")
 
   services   Service[]
@@ -48,6 +58,12 @@ model Workspace {
   leads      Lead[]
   logs       WebhookLog[]
   adminUsers AdminUser[]
+  usage      Usage[]
+  stages     Stage[]
+  broadcasts Broadcast[]
+  webhooks   Webhook[]
+  apiKeys    ApiKey[]
+  payments   Payment[]
 
   @@map("saas_workspaces")
 }
@@ -92,6 +108,10 @@ model Session {
   currentStep       Int          @default(0) @map("current_step")
   answers           Json         @default("{}")
   isAgentPaused     Boolean      @default(false) @map("is_agent_paused")
+  /// Customer replied STOP: never include in broadcasts
+  optedOut          Boolean      @default(false) @map("opted_out")
+  /// Campaign tag from a click-to-chat link ("(ref: summer24)" in the first message)
+  source            String?
   lastInteractionAt DateTime     @default(now()) @map("last_interaction_at")
   createdAt         DateTime     @default(now()) @map("created_at")
   updatedAt         DateTime     @updatedAt @map("updated_at")
@@ -108,16 +128,25 @@ model Lead {
   workspace       Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   sessionId       String    @unique @map("session_id")
   session         Session   @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  events          LeadEvent[]
   phoneNumber     String    @map("phone_number")
   serviceCategory String    @map("service_category")
   collectedData   Json      @map("collected_data")
-  isBookedTopmate Boolean   @default(false) @map("is_booked_topmate")
-  followUp        Boolean   @default(false) @map("follow_up")
+  /// Pipeline stage (Stage.key within the workspace)
+  stageKey        String    @default("new") @map("stage_key")
+  /// Team member responsible for this lead (AdminUser.id)
+  ownerId         String?   @map("owner_id")
+  tags            String[]  @default([])
+  followUpAt       DateTime? @map("follow_up_at")
+  followUpNotified Boolean   @default(false) @map("follow_up_notified")
   counsellorNotes String?   @map("counsellor_notes")
   createdAt       DateTime  @default(now()) @map("created_at")
   updatedAt       DateTime  @updatedAt @map("updated_at")
 
   @@index([workspaceId, phoneNumber])
+  @@index([workspaceId, stageKey])
+  @@index([workspaceId, ownerId])
+  @@index([followUpAt])
   @@index([serviceCategory])
   @@map("mns_leads")
 }
@@ -149,4 +178,190 @@ model AdminUser {
   lastLoginAt  DateTime?  @map("last_login_at")
 
   @@map("mns_admin_users")
+}
+
+/// Monthly counters used for plan limits (period = YYYY-MM)
+model Usage {
+  id            String    @id @default(uuid())
+  workspaceId   String    @map("workspace_id")
+  workspace     Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  period        String
+  conversations Int       @default(0)
+  aiReplies     Int       @default(0)
+  broadcasts    Int       @default(0)
+
+  @@unique([workspaceId, period])
+  @@map("saas_usage")
+}
+
+model Payment {
+  id          String    @id @default(uuid())
+  workspaceId String    @map("workspace_id")
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  provider    String
+  providerRef String    @unique @map("provider_ref")
+  plan        String
+  /// Smallest currency unit (paise / cents)
+  amount      Int
+  currency    String
+  status      String
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  @@index([workspaceId, createdAt])
+  @@map("saas_payments")
+}
+
+/// Provider webhook ids already processed (idempotency)
+model BillingEvent {
+  id        String   @id
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("saas_billing_events")
+}
+
+/// A step in the business's lead pipeline. "new" and "booked" are system stages the bot relies on.
+model Stage {
+  id          String    @id @default(uuid())
+  workspaceId String    @map("workspace_id")
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  key         String
+  label       String
+  color       String    @default("slate")
+  position    Int
+  /// open | won | lost
+  kind        String    @default("open")
+
+  @@unique([workspaceId, key])
+  @@index([workspaceId, position])
+  @@map("saas_stages")
+}
+
+/// A one-to-many message to customers who already chatted with the business
+model Broadcast {
+  id          String    @id @default(uuid())
+  workspaceId String    @map("workspace_id")
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  name        String
+  text        String
+  filters     Json      @default("{}")
+  /// draft | scheduled | sending | paused | done | canceled
+  status      String    @default("draft")
+  note        String    @default("")
+  total       Int       @default(0)
+  sent        Int       @default(0)
+  failed      Int       @default(0)
+  createdBy   String    @default("")
+  scheduledAt DateTime? @map("scheduled_at")
+  startedAt   DateTime? @map("started_at")
+  finishedAt  DateTime? @map("finished_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  recipients BroadcastRecipient[]
+
+  @@index([workspaceId, createdAt])
+  @@index([status])
+  @@map("saas_broadcasts")
+}
+
+model BroadcastRecipient {
+  id          String    @id @default(uuid())
+  broadcastId String    @map("broadcast_id")
+  broadcast   Broadcast @relation(fields: [broadcastId], references: [id], onDelete: Cascade)
+  phone       String
+  name        String?
+  /// pending | sent | failed | skipped
+  status      String    @default("pending")
+  error       String    @default("")
+  sentAt      DateTime? @map("sent_at")
+
+  @@index([broadcastId, status])
+  @@map("saas_broadcast_recipients")
+}
+
+/// Outgoing webhook: Zapier, Make, n8n, a Google Apps Script, the customer's own server
+model Webhook {
+  id          String    @id @default(uuid())
+  workspaceId String    @map("workspace_id")
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  url         String
+  secret      String
+  events      String[]
+  active      Boolean   @default(true)
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  deliveries WebhookDelivery[]
+
+  @@index([workspaceId])
+  @@map("saas_webhooks")
+}
+
+model WebhookDelivery {
+  id            String    @id @default(uuid())
+  webhookId     String    @map("webhook_id")
+  webhook       Webhook   @relation(fields: [webhookId], references: [id], onDelete: Cascade)
+  event         String
+  payload       Json
+  /// pending | ok | failed
+  status        String    @default("pending")
+  attempts      Int       @default(0)
+  responseCode  Int?      @map("response_code")
+  error         String    @default("")
+  nextAttemptAt DateTime  @default(now()) @map("next_attempt_at")
+  createdAt     DateTime  @default(now()) @map("created_at")
+
+  @@index([status, nextAttemptAt])
+  @@index([webhookId, createdAt])
+  @@map("saas_webhook_deliveries")
+}
+
+/// API key for the public REST API. Only a hash is stored; the key is shown once on creation.
+model ApiKey {
+  id          String    @id @default(uuid())
+  workspaceId String    @map("workspace_id")
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  name        String
+  prefix      String
+  hash        String    @unique
+  lastUsedAt  DateTime? @map("last_used_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  @@index([workspaceId])
+  @@map("saas_api_keys")
+}
+
+/// Activity timeline of a lead
+model LeadEvent {
+  id          String   @id @default(uuid())
+  leadId      String   @map("lead_id")
+  lead        Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  workspaceId String   @map("workspace_id")
+  /// created | stage | owner | tags | follow_up | note
+  type        String
+  detail      String   @default("")
+  actor       String   @default("bot")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@index([leadId, createdAt])
+  @@map("saas_lead_events")
+}
+
+/// Platform-operator actions (creating / deleting businesses, plan changes, impersonation)
+model AuditLog {
+  id          String   @id @default(uuid())
+  actor       String
+  action      String
+  workspaceId String?  @map("workspace_id")
+  detail      String   @default("")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@index([createdAt])
+  @@map("saas_audit_log")
+}
+
+/// Platform-wide switches (key -> JSON value)
+model Setting {
+  key   String @id
+  value Json
+
+  @@map("saas_settings")
 }

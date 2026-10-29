@@ -4,13 +4,16 @@
 import dotenv from 'dotenv';
 dotenv.config();
 import { prisma } from '../src/lib/prisma';
-import { setTransport } from '../src/services/transport';
+import { setTransport, captureReplies } from '../src/services/transport';
 import { handleIncomingMessage } from '../src/services/engine';
 import { loadConfig, resolveService, saveServices, invalidateConfig, sanitizeServices } from '../src/services/botConfig';
 import { getTemplate } from '../src/templates';
+import { setSetting } from '../src/services/settings';
+import { deliverAlert, sendTestAlert } from '../src/services/alerts';
 
+const extra: string[] = [];
 const sent: { ws: string; to: string; text: string }[] = [];
-const wire = (ws: string) => setTransport(ws, { sendText: async (to, text) => void sent.push({ ws, to, text }) });
+const wire = (ws: string) => setTransport(ws, { sendText: async (to, text) => void sent.push({ ws, to, text }), ready: () => true });
 const replies = (ws: string, to: string) => sent.filter((s) => s.ws === ws && s.to === to).map((s) => s.text);
 
 function assert(c: any, msg: string) {
@@ -24,11 +27,11 @@ async function main() {
     data: {
       slug: `e2e-a-${run}`, name: 'Acme Careers', businessName: 'Acme Careers', tagline: 'Your partner',
       welcomeIntro: 'We help with careers.', formUrl: 'https://forms.example/acme', bookingUrl: 'https://cal.example/acme',
-      bookingLabel: 'consultation', bookingNote: 'Fees adjusted later.', botEnabled: true, onboardingCompleted: true
+      bookingLabel: 'consultation', bookingNote: 'Fees adjusted later.', botEnabled: true, onboardingCompleted: true, plan: 'internal', planStatus: 'active'
     }
   });
   const B = await prisma.workspace.create({
-    data: { slug: `e2e-b-${run}`, name: 'Bolt Plumbing', businessName: 'Bolt Plumbing', botEnabled: true, onboardingCompleted: true }
+    data: { slug: `e2e-b-${run}`, name: 'Bolt Plumbing', businessName: 'Bolt Plumbing', botEnabled: true, onboardingCompleted: true, plan: 'internal', planStatus: 'active' }
   });
   try {
     wire(A.id);
@@ -72,7 +75,7 @@ async function main() {
       await handleIncomingMessage(A.id, phone, 'Test', 'how much is the fee');
       assert(replies(A.id, phone).at(-1)!.includes('cal.example'), `${svc.key}: fee question -> booking link`);
       await handleIncomingMessage(A.id, phone, 'Test', 'I have already booked');
-      assert((await prisma.lead.findFirst({ where: { workspaceId: A.id, phoneNumber: phone } }))?.isBookedTopmate === true, `${svc.key}: booking flips the flag`);
+      assert((await prisma.lead.findFirst({ where: { workspaceId: A.id, phoneNumber: phone } }))?.stageKey === 'booked', `${svc.key}: booking moves the lead to the Booked stage`);
       await handleIncomingMessage(A.id, phone, 'Test', 'menu');
       assert(replies(A.id, phone).at(-1)!.includes('Welcome to Acme Careers'), `${svc.key}: menu restarts the funnel`);
     }
@@ -111,6 +114,104 @@ async function main() {
     await handleIncomingMessage(A.id, mid, 'Mid', 'answer');
     assert(replies(A.id, mid).at(-1)!.includes('Only option'), 'removed service -> customer is sent back to the new menu');
 
+    console.log('\n[pipeline]');
+    await saveServices(A.id, tplA.services);
+    const won = `9122${run}`;
+    await handleIncomingMessage(A.id, won, 'W', 'hi');
+    await handleIncomingMessage(A.id, won, 'W', '5');
+    for (let i = 0; i < 3; i++) await handleIncomingMessage(A.id, won, 'W', 'x');
+    assert((await prisma.lead.findFirst({ where: { workspaceId: A.id, phoneNumber: won } }))?.stageKey === 'new', 'a finished lead starts in "new"');
+    await prisma.lead.updateMany({ where: { workspaceId: A.id, phoneNumber: won }, data: { stageKey: 'won' } });
+    await handleIncomingMessage(A.id, won, 'W', 'I have already booked');
+    assert((await prisma.lead.findFirst({ where: { workspaceId: A.id, phoneNumber: won } }))?.stageKey === 'won', 'a closed (won) lead is not pulled back to Booked');
+
+    console.log('\n[lead alerts]');
+    await saveServices(A.id, tplA.services);
+    process.env.SMTP_HOST = 'json';
+    process.env.SMTP_FROM = 'bot@example.com';
+    await prisma.workspace.update({ where: { id: A.id }, data: { notifyPhone: '+91 90000 00001', notifyEmail: 'owner@example.com' } });
+    invalidateConfig(A.id);
+    const ap = `9133${run}`;
+    const q0 = cfgA.services[4].questions; // "Other Enquiry": 3 questions
+    await handleIncomingMessage(A.id, ap, 'Priya', 'hi');
+    await handleIncomingMessage(A.id, ap, 'Priya', '5');
+    for (let i = 0; i < q0.length; i++) await handleIncomingMessage(A.id, ap, 'Priya', `alert-answer-${i}`);
+    await new Promise((r) => setTimeout(r, 400));
+    const alertMsg = replies(A.id, '919000000001').find((t) => t.includes('New lead'));
+    assert(!!alertMsg && alertMsg.includes('Priya') && alertMsg.includes('Other Enquiry') && alertMsg.includes('alert-answer-0'), 'new-lead alert reaches the owner WhatsApp number with name, service and answers');
+    assert((await prisma.webhookLog.count({ where: { workspaceId: A.id, phoneNumber: '919000000001' } })) === 0, 'owner alerts are not written into customer chat logs');
+    const tr = await sendTestAlert(A.id, 'Acme Careers');
+    assert(tr.whatsapp === 'sent' && tr.email === 'sent', 'test alert: both channels sent');
+    await handleIncomingMessage(A.id, ap, 'Priya', 'I have already booked');
+    await new Promise((r) => setTimeout(r, 400));
+    assert(replies(A.id, '919000000001').some((t) => t.includes('Booking confirmed')), 'booking alert sent once the customer confirms');
+    const n1 = replies(A.id, '919000000001').length;
+    await handleIncomingMessage(A.id, ap, 'Priya', 'I have already booked');
+    await new Promise((r) => setTimeout(r, 300));
+    assert(replies(A.id, '919000000001').length === n1, 'booking alert is not repeated');
+    // platform switch: alerts leave from the operator's own number instead of the client's
+    await setSetting('platformSender', true);
+    await prisma.workspace.update({ where: { id: A.id }, data: { notifyPhone: '919000000002' } });
+    invalidateConfig(A.id);
+    const platformWs = await prisma.workspace.findUnique({ where: { id: 'default-workspace' } });
+    if (platformWs) {
+      wire('default-workspace');
+      const viaA = replies(A.id, '919000000002').length;
+      const viaP = await deliverAlert(A.id, 'Hello', 'World');
+      assert(viaP.whatsapp === 'sent' && replies('default-workspace', '919000000002').some((t) => t.startsWith('[Acme Careers]')) && replies(A.id, '919000000002').length === viaA, 'platform switch on: the alert is sent from the platform number, labelled with the business name');
+      setTransport('default-workspace', null);
+      assert((await deliverAlert(A.id, 'x', 'y')).whatsapp.startsWith('skipped: the platform WhatsApp number'), 'platform number offline: alert skipped with a clear reason');
+    }
+    await setSetting('platformSender', false);
+    await prisma.workspace.update({ where: { id: A.id }, data: { notifyPhone: '+91 90000 00001' } });
+    invalidateConfig(A.id);
+    const none = await deliverAlert(B.id, 'x', 'y');
+    assert(none.whatsapp.startsWith('skipped') && none.email.startsWith('skipped'), 'no channels configured: nothing sent, no error');
+    await prisma.workspace.update({ where: { id: A.id }, data: { notifyPhone: 'abc' } });
+    invalidateConfig(A.id);
+    assert((await deliverAlert(A.id, 'x', 'y')).whatsapp.startsWith('skipped: the alert number'), 'invalid alert number is rejected');
+    delete process.env.SMTP_HOST;
+    await prisma.workspace.update({ where: { id: A.id }, data: { notifyPhone: '' } });
+    invalidateConfig(A.id);
+    assert((await deliverAlert(A.id, 'x', 'y')).email.startsWith('skipped: email sending'), 'email without SMTP is reported, not thrown');
+
+    console.log('\n[plan access and limits]');
+    const C = await prisma.workspace.create({
+      data: { slug: `e2e-c-${run}`, name: 'Cedar', businessName: 'Cedar', botEnabled: true, onboardingCompleted: true, trialEndsAt: new Date(Date.now() + 86400000) }
+    });
+    extra.push(C.id);
+    wire(C.id);
+    await saveServices(C.id, getTemplate('generic').services);
+    const pc = (n: number) => `9144${run}${n}`;
+    await handleIncomingMessage(C.id, pc(1), 'T', 'hi');
+    assert(replies(C.id, pc(1)).length === 1, 'active trial: bot replies');
+    assert((await prisma.usage.findFirst({ where: { workspaceId: C.id } }))?.conversations === 1, 'a new chat counts as one conversation');
+    await handleIncomingMessage(C.id, pc(1), 'T', 'menu');
+    assert((await prisma.usage.findFirst({ where: { workspaceId: C.id } }))?.conversations === 1, 'follow-up messages in the same chat are not counted again');
+    // conversation allowance used up: existing chats continue, new chats get nothing
+    await prisma.usage.updateMany({ where: { workspaceId: C.id }, data: { conversations: 1500 } });
+    const before = replies(C.id, pc(1)).length;
+    await handleIncomingMessage(C.id, pc(1), 'T', '1');
+    assert(replies(C.id, pc(1)).length === before + 1, 'limit reached: customers already chatting are still served');
+    await handleIncomingMessage(C.id, pc(2), 'T', 'hi');
+    assert(replies(C.id, pc(2)).length === 0 && (await prisma.session.count({ where: { workspaceId: C.id, phoneNumber: pc(2) } })) === 0, 'limit reached: no new chat is started');
+    // trial over
+    await prisma.workspace.update({ where: { id: C.id }, data: { trialEndsAt: new Date(Date.now() - 1000) } });
+    invalidateConfig(C.id);
+    const b2 = replies(C.id, pc(1)).length;
+    await handleIncomingMessage(C.id, pc(1), 'T', 'anyone there');
+    await handleIncomingMessage(C.id, pc(3), 'T', 'hi');
+    assert(replies(C.id, pc(1)).length === b2 && replies(C.id, pc(3)).length === 0, 'trial expired: bot goes quiet for everyone');
+    // simulator still works so the owner can finish setup
+    const sim = await captureReplies(() => handleIncomingMessage(C.id, 'SIM-x', 'S', 'hi'));
+    assert(sim.length === 1, 'trial expired: the simulator still works');
+    // paying again restores service (new month's allowance)
+    await prisma.usage.updateMany({ where: { workspaceId: C.id }, data: { conversations: 0 } });
+    await prisma.workspace.update({ where: { id: C.id }, data: { plan: 'growth', planStatus: 'active', currentPeriodEnd: new Date(Date.now() + 86400000) } });
+    invalidateConfig(C.id);
+    await handleIncomingMessage(C.id, pc(3), 'T', 'hi');
+    assert(replies(C.id, pc(3)).length === 1, 'subscription active: replies resume');
+
     console.log('\n[validation]');
     for (const bad of [[], [{ title: '', questions: [] }], [{ title: 'x', questions: [] }], Array.from({ length: 10 }, (_, i) => ({ title: `s${i}`, questions: [{ prompt: 'q' }] }))]) {
       let threw = false;
@@ -137,7 +238,7 @@ async function main() {
     }
     console.log('\nALL E2E CHECKS PASSED');
   } finally {
-    await prisma.workspace.deleteMany({ where: { id: { in: [A.id, B.id] } } }); // cascades to sessions, leads, logs
+    await prisma.workspace.deleteMany({ where: { id: { in: [A.id, B.id, ...extra] } } }); // cascades to sessions, leads, logs
   }
 }
 

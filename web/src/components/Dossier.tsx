@@ -1,7 +1,8 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Calendar, Phone, UserCheck, Zap } from 'lucide-react';
 import { api } from '../api';
-import type { Contact, Status } from '../types';
+import type { AdminRow, Contact, LeadEventInfo } from '../types';
+import { useStages } from '../stages';
 import { serviceStyle, humanize, displayPhone, waLink } from '../config';
 
 interface Props {
@@ -9,11 +10,29 @@ interface Props {
   bookingUrl: string;
   onClose: () => void;
   onChanged: (c: Contact) => void;
+  team: AdminRow[];
 }
 
-export default function Dossier({ contact, bookingUrl, onClose, onChanged }: Props) {
+const toLocalInput = (iso: string | null) => {
+  if (!iso) return '';
+  const d = new Date(iso);
+  d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
+  return d.toISOString().slice(0, 16);
+};
+
+const EVENT_LABEL: Record<string, string> = { created: 'Lead created', stage: 'Stage', owner: 'Owner', tags: 'Tags', follow_up: 'Follow-up', note: 'Notes' };
+
+export default function Dossier({ contact, bookingUrl, onClose, onChanged, team }: Props) {
+  const [ownerId, setOwnerId] = useState(contact.ownerId ?? '');
+  const [tags, setTags] = useState(contact.tags.join(', '));
+  const [followUp, setFollowUp] = useState(toLocalInput(contact.followUpAt));
+  const [events, setEvents] = useState<LeadEventInfo[]>([]);
+  useEffect(() => {
+    if (contact.hasLead) api.leadEvents(contact.phone).then(setEvents).catch(() => undefined);
+  }, [contact.phone, contact.hasLead]);
   const [notes, setNotes] = useState(contact.notes ?? '');
-  const [status, setStatus] = useState<Status>(contact.status);
+  const stages = useStages();
+  const [status, setStatus] = useState<string>(contact.pipeline ?? 'new');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const svc = contact.service ? serviceStyle(contact.service, contact.serviceTitle) : null;
@@ -22,7 +41,17 @@ export default function Dossier({ contact, bookingUrl, onClose, onChanged }: Pro
     setBusy(true);
     setError('');
     try {
-      if (contact.hasLead) onChanged(await api.patch(contact.phone, { notes, status }));
+      if (contact.hasLead) {
+        onChanged(
+          await api.patch(contact.phone, {
+            notes,
+            stage: status,
+            ownerId: ownerId || null,
+            tags: tags.split(',').map((t) => t.trim()).filter(Boolean),
+            followUpAt: followUp ? new Date(followUp).toISOString() : null
+          })
+        );
+      }
       onClose();
     } catch (err) {
       setError((err as Error).message);
@@ -65,14 +94,12 @@ export default function Dossier({ contact, bookingUrl, onClose, onChanged }: Pro
               <label className="text-[11px] font-semibold text-slate-400 block mb-1">Lead Stage</label>
               <select
                 value={status}
-                onChange={(e) => setStatus(e.target.value as Status)}
+                onChange={(e) => setStatus(e.target.value)}
                 disabled={!contact.hasLead}
                 className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-emerald-500 disabled:opacity-60"
               >
-                {!contact.hasLead && <option value="IN_PROGRESS">⏳ Still answering the questionnaire</option>}
-                <option value="COMPLETED">✓ Fully Qualified</option>
-                <option value="CONSULTATION_BOOKED">🗓 Booked</option>
-                <option value="FOLLOW_UP">📞 Follow-up Required</option>
+                {!contact.hasLead && <option value="new">⏳ Still answering the questionnaire</option>}
+                {stages.map((s) => <option key={s.key} value={s.key}>{s.label}</option>)}
               </select>
             </div>
             <div>
@@ -90,6 +117,27 @@ export default function Dossier({ contact, bookingUrl, onClose, onChanged }: Pro
               </button>
             </div>
           </div>
+
+          {contact.hasLead && (
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 bg-slate-950 p-3.5 rounded-xl border border-slate-800">
+              <div>
+                <label className="text-[11px] font-semibold text-slate-400 block mb-1">Owner</label>
+                <select value={ownerId} onChange={(e) => setOwnerId(e.target.value)} className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-emerald-500">
+                  <option value="">Unassigned</option>
+                  {team.map((m) => <option key={m.id} value={m.id}>{m.email}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="text-[11px] font-semibold text-slate-400 block mb-1">Tags (comma separated)</label>
+                <input value={tags} onChange={(e) => setTags(e.target.value)} placeholder="vip, call-back" className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-emerald-500" />
+              </div>
+              <div>
+                <label className="text-[11px] font-semibold text-slate-400 block mb-1">Follow up on</label>
+                <input type="datetime-local" value={followUp} onChange={(e) => setFollowUp(e.target.value)} className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-emerald-500" />
+              </div>
+              {contact.source && <div className="sm:col-span-3 text-[11px] text-slate-500">Came from campaign: <strong className="text-slate-300">{contact.source}</strong></div>}
+            </div>
+          )}
 
           <div>
             <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-2">Collected Answers</h4>
@@ -116,6 +164,19 @@ export default function Dossier({ contact, bookingUrl, onClose, onChanged }: Pro
               placeholder={contact.hasLead ? 'Verification notes, call outcomes, meeting notes…' : 'Notes unlock once the questionnaire is complete.'}
             />
           </div>
+          {events.length > 0 && (
+            <div>
+              <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400 mb-2">Activity</h4>
+              <div className="bg-slate-950 rounded-xl p-3.5 border border-slate-800 space-y-2 max-h-40 overflow-y-auto">
+                {events.map((e) => (
+                  <div key={e.id} className="flex justify-between gap-3 text-[11px]">
+                    <span className="text-slate-300"><strong>{EVENT_LABEL[e.type] ?? e.type}</strong>{e.detail ? ': ' + e.detail : ''}</span>
+                    <span className="text-slate-500 whitespace-nowrap">{e.actor.split('@')[0]} · {new Date(e.at).toLocaleString()}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
           {error && <p className="text-rose-400">{error}</p>}
         </div>
 

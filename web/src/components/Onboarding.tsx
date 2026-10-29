@@ -207,7 +207,7 @@ export default function Onboarding({ user, onDone, onSignOut }: { user: AdminUse
             <div>
               <label className="text-xs text-slate-300 block mb-1">Email for lead alerts</label>
               <input type="email" value={links.notifyEmail} onChange={(e) => setLinks({ ...links, notifyEmail: e.target.value })} className={input$} />
-              <p className="text-[11px] text-slate-500 mt-1">Saved now; email alerts are coming soon.</p>
+              <p className="text-[11px] text-slate-500 mt-1">You get an email when a customer finishes the questions (if email sending is set up on this server). Add a WhatsApp number later in Settings.</p>
             </div>
             {error && <p className="text-xs text-rose-400" role="alert">{error}</p>}
             <div className="flex gap-2">

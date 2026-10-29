@@ -1,15 +1,15 @@
-import { FormEvent, useState } from 'react';
+import { FormEvent, useEffect, useState } from 'react';
 import { Play, Pause } from 'lucide-react';
 import { api } from '../api';
 import type { Workspace } from '../types';
 
 type Fields = Pick<
   Workspace,
-  'businessName' | 'tagline' | 'description' | 'welcomeIntro' | 'tone' | 'languages' | 'bookingLabel' | 'bookingUrl' | 'bookingNote' | 'formUrl' | 'knowledge' | 'notifyEmail' | 'notifyPhone'
+  'timezone' | 'businessName' | 'tagline' | 'description' | 'welcomeIntro' | 'tone' | 'languages' | 'bookingLabel' | 'bookingUrl' | 'bookingNote' | 'formUrl' | 'knowledge' | 'notifyEmail' | 'notifyPhone'
 >;
 
 const pick = (w: Workspace): Fields => ({
-  businessName: w.businessName, tagline: w.tagline, description: w.description, welcomeIntro: w.welcomeIntro, tone: w.tone,
+  timezone: w.timezone, businessName: w.businessName, tagline: w.tagline, description: w.description, welcomeIntro: w.welcomeIntro, tone: w.tone,
   languages: w.languages, bookingLabel: w.bookingLabel, bookingUrl: w.bookingUrl, bookingNote: w.bookingNote, formUrl: w.formUrl,
   knowledge: w.knowledge, notifyEmail: w.notifyEmail, notifyPhone: w.notifyPhone
 });
@@ -19,6 +19,24 @@ export default function BusinessProfile({ workspace, onSaved }: { workspace: Wor
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [note, setNote] = useState('');
+  const [alertInfo, setAlertInfo] = useState<{ emailAvailable: boolean; whatsappReady: boolean } | null>(null);
+  const [testResult, setTestResult] = useState<{ whatsapp: string; email: string } | null>(null);
+  useEffect(() => { api.alertInfo().then(setAlertInfo).catch(() => undefined); }, []);
+
+  async function testAlert() {
+    setBusy(true);
+    setError('');
+    setTestResult(null);
+    try {
+      await api.saveWorkspace(f);
+      setTestResult(await api.testAlert());
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
   const set = (k: keyof Fields) => (e: { target: { value: string } }) => setF((x) => ({ ...x, [k]: e.target.value }));
 
   async function save(e: FormEvent) {
@@ -77,6 +95,7 @@ export default function BusinessProfile({ workspace, onSaved }: { workspace: Wor
             {[...new Set(['friendly', 'professional', 'formal', 'casual', f.tone])].map((t) => <option key={t} value={t}>{t}</option>)}
           </select>
         </div>
+        <div><label className={label}>Time zone (broadcasts go out 9:00-20:00 here)</label><input value={f.timezone} maxLength={60} onChange={set('timezone')} className={input} placeholder="Asia/Kolkata" /></div>
         <div><label className={label}>Languages customers use</label><input value={f.languages} maxLength={80} onChange={set('languages')} className={input} /></div>
         <div><label className={label}>Booking / payment link</label><input value={f.bookingUrl} maxLength={300} onChange={set('bookingUrl')} className={input} placeholder="https://cal.com/you" /></div>
         <div><label className={label}>What it is called (&ldquo;schedule a ___&rdquo;)</label><input value={f.bookingLabel} maxLength={80} onChange={set('bookingLabel')} className={input} placeholder="consultation" /></div>
@@ -86,8 +105,29 @@ export default function BusinessProfile({ workspace, onSaved }: { workspace: Wor
           <label className={label}>Facts the AI may use when customers ask questions (prices, hours, policies, FAQs)</label>
           <textarea rows={6} value={f.knowledge} maxLength={8000} onChange={set('knowledge')} className={input} placeholder="Opening hours: Mon–Sat 9–6&#10;Consultation costs ₹500…&#10;The AI will not invent anything that is not written here." />
         </div>
-        <div><label className={label}>Lead alerts: email (coming soon)</label><input type="email" value={f.notifyEmail} onChange={set('notifyEmail')} className={input} /></div>
-        <div><label className={label}>Lead alerts: WhatsApp number (coming soon)</label><input value={f.notifyPhone} onChange={set('notifyPhone')} className={input} /></div>
+        <div className="sm:col-span-2 border-t border-slate-800 pt-4">
+          <h4 className="text-sm font-bold text-white">Lead alerts</h4>
+          <p className="text-[11px] text-slate-500 mt-1">Get a message the moment a customer finishes the questions, or says they have booked.</p>
+        </div>
+        <div>
+          <label className={label}>Email</label>
+          <input type="email" value={f.notifyEmail} onChange={set('notifyEmail')} className={input} placeholder="you@example.com" />
+          {alertInfo && !alertInfo.emailAvailable && <p className="text-[11px] text-amber-400 mt-1">Email sending is not set up on this server yet.</p>}
+        </div>
+        <div>
+          <label className={label}>WhatsApp number (with country code)</label>
+          <input value={f.notifyPhone} onChange={set('notifyPhone')} className={input} placeholder="919876543210" />
+          {alertInfo && !alertInfo.whatsappReady && <p className="text-[11px] text-amber-400 mt-1">Connect WhatsApp first: alerts are sent from your linked number.</p>}
+        </div>
+        <div className="sm:col-span-2 flex flex-wrap items-center gap-3">
+          <button type="button" onClick={testAlert} disabled={busy || (!f.notifyEmail && !f.notifyPhone)} className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs rounded-lg border border-slate-700 disabled:opacity-40">Save &amp; send a test alert</button>
+          {testResult && (
+            <span className="text-[11px] text-slate-300">
+              WhatsApp: <strong className={testResult.whatsapp === 'sent' ? 'text-emerald-400' : 'text-amber-300'}>{testResult.whatsapp}</strong>
+              {' · '}Email: <strong className={testResult.email === 'sent' ? 'text-emerald-400' : 'text-amber-300'}>{testResult.email}</strong>
+            </span>
+          )}
+        </div>
         <div className="sm:col-span-2 flex items-center gap-3">
           <button disabled={busy} className="px-5 py-2 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs rounded-lg transition disabled:opacity-50">{busy ? 'Saving…' : 'Save'}</button>
           {note && <span className="text-xs text-emerald-400">{note}</span>}

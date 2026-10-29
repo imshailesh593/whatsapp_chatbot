@@ -1,8 +1,9 @@
 import { useMemo, useState } from 'react';
-import { Download, Phone, Search, UserCheck, Zap } from 'lucide-react';
+import { Clock, Download, LayoutGrid, List, Phone, Search, UserCheck, Zap } from 'lucide-react';
 import { api } from '../api';
-import type { Contact, Status } from '../types';
-import { serviceStyle, STATUS_STYLE, ago, displayPhone, waLink } from '../config';
+import type { AdminRow, Contact } from '../types';
+import { useStages } from '../stages';
+import { serviceStyle, stageBadge, ago, displayPhone, waLink } from '../config';
 
 interface Props {
   contacts: Contact[];
@@ -10,12 +11,22 @@ interface Props {
   onIncludeTest: (v: boolean) => void;
   onOpen: (phone: string) => void;
   onChanged: (c: Contact) => void;
+  team: AdminRow[];
+  meId: string;
 }
 
-export default function Crm({ contacts, includeTest, onIncludeTest, onOpen, onChanged }: Props) {
+export default function Crm({ contacts, includeTest, onIncludeTest, onOpen, onChanged, team, meId }: Props) {
+  const [view, setView] = useState<'list' | 'board'>(() => (localStorage.getItem('crmView') === 'board' ? 'board' : 'list'));
+  const [owner, setOwner] = useState<string>('ALL');
+  const [tag, setTag] = useState<string>('ALL');
+  const [dueOnly, setDueOnly] = useState(false);
+  const [dragging, setDragging] = useState<string | null>(null);
+  const [overStage, setOverStage] = useState<string | null>(null);
+  const [boardError, setBoardError] = useState('');
   const [search, setSearch] = useState('');
   const [service, setService] = useState<string>('ALL');
-  const [status, setStatus] = useState<'ALL' | Status>('ALL');
+  const stages = useStages();
+  const [status, setStatus] = useState<string>('ALL');
 
   const serviceOptions = useMemo(() => {
     const m = new Map<string, string>();
@@ -29,9 +40,26 @@ export default function Crm({ contacts, includeTest, onIncludeTest, onOpen, onCh
       (c) =>
         (!q || (c.name ?? '').toLowerCase().includes(q) || c.phone.includes(q) || (c.targetCountry ?? '').toLowerCase().includes(q)) &&
         (service === 'ALL' || c.service === service) &&
-        (status === 'ALL' || c.status === status)
+        (status === 'ALL' || (c.pipeline ?? 'answering') === status) &&
+        (owner === 'ALL' || (owner === 'ME' ? c.ownerId === meId : owner === 'NONE' ? !c.ownerId : c.ownerId === owner)) &&
+        (tag === 'ALL' || c.tags.includes(tag)) &&
+        (!dueOnly || (!!c.followUpAt && new Date(c.followUpAt).getTime() <= Date.now()))
     );
-  }, [contacts, search, service, status]);
+  }, [contacts, search, service, status, owner, tag, dueOnly, meId]);
+
+  const allTags = useMemo(() => [...new Set(contacts.flatMap((c) => c.tags))].sort(), [contacts]);
+  const dueCount = useMemo(() => contacts.filter((c) => c.followUpAt && new Date(c.followUpAt).getTime() <= Date.now()).length, [contacts]);
+
+  async function moveTo(phone: string, stage: string) {
+    const c = contacts.find((x) => x.phone === phone);
+    if (!c || !c.hasLead || c.pipeline === stage) return;
+    setBoardError('');
+    try {
+      onChanged(await api.patch(phone, { stage }));
+    } catch (err) {
+      setBoardError((err as Error).message);
+    }
+  }
 
   const select = 'bg-slate-900 border border-slate-700/80 rounded-lg px-3 py-2 text-xs text-slate-300 focus:outline-none focus:border-emerald-500';
 
@@ -59,12 +87,32 @@ export default function Crm({ contacts, includeTest, onIncludeTest, onOpen, onCh
               <option key={id} value={id}>{title}</option>
             ))}
           </select>
-          <select value={status} onChange={(e) => setStatus(e.target.value as 'ALL' | Status)} className={select}>
+          <select value={status} onChange={(e) => setStatus(e.target.value)} className={select}>
             <option value="ALL">All Statuses</option>
-            {(Object.keys(STATUS_STYLE) as Status[]).map((s) => (
-              <option key={s} value={s}>{STATUS_STYLE[s].label}</option>
+            <option value="answering">⏳ Answering</option>
+            {stages.map((s) => (
+              <option key={s.key} value={s.key}>{s.label}</option>
             ))}
           </select>
+          <select value={owner} onChange={(e) => setOwner(e.target.value)} className={select}>
+            <option value="ALL">Anyone</option>
+            <option value="ME">My leads</option>
+            <option value="NONE">Unassigned</option>
+            {team.map((m) => <option key={m.id} value={m.id}>{m.email}</option>)}
+          </select>
+          {allTags.length > 0 && (
+            <select value={tag} onChange={(e) => setTag(e.target.value)} className={select}>
+              <option value="ALL">All tags</option>
+              {allTags.map((t) => <option key={t} value={t}>#{t}</option>)}
+            </select>
+          )}
+          <button onClick={() => setDueOnly((v) => !v)} className={`flex items-center space-x-1 px-3 py-2 rounded-lg text-xs font-medium border transition ${dueOnly ? 'bg-amber-500/20 text-amber-300 border-amber-500/50' : 'bg-slate-900 text-slate-300 border-slate-700/80'}`}>
+            <Clock className="w-3.5 h-3.5" /><span>Follow-ups due{dueCount ? ` (${dueCount})` : ''}</span>
+          </button>
+          <div className="flex rounded-lg overflow-hidden border border-slate-700/80">
+            <button onClick={() => { setView('list'); localStorage.setItem('crmView', 'list'); }} title="List" className={`px-2.5 py-2 ${view === 'list' ? 'bg-emerald-500/20 text-emerald-300' : 'bg-slate-900 text-slate-400'}`}><List className="w-3.5 h-3.5" /></button>
+            <button onClick={() => { setView('board'); localStorage.setItem('crmView', 'board'); }} title="Board" className={`px-2.5 py-2 ${view === 'board' ? 'bg-emerald-500/20 text-emerald-300' : 'bg-slate-900 text-slate-400'}`}><LayoutGrid className="w-3.5 h-3.5" /></button>
+          </div>
           <label className="flex items-center space-x-1.5 text-[11px] text-slate-400 cursor-pointer">
             <input type="checkbox" checked={includeTest} onChange={(e) => onIncludeTest(e.target.checked)} />
             <span>Show simulator data</span>
@@ -79,7 +127,48 @@ export default function Crm({ contacts, includeTest, onIncludeTest, onOpen, onCh
         </div>
       </div>
 
-      <div className="bg-slate-950/80 border border-slate-800 rounded-xl overflow-hidden shadow-xl">
+      {view === 'board' && (
+        <div>
+          {boardError && <p className="text-xs text-rose-400 mb-2" role="alert">{boardError}</p>}
+          <p className="text-[11px] text-slate-500 mb-2">Drag a card to another column to change its stage. People still answering the questions are not shown here.</p>
+          <div className="flex gap-3 overflow-x-auto pb-3">
+            {stages.map((st) => {
+              const cards = rows.filter((c) => c.pipeline === st.key);
+              return (
+                <div key={st.key}
+                  onDragOver={(e) => { e.preventDefault(); setOverStage(st.key); }}
+                  onDragLeave={() => setOverStage((o) => (o === st.key ? null : o))}
+                  onDrop={(e) => { e.preventDefault(); setOverStage(null); const p = e.dataTransfer.getData('text/plain') || dragging; if (p) moveTo(p, st.key); setDragging(null); }}
+                  className={`w-64 shrink-0 rounded-xl border p-2.5 ${overStage === st.key ? 'border-emerald-500/70 bg-emerald-500/5' : 'border-slate-800 bg-slate-950/70'}`}>
+                  <div className="flex items-center justify-between mb-2 px-1">
+                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold border ${stageBadge(stages, st.key).cls}`}>{st.label}</span>
+                    <span className="text-[11px] text-slate-500">{cards.length}</span>
+                  </div>
+                  <div className="space-y-2 min-h-[60px]">
+                    {cards.map((c) => (
+                      <div key={c.phone} draggable onDragStart={(e) => { e.dataTransfer.setData('text/plain', c.phone); setDragging(c.phone); }} onDragEnd={() => setDragging(null)}
+                        onClick={() => onOpen(c.phone)}
+                        className="bg-slate-900 border border-slate-800 hover:border-slate-600 rounded-lg p-2.5 cursor-grab active:cursor-grabbing text-xs">
+                        <div className="font-semibold text-slate-100 truncate">{c.name || 'Unknown'}</div>
+                        <div className="text-[11px] text-slate-400 mt-0.5 truncate">{c.serviceTitle ?? '—'} · {ago(c.lastActivity)}</div>
+                        {(c.tags.length > 0 || c.followUpAt || c.ownerEmail) && (
+                          <div className="mt-1.5 flex flex-wrap gap-1 items-center">
+                            {c.tags.map((t) => <span key={t} className="px-1.5 py-0.5 rounded bg-slate-800 text-slate-300 text-[10px]">#{t}</span>)}
+                            {c.followUpAt && <span className={`text-[10px] flex items-center space-x-0.5 ${new Date(c.followUpAt).getTime() <= Date.now() ? 'text-amber-300' : 'text-slate-500'}`}><Clock className="w-2.5 h-2.5" /><span>{new Date(c.followUpAt).toLocaleDateString()}</span></span>}
+                            {c.ownerEmail && <span className="text-[10px] text-slate-500 truncate">{c.ownerEmail.split('@')[0]}</span>}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {view === 'list' && <div className="bg-slate-950/80 border border-slate-800 rounded-xl overflow-hidden shadow-xl">
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs sm:text-sm">
             <thead className="bg-slate-900/90 border-b border-slate-800 text-slate-400 font-semibold uppercase text-[10px] tracking-wider">
@@ -104,6 +193,13 @@ export default function Crm({ contacts, includeTest, onIncludeTest, onOpen, onCh
                         {c.isTest && <span className="ml-2 text-[9px] px-1.5 py-0.5 rounded bg-slate-800 text-slate-400">TEST</span>}
                       </div>
                       <div className="text-[11px] text-slate-400 mt-0.5">{displayPhone(c.phone)} · {ago(c.lastActivity)}</div>
+                      {(c.tags.length > 0 || c.ownerEmail || c.followUpAt) && (
+                        <div className="mt-1 flex flex-wrap gap-1 items-center">
+                          {c.tags.map((t) => <span key={t} className="px-1.5 py-0.5 rounded bg-slate-800 text-slate-300 text-[10px]">#{t}</span>)}
+                          {c.ownerEmail && <span className="text-[10px] text-slate-500">· {c.ownerEmail.split('@')[0]}</span>}
+                          {c.followUpAt && <span className={`text-[10px] ${new Date(c.followUpAt).getTime() <= Date.now() ? 'text-amber-300' : 'text-slate-500'}`}>· follow up {new Date(c.followUpAt).toLocaleDateString()}</span>}
+                        </div>
+                      )}
                     </td>
                     <td className="py-3.5 px-4">
                       {svc ? (
@@ -125,8 +221,8 @@ export default function Crm({ contacts, includeTest, onIncludeTest, onOpen, onCh
                       </div>
                     </td>
                     <td className="py-3.5 px-4">
-                      <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold border ${STATUS_STYLE[c.status].cls}`}>
-                        {STATUS_STYLE[c.status].label}
+                      <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold border ${stageBadge(stages, c.pipeline).cls}`}>
+                        {stageBadge(stages, c.pipeline).label}
                       </span>
                     </td>
                     <td className="py-3.5 px-4" onClick={(e) => e.stopPropagation()}>
@@ -176,7 +272,7 @@ export default function Crm({ contacts, includeTest, onIncludeTest, onOpen, onCh
             </div>
           )}
         </div>
-      </div>
+      </div>}
     </div>
   );
 }
