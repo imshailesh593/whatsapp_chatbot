@@ -197,6 +197,16 @@ export interface IntegrationsInfo {
   apiKeys: ApiKeyInfo[];
 }
 
+export interface AnalyticsData {
+  days: number;
+  totals: { started: number; pickedService: number; leads: number; booked: number; won: number; completionRate: number; medianMinutesToComplete: number | null };
+  series: { day: string; started: number; leads: number }[];
+  byService: { key: string | null; title: string; started: number; leads: number }[];
+  bySource: { source: string; started: number; leads: number }[];
+  byStage: { key: string; label: string; color: string; count: number }[];
+  dropOffs: { service: string; question: string; count: number }[];
+}
+
 export interface BroadcastInfo {
   id: string;
   name: string;

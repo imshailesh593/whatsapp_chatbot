@@ -1,4 +1,4 @@
-import type { ApiKeyInfo, IntegrationsInfo, WebhookInfo, BroadcastInfo, StageDef, BillingInfo, AdminRow, AdminUser, ChatMessage, ChatTurn, Contact, Draft, Overview, PatchBody, PlatformWorkspace, ServiceDef, TemplateInfo, WaSnapshot, Workspace } from './types';
+import type { AnalyticsData, ApiKeyInfo, IntegrationsInfo, WebhookInfo, BroadcastInfo, StageDef, BillingInfo, AdminRow, AdminUser, ChatMessage, ChatTurn, Contact, Draft, Overview, PatchBody, PlatformWorkspace, ServiceDef, TemplateInfo, WaSnapshot, Workspace } from './types';
 
 export class UnauthorizedError extends Error {}
 
@@ -44,6 +44,7 @@ export const api = {
   createApiKey: (name: string) => post<{ key: string; apiKey: ApiKeyInfo }>('/admin/api/api-keys', { name }),
   deleteApiKey: (id: string) => request<{ ok: true }>(`/admin/api/api-keys/${encodeURIComponent(id)}`, { method: 'DELETE' }),
   chatLinkQr: (url: string) => post<{ qr: string }>('/admin/api/chat-link/qr', { url }),
+  analytics: (days: number) => request<AnalyticsData>(`/admin/api/analytics?days=${days}`),
   alertInfo: () => request<{ emailAvailable: boolean; whatsappReady: boolean }>('/admin/api/alerts'),
   testAlert: () => post<{ whatsapp: string; email: string }>('/admin/api/alerts/test', {}),
   billing: () => request<BillingInfo>('/admin/api/billing'),

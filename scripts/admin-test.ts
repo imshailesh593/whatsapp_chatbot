@@ -286,6 +286,14 @@ async function cleanup() {
   ok((await call(hA, 'POST', '/admin/api/chat-link/qr', { url: 'https://evil.example/x' })).statusCode === 400 && (await call(hA, 'POST', '/admin/api/chat-link/qr', { url: 'https://wa.me/919000000000?text=hi' })).json().qr.startsWith('data:image/png'), 'QR only for WhatsApp links');
   ok((await call(hA, 'DELETE', '/admin/api/webhooks/' + hookId)).statusCode === 200, 'webhook deleted');
 
+  // ---- analytics ----
+  r = await call(hA, 'GET', '/admin/api/analytics?days=7');
+  ok(r.statusCode === 200 && r.json().series.length === 7 && r.json().totals.started >= 2 && r.json().totals.leads >= 1, 'analytics: totals and a 7-day series (simulator chats excluded)');
+  ok(r.json().totals.completionRate > 0 && r.json().byStage.some((x: any) => x.key === 'new' && x.count >= 1) && r.json().byService.length > 0, 'analytics: completion rate, stage and service breakdowns');
+  ok((await call(hA, 'GET', '/admin/api/analytics?days=999')).json().series.length === 30, 'analytics: unknown ranges fall back to 30 days');
+  ok((await call(hB, 'GET', '/admin/api/analytics')).json().totals.started === 0, "analytics: another workspace's data is not included");
+  ok((await call(hAg2, 'GET', '/admin/api/analytics')).statusCode === 403, 'agents cannot open analytics');
+
   // ---- platform admin ----
   await prisma.adminUser.create({ data: { email: `root${DOMAIN}`, passwordHash: await hashPassword('platform admin pw 1'), workspaceId: wsB, role: 'owner', isSuperAdmin: true } });
   const hRoot = cookieOf(await login(`root${DOMAIN}`, 'platform admin pw 1'));

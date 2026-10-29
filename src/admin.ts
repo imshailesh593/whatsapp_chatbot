@@ -27,6 +27,7 @@ import { PRODUCT_NAME } from './brand';
 import { sendTestAlert, smtpConfigured } from './services/alerts';
 import { getStages, saveStages, stageExists } from './services/pipeline';
 import QRCode from 'qrcode';
+import { analytics } from './services/analytics';
 import { EVENTS, assertPublicUrl, createApiKey, createWebhook, deliverDue, dispatchEvent, leadSnapshot } from './services/integrations';
 import { createBroadcast, previewAudience, setStatus as setBroadcastStatus } from './services/broadcast';
 import { transportReady } from './services/transport';
@@ -577,6 +578,12 @@ export function registerAdmin(app: FastifyInstance, opts: { getQr: (workspaceId:
     } catch (err) {
       return reply.status(400).send({ error: (err as Error).message });
     }
+  });
+
+  // ---- analytics ----
+  app.get('/admin/api/analytics', { preHandler: manager }, async (req) => {
+    const d = parseInt(String((req.query as any).days ?? '30'), 10);
+    return analytics(wsId(req), [7, 30, 90].includes(d) ? d : 30);
   });
 
   // ---- integrations: webhooks, API keys, click-to-chat ----
