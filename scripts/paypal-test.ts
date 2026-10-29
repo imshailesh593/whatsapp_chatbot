@@ -133,7 +133,7 @@ async function cleanup() {
   plansById.get(growthId)!.billing_cycles[0].pricing_scheme.fixed_price.value = '1.00';
   checks = await checkPaypal(true);
   ok(checks.find((c) => c.label === 'Pro plan in PayPal')!.ok === false, 'a plan whose price differs from ours is flagged');
-  plansById.get(growthId)!.billing_cycles[0].pricing_scheme.fixed_price.value = (PLANS.find((p) => p.id === 'pro')!.price.USD / 100).toFixed(2);
+  plansById.get(growthId)!.billing_cycles[0].pricing_scheme.fixed_price.value = (PLANS.find((p) => p.id === 'pro')!.price.USD / 100).toFixed(1);
   tokenFails = true;
   const stale = apiCalls.length;
   checks = await checkPaypal(true);

@@ -192,7 +192,7 @@ export async function checkPaypal(live: boolean): Promise<SetupCheck[]> {
       const plan = await pp<any>('GET', `/v1/billing/plans/${encodeURIComponent(id)}`);
       const cycle = plan.billing_cycles?.find((c: any) => c.tenure_type === 'REGULAR');
       const price = cycle?.pricing_scheme?.fixed_price;
-      const good = plan.status === 'ACTIVE' && cycle?.frequency?.interval_unit === 'MONTH' && cycle?.frequency?.interval_count === 1 && price?.currency_code === 'USD' && price?.value === money(p.price.USD);
+      const good = plan.status === 'ACTIVE' && cycle?.frequency?.interval_unit === 'MONTH' && cycle?.frequency?.interval_count === 1 && price?.currency_code === 'USD' && Number(price?.value) === p.price.USD / 100; // PayPal may return 19.0 for 19.00
       checks.push({
         label: `${p.name} plan in PayPal`,
         ok: good,
