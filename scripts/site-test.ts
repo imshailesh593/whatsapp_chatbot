@@ -80,7 +80,8 @@ const ok = (c: any, m: string) => { if (!c) throw new Error('FAIL: ' + m); conso
   delete process.env.SIGNUP_ENABLED;
 
   console.log('\n[links, robots and errors]');
-  const hrefs = [...new Set([...l.matchAll(/href="(\/[^"#]*)"/g)].map((m) => m[1]))].filter((h) => h !== '/admin/');
+  const hrefs = [...new Set([...l.matchAll(/href="(\/[^"#]*)"/g)].map((m) => m[1]))].filter((h) => !h.startsWith('/admin/'));
+  ok(l.includes('href="/admin/?plan=pro"') && !l.includes('class="btn p" href="/admin/"'), 'the call-to-action buttons open sign-up and then the payment page (/admin/?plan=pro)');
   for (const h of hrefs) ok((await get(h)).statusCode === 200, `internal link ${h} works`);
   ok(/href="#features"/.test(l) && /id="features"/.test(l) && /id="pricing"/.test(l) && /id="faq"/.test(l) && /id="how"/.test(l), 'in-page anchors have targets');
   const robots = (await get('/robots.txt', 'text/plain')).body;

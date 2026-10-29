@@ -10,6 +10,7 @@ import Inbox from './components/Inbox';
 import Settings from './components/Settings';
 import Dossier from './components/Dossier';
 import Onboarding from './components/Onboarding';
+import Billing from './components/Billing';
 import PlatformShell from './components/PlatformShell';
 import Broadcasts from './components/Broadcasts';
 import Analytics from './components/Analytics';
@@ -40,6 +41,9 @@ export default function App() {
   if (platformMode) {
     return <PlatformShell user={user} onBusiness={() => switchMode('business')} onSignOut={signOut} />;
   }
+  if (wantsCheckout(user)) {
+    return <CheckoutPage user={user} onSkip={() => { clearCheckout(); reloadUser(); }} onSignOut={signOut} />;
+  }
   if (user.workspace && !user.workspace.onboardingCompleted) {
     return user.role === 'agent' ? (
       <div className="min-h-screen bg-slate-900 text-slate-200 flex flex-col items-center justify-center gap-3 p-6 text-center">
@@ -51,6 +55,38 @@ export default function App() {
     );
   }
   return <Console user={user} onSignedOut={() => setUser(null)} onPlatform={user.isSuperAdmin ? () => switchMode('platform') : undefined} />;
+}
+
+// Coming from the website's "Get started" button: after signing in or signing up, the owner lands on the payment page first
+const clearCheckout = () => { try { sessionStorage.removeItem('lk_checkout'); } catch { /* storage unavailable */ } };
+function wantsCheckout(user: AdminUser): boolean {
+  try {
+    if (new URLSearchParams(window.location.search).has('billing')) { clearCheckout(); return false; } // back from the payment provider
+    if (sessionStorage.getItem('lk_checkout') !== '1') return false;
+  } catch {
+    return false;
+  }
+  return user.role === 'owner' && !user.isSuperAdmin && !!user.workspace;
+}
+
+function CheckoutPage({ user, onSkip, onSignOut }: { user: AdminUser; onSkip: () => void; onSignOut: () => void }) {
+  return (
+    <div className="min-h-screen bg-slate-900 text-slate-200 p-4 sm:p-8">
+      <div className="max-w-3xl mx-auto">
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <h1 className="text-xl font-extrabold text-white">Choose your plan</h1>
+            <p className="text-xs text-slate-400 mt-1">Pay now to switch on your plan, or start your free trial and pay later from Plan &amp; billing.</p>
+          </div>
+          <button onClick={onSignOut} className="text-xs text-slate-400 hover:text-slate-200">Sign out</button>
+        </div>
+        <Billing me={user} />
+        <div className="mt-4 text-center">
+          <button onClick={onSkip} className="px-4 py-2 text-sm text-emerald-300 hover:text-emerald-200 border border-slate-700 rounded-lg">Start my free trial first</button>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 const daysLeft = (iso: string | null) => (iso ? Math.max(0, Math.ceil((new Date(iso).getTime() - Date.now()) / 86_400_000)) : 0);

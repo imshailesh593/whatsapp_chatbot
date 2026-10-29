@@ -157,7 +157,7 @@ ${canon}
 <a class="logo" href="/"><i></i>${name}</a>
 <nav class="main">
 <a class="h" href="${anchor('features')}">Features</a><a class="h" href="${anchor('how')}">How it works</a><a class="h" href="${anchor('pricing')}">Pricing</a><a class="h" href="${anchor('faq')}">FAQ</a>
-<a href="/admin/">Sign in</a><a class="btn p sm" href="/admin/">${signupOpen() ? 'Start free' : 'Open dashboard'}</a>
+<a href="/admin/">Sign in</a><a class="btn p sm" href="/admin/?plan=pro">${signupOpen() ? 'Start free' : 'Open dashboard'}</a>
 </nav></div></header>
 ${d.body}
 <footer><div class="wrap"><div class="cols">
@@ -248,7 +248,7 @@ function landing(): string {
 <li class="${p.integrations ? '' : 'no'}">Webhooks and REST API${p.integrations ? '' : ' (not included)'}</li>
 <li>Free updates and email support</li>
 </ul>
-<a class="btn p" href="/admin/">${signupOpen() ? `Start ${TRIAL_DAYS}-day free trial` : 'Get started'}</a>
+<a class="btn p" href="/admin/?plan=pro">${signupOpen() ? `Start ${TRIAL_DAYS}-day free trial` : 'Get started'}</a>
 </div>`;
   }).join('');
 
@@ -270,7 +270,7 @@ function landing(): string {
 <span class="eyebrow">WhatsApp lead capture, on your own number</span>
 <h1>Turn every WhatsApp enquiry into a qualified lead.</h1>
 <p class="lead">${name} greets new customers on your WhatsApp number, asks the right questions, answers common questions with AI, books appointments into your calendar and hands the hot ones to you. No Meta approval, no code.</p>
-<div class="cta"><a class="btn p" href="/admin/">${signupOpen() ? `Start your ${TRIAL_DAYS}-day free trial` : 'Open the dashboard'}</a><a class="btn s" href="#features">See everything it does</a></div>
+<div class="cta"><a class="btn p" href="/admin/?plan=pro">${signupOpen() ? `Start your ${TRIAL_DAYS}-day free trial` : 'Open the dashboard'}</a><a class="btn s" href="#features">See everything it does</a></div>
 <div class="fine">${signupOpen() ? 'No card needed to start. ' : ''}Set up in about ten minutes.</div>
 <div class="chips"><span>✓ Your own number</span><span>✓ Replies in the customer's language</span><span>✓ Google Calendar booking</span><span>✓ Built-in CRM</span></div>
 </div>
@@ -441,7 +441,7 @@ ${faq.map(([q, a]) => `<details><summary>${esc(q)}</summary><p>${a}</p></details
 <section><div class="wrap"><div class="cta-band">
 <h2>Stop losing leads in your WhatsApp inbox.</h2>
 <p>${signupOpen() ? `Try ${name} free for ${TRIAL_DAYS} days.` : `Open the dashboard to get started.`}</p>
-<a class="btn p" href="/admin/">${signupOpen() ? 'Start free' : 'Open the dashboard'}</a>
+<a class="btn p" href="/admin/?plan=pro">${signupOpen() ? 'Start free' : 'Open the dashboard'}</a>
 </div></div></section>`;
   return page({ title: `${PRODUCT_NAME}: WhatsApp lead capture, CRM and appointment booking`, description: `${PRODUCT_NAME} turns WhatsApp enquiries into qualified leads: guided questions, AI answers, human hand-off, Google Calendar booking, CRM, broadcasts and analytics on your own number. ${inr(PLANS[0].price.INR)} a month in India, ${usd(PLANS[0].price.USD)} elsewhere.`, path: '/', body, landing: true });
 }

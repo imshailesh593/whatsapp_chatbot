@@ -16,13 +16,24 @@ export default function Login({ onDone }: { onDone: (user: AdminUser) => void })
       return '';
     }
   })();
-  const [mode, setMode] = useState<'signin' | 'signup'>(ref ? 'signup' : 'signin');
+  // "Get started" on the website (/admin/?plan=pro): open the sign-up form, and after signing in show the payment page
+  const wantsPlan = (() => {
+    try {
+      const q = new URLSearchParams(window.location.search);
+      const want = q.has('plan') || q.get('signup') === '1';
+      if (want) sessionStorage.setItem('lk_checkout', '1');
+      return want;
+    } catch {
+      return false;
+    }
+  })();
+  const [mode, setMode] = useState<'signin' | 'signup'>(ref || wantsPlan ? 'signup' : 'signin');
   const [businessName, setBusinessName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
-  const signup = mode === 'signup';
+  const signup = mode === 'signup' && (product.signupEnabled || !!ref);
 
   async function submit(e: FormEvent) {
     e.preventDefault();

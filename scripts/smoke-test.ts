@@ -113,6 +113,22 @@ async function cleanup() {
   const refWs = await prisma.workspace.create({ data: { slug: `smoke-ref-${Date.now().toString(36)}`, name: 'Referrer Co', businessName: 'Referrer Co', referralCode: 'SMOKE77', botEnabled: false, onboardingCompleted: true } });
   await prisma.adminUser.create({ data: { email: `referrer${DOMAIN}`, passwordHash: await hashPassword('referrer password 1'), role: 'owner', workspaceId: refWs.id } });
 
+  // ============ coming from the website's "Get started" button ============
+  console.log('\n[get started from the website]');
+  const gs = await newPage('get-started');
+  await gs.goto(base + '?plan=pro', { waitUntil: 'networkidle0' });
+  ok((await text(gs)).includes('Business name'), 'the Get started link opens the sign-up form, not the sign-in form');
+  await gs.type('#biz', 'Website Visitor Co');
+  await gs.type('#email', `visitor${DOMAIN}`);
+  await gs.type('#password', 'visitor password 1');
+  await click(gs, 'form button', 'Create account');
+  await waitText(gs, 'Choose your plan');
+  ok((await text(gs)).includes('Start my free trial first'), 'after signing up the owner lands on the payment page first');
+  await shot(gs, 'gs-1-choose-plan');
+  await click(gs, 'button', 'Start my free trial first');
+  await waitText(gs, 'Pick a starting point');
+  ok(true, 'choosing the free trial continues to set-up');
+
   // ============ business owner ============
   console.log('\n[business owner]');
   const ow = await newPage('owner');
