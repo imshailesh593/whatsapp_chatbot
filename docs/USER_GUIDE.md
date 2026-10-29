@@ -274,8 +274,10 @@ What happens at a limit:
 
 **Have a code?** If you were given a redeem code (a pilot, partnership or goodwill offer), type it under Plan & billing and press **Apply code**. It switches the plan on, or adds trial days, without a payment. Only the owner can do this, and each code works once per business.
 
-**Paying online** (when your service has it switched on): owners can choose a plan and pay in rupees (UPI or card) or dollars (card).
-- **Rupee payments are for 30 days at a time.** You pay on a secure Razorpay page and your plan switches on within moments. It does not renew by itself: about 3 days before it ends you receive a new payment link by WhatsApp or email (if you set up alerts), and you can press **Renew for 30 days** in Plan & billing at any time. Paying early adds days to your current plan.
+**Paying.** Your service provider switches on one or more ways to pay:
+- **Pay link or UPI, then tell us.** Under Plan & billing press the pay button for your plan (or use the UPI or bank details shown), pay, then type the **payment reference** from your receipt (a Razorpay payment id such as `pay_...`, a UPI reference or a bank transaction number) into **Paid? Tell us** and press **I have paid**. The provider checks it and switches your plan on, usually within a few hours. Some payments are confirmed automatically if you pay with the same email you sign in with. You can have 3 submissions waiting at once.
+- **Online checkout** (when switched on): choose a plan and pay in rupees (UPI or card) or dollars (card).
+- **Rupee payments are for 30 days at a time.** Your plan switches on once the payment is confirmed. It does not renew by itself: about 3 days before it ends you receive a new payment link by WhatsApp or email (if you set up alerts), and you can press **Renew for 30 days** in Plan & billing at any time. Paying early adds days to your current plan.
 - **Dollar payments** are a card subscription that renews monthly. Cancel any time; you keep access until the end of the period you paid for.
 - A redeem code cannot replace a plan that is still running; use it once the plan has ended.
 - If online payment is not on yet, contact your service provider to activate a plan.
@@ -335,6 +337,7 @@ Your plan limits the number of team members.
 | Alert email missing | Email may not be switched on for your service. WhatsApp alerts still work |
 | A chat is silent | The bot is paused for that chat (human takeover or hand-off). Press the bot button to resume |
 | Broadcast not sending | Outside 9:00 to 20:00 your time zone, daily cap reached, plan allowance used, or the audience is empty |
+| I paid but my plan is not on | Make sure you submitted the payment reference under Plan & billing. It shows as waiting until your provider confirms it |
 | Cannot book appointments | Calendar not connected, no free times in your working hours, or the customer has not finished the questions |
 | "Google sign-in is not set up" | Ask the service operator to add the Google keys |
 | Appointment times look wrong | Fix the **time zone** in Business & bot |

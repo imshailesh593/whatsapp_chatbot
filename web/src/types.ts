@@ -225,6 +225,7 @@ export interface BillingInfo {
   limits: { conversations: number | null; aiReplies: number | null; seats: number | null; broadcasts: number | null };
   usage: { conversations: number; aiReplies: number; seats: number; broadcasts: number };
   providers: { stripe: boolean; razorpay: boolean };
+  pay: { enabled: boolean; links: Record<string, string>; instructions: string };
   plans: BillingPlan[];
   payments: { id: string; amount: number; currency: string; status: string; plan: string; at: string }[];
 }

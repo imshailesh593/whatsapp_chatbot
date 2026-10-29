@@ -119,7 +119,7 @@ async function cleanup() {
   w = await row();
   ok(w.plan === 'starter' && Math.abs(w.currentPeriodEnd!.getTime() - (Date.now() + 30 * DAY)) < 60_000, 'a different plan starts now for 30 days');
 
-  ok((await hook('rzl_5', 'payment_link.paid', paid('pay_5', 'growth', 299_900, 'no-such-workspace'))).body === 'ignored', 'a link for an unknown business is ignored');
+  ok((await hook('rzl_5', 'payment_link.paid', paid('pay_5', 'growth', 299_900, 'no-such-workspace'))).body === 'unmatched', 'a link for an unknown business is not applied (and is logged for the operator)');
   ok((await hook('rzl_6', 'payment_link.paid', paid('pay_6', 'platinum', 299_900))).body === 'ignored', 'a link for an unknown plan is ignored');
   await prisma.workspace.update({ where: { id: wsId }, data: { plan: 'internal' } });
   ok((await hook('rzl_7', 'payment_link.paid', paid('pay_7', 'growth', 299_900))).body === 'ignored' && (await row()).plan === 'internal', 'the unbilled internal business cannot be changed by a payment');
