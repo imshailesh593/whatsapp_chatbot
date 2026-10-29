@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { Calendar, Phone, UserCheck, Zap } from 'lucide-react';
 import { api } from '../api';
-import type { Contact, Status } from '../types';
+import type { Contact } from '../types';
+import { useStages } from '../stages';
 import { serviceStyle, humanize, displayPhone, waLink } from '../config';
 
 interface Props {
@@ -13,7 +14,8 @@ interface Props {
 
 export default function Dossier({ contact, bookingUrl, onClose, onChanged }: Props) {
   const [notes, setNotes] = useState(contact.notes ?? '');
-  const [status, setStatus] = useState<Status>(contact.status);
+  const stages = useStages();
+  const [status, setStatus] = useState<string>(contact.pipeline ?? 'new');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const svc = contact.service ? serviceStyle(contact.service, contact.serviceTitle) : null;
@@ -22,7 +24,7 @@ export default function Dossier({ contact, bookingUrl, onClose, onChanged }: Pro
     setBusy(true);
     setError('');
     try {
-      if (contact.hasLead) onChanged(await api.patch(contact.phone, { notes, status }));
+      if (contact.hasLead) onChanged(await api.patch(contact.phone, { notes, stage: status }));
       onClose();
     } catch (err) {
       setError((err as Error).message);
@@ -65,14 +67,12 @@ export default function Dossier({ contact, bookingUrl, onClose, onChanged }: Pro
               <label className="text-[11px] font-semibold text-slate-400 block mb-1">Lead Stage</label>
               <select
                 value={status}
-                onChange={(e) => setStatus(e.target.value as Status)}
+                onChange={(e) => setStatus(e.target.value)}
                 disabled={!contact.hasLead}
                 className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-emerald-500 disabled:opacity-60"
               >
-                {!contact.hasLead && <option value="IN_PROGRESS">⏳ Still answering the questionnaire</option>}
-                <option value="COMPLETED">✓ Fully Qualified</option>
-                <option value="CONSULTATION_BOOKED">🗓 Booked</option>
-                <option value="FOLLOW_UP">📞 Follow-up Required</option>
+                {!contact.hasLead && <option value="new">⏳ Still answering the questionnaire</option>}
+                {stages.map((s) => <option key={s.key} value={s.key}>{s.label}</option>)}
               </select>
             </div>
             <div>

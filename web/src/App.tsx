@@ -12,6 +12,7 @@ import Dossier from './components/Dossier';
 import Onboarding from './components/Onboarding';
 import Platform from './components/Platform';
 import { BrandContext } from './brand';
+import { StagesContext } from './stages';
 
 type Tab = 'crm' | 'simulator' | 'inbox' | 'config' | 'platform';
 
@@ -76,7 +77,7 @@ function Console({ user, onSignedOut }: { user: AdminUser; onSignedOut: () => vo
     return {
       total: real.length,
       qualified: real.filter((c) => c.hasLead).length,
-      booked: real.filter((c) => c.status === 'CONSULTATION_BOOKED').length,
+      booked: real.filter((c) => c.pipeline === 'booked').length,
       inProgress: real.filter((c) => !c.hasLead).length
     };
   }, [contacts]);
@@ -113,6 +114,7 @@ function Console({ user, onSignedOut }: { user: AdminUser; onSignedOut: () => vo
 
   return (
     <BrandContext.Provider value={brand}>
+    <StagesContext.Provider value={overview?.stages ?? []}>
     <div className="min-h-screen bg-slate-900 text-slate-100 flex flex-col font-sans">
       <header className="bg-slate-950 border-b border-slate-800 sticky top-0 z-40">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -225,6 +227,7 @@ function Console({ user, onSignedOut }: { user: AdminUser; onSignedOut: () => vo
         />
       )}
     </div>
+    </StagesContext.Provider>
     </BrandContext.Provider>
   );
 }

@@ -5,6 +5,7 @@ import { answerFreeform } from './gemini';
 import { accessState } from '../plans';
 import { admitAiReply, admitConversation } from './usage';
 import { notifyBooked, notifyNewLead } from './alerts';
+import { getStages } from './pipeline';
 import {
   loadConfig,
   resolveService,
@@ -166,10 +167,13 @@ export async function handleIncomingMessage(
     case SessionStage.COMPLETED: {
       const hasBooking = !!cfg.ws.bookingUrl.trim();
       if (hasBooking && BOOKED_RE.test(text)) {
-        const wasBooked = (await prisma.lead.findFirst({ where: { workspaceId, phoneNumber }, select: { isBookedTopmate: true } }))?.isBookedTopmate;
-        await prisma.lead.updateMany({ where: { workspaceId, phoneNumber }, data: { isBookedTopmate: true } });
+        // Move the lead to "Booked" unless it is already there or has been closed (won / lost) by the team
+        const lead = await prisma.lead.findFirst({ where: { workspaceId, phoneNumber }, select: { id: true, stageKey: true } });
+        const kind = lead ? (await getStages(workspaceId)).find((st) => st.key === lead.stageKey)?.kind ?? 'open' : 'open';
+        const moved = !!lead && lead.stageKey !== 'booked' && kind === 'open';
+        if (moved) await prisma.lead.update({ where: { id: lead!.id }, data: { stageKey: 'booked' } });
         await send(phoneNumber, bookedConfirmationMessage());
-        if (!isCapturing() && wasBooked === false) void notifyBooked(workspaceId, phoneNumber);
+        if (!isCapturing() && moved) void notifyBooked(workspaceId, phoneNumber);
       } else if (hasBooking && /consultation|appointment|book|fee/.test(lower)) {
         await send(phoneNumber, bookingReminderMessage(cfg));
       } else if (looksLikeQuestion(text) && (await tryAnswer(text))) {

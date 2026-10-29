@@ -1,4 +1,9 @@
-export type Status = 'IN_PROGRESS' | 'COMPLETED' | 'CONSULTATION_BOOKED' | 'FOLLOW_UP';
+export interface StageDef {
+  key: string;
+  label: string;
+  color: string;
+  kind: 'open' | 'won' | 'lost';
+}
 export type Role = 'owner' | 'admin' | 'agent';
 
 export interface Contact {
@@ -6,7 +11,8 @@ export interface Contact {
   name: string | null;
   service: string | null;
   serviceTitle: string | null;
-  status: Status;
+  /** Pipeline stage key once the questionnaire is complete; null while still answering */
+  pipeline: string | null;
   stage: string;
   step: number;
   totalSteps: number;
@@ -57,6 +63,7 @@ export interface Workspace {
 export interface Overview {
   whatsapp: string;
   workspace: Workspace;
+  stages: StageDef[];
   services: (ServiceDef & { id: string })[];
 }
 
@@ -70,7 +77,7 @@ export interface ChatMessage {
 export interface PatchBody {
   paused?: boolean;
   notes?: string;
-  status?: Status;
+  stage?: string;
 }
 
 export interface AdminUser {

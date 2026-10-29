@@ -25,6 +25,7 @@ import { TEMPLATES, getTemplate } from './templates';
 import { waFor } from './services/whatsapp';
 import { PRODUCT_NAME } from './brand';
 import { sendTestAlert, smtpConfigured } from './services/alerts';
+import { getStages, saveStages, stageExists } from './services/pipeline';
 import { transportReady } from './services/transport';
 import { PLANS, accessState, planById } from './plans';
 import { getUsage } from './services/usage';
@@ -33,7 +34,6 @@ import { cancelSubscription, handleRazorpayWebhook, handleStripeWebhook, openPor
 const SIM_PREFIX = 'SIM-';
 const WEB_DIST = path.join(__dirname, '..', 'web', 'dist');
 
-type Status = 'IN_PROGRESS' | 'COMPLETED' | 'CONSULTATION_BOOKED' | 'FOLLOW_UP';
 type Role = 'owner' | 'admin' | 'agent';
 
 interface AdminCtx {
@@ -59,13 +59,8 @@ function toContact(s: SessionWithLead, cfg: BotConfig) {
   const serviceKey = lead?.serviceCategory ?? s.selectedService ?? null;
   const service = serviceKey ? cfg.services.find((x) => x.key === serviceKey) : undefined;
   const total = service?.questions.length ?? 0;
-  const status: Status = !lead
-    ? 'IN_PROGRESS'
-    : lead.isBookedTopmate
-      ? 'CONSULTATION_BOOKED'
-      : lead.followUp
-        ? 'FOLLOW_UP'
-        : 'COMPLETED';
+  // Pipeline stage key once the questionnaire is complete; null while the customer is still answering
+  const pipeline = lead ? lead.stageKey : null;
   const progress = lead ? 100 : total ? Math.round((s.currentStep / total) * 100) : 0;
   const locationKey = Object.keys(answers).find((k) => /country|location|city|destination/.test(k) && answers[k]);
   return {
@@ -73,7 +68,7 @@ function toContact(s: SessionWithLead, cfg: BotConfig) {
     name: s.contactName,
     service: serviceKey,
     serviceTitle: service?.title ?? serviceKey,
-    status,
+    pipeline,
     stage: s.stage,
     step: s.currentStep,
     totalSteps: total,
@@ -442,6 +437,7 @@ export function registerAdmin(app: FastifyInstance, opts: { getQr: (workspaceId:
     return {
       whatsapp: waFor(wsId(req)).status,
       workspace: publicWorkspace(cfg.ws),
+      stages: await getStages(wsId(req)),
       services: cfg.services.map((s) => ({ id: s.key, title: s.title, keywords: s.keywords, questions: s.questions.map((q) => ({ key: q.key, prompt: q.prompt })) }))
     };
   });
@@ -563,6 +559,16 @@ export function registerAdmin(app: FastifyInstance, opts: { getQr: (workspaceId:
     return waSnapshot(wsId(req));
   });
 
+  // ---- pipeline stages ----
+  app.get('/admin/api/stages', { preHandler: guard }, async (req) => ({ stages: await getStages(wsId(req)) }));
+  app.put('/admin/api/stages', { preHandler: manager }, async (req, reply) => {
+    try {
+      return { stages: await saveStages(wsId(req), (req.body as any)?.stages) };
+    } catch (err) {
+      return reply.status(400).send({ error: (err as Error).message });
+    }
+  });
+
   // ---- contacts / leads ----
   app.get('/admin/api/contacts', { preHandler: guard }, async (req) => {
     const includeTest = (req.query as any).test === '1';
@@ -594,20 +600,19 @@ export function registerAdmin(app: FastifyInstance, opts: { getQr: (workspaceId:
     const { phone } = req.params as { phone: string };
     const w = wsId(req);
     const key = { workspaceId_phoneNumber: { workspaceId: w, phoneNumber: phone } };
-    const b = (req.body ?? {}) as { paused?: boolean; notes?: string; status?: Status };
+    const b = (req.body ?? {}) as { paused?: boolean; notes?: string; stage?: string };
     const session = await prisma.session.findUnique({ where: key, include: { lead: true } });
     if (!session) return reply.status(404).send({ error: 'Contact not found' });
 
     if (typeof b.paused === 'boolean') {
       await prisma.session.update({ where: key, data: { isAgentPaused: b.paused } });
     }
-    if (b.notes !== undefined || b.status !== undefined) {
-      if (!session.lead) return reply.status(409).send({ error: 'Notes and status can be set once the questionnaire is complete' });
+    if (b.notes !== undefined || b.stage !== undefined) {
+      if (!session.lead) return reply.status(409).send({ error: 'Notes and stage can be set once the questionnaire is complete' });
+      if (b.stage !== undefined && !(await stageExists(w, b.stage))) return reply.status(400).send({ error: 'Unknown pipeline stage' });
       const data: Prisma.LeadUpdateInput = {};
       if (b.notes !== undefined) data.counsellorNotes = String(b.notes).slice(0, 4000) || null;
-      if (b.status === 'COMPLETED') Object.assign(data, { isBookedTopmate: false, followUp: false });
-      if (b.status === 'CONSULTATION_BOOKED') Object.assign(data, { isBookedTopmate: true, followUp: false });
-      if (b.status === 'FOLLOW_UP') Object.assign(data, { isBookedTopmate: false, followUp: true });
+      if (b.stage !== undefined) data.stageKey = b.stage;
       await prisma.lead.update({ where: { id: session.lead.id }, data });
     }
     const fresh = await prisma.session.findUnique({ where: key, include: { lead: true } });
@@ -677,7 +682,8 @@ export function registerAdmin(app: FastifyInstance, opts: { getQr: (workspaceId:
       if (/^[=+\-@\t\r]/.test(s)) s = `'${s}`;
       return `"${s.replace(/"/g, '""')}"`;
     };
-    const lines = ['Received,Name,Phone,Service,Status,Notes,Answers'].concat(
+    const stageLabel = new Map((await getStages(wsId(req))).map((st) => [st.key, st.label]));
+    const lines = ['Received,Name,Phone,Service,Stage,Notes,Answers'].concat(
       sessions.map((s) => {
         const c = toContact(s, cfg);
         return [
@@ -685,7 +691,7 @@ export function registerAdmin(app: FastifyInstance, opts: { getQr: (workspaceId:
           c.name,
           c.phone,
           c.serviceTitle ?? '',
-          c.status,
+          c.pipeline ? stageLabel.get(c.pipeline) ?? c.pipeline : 'Answering',
           c.notes,
           Object.entries(c.answers).map(([k, v]) => `${k.replace(/_/g, ' ')}: ${v}`).join(' | ')
         ].map(cell).join(',');

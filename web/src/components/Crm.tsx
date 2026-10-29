@@ -1,8 +1,9 @@
 import { useMemo, useState } from 'react';
 import { Download, Phone, Search, UserCheck, Zap } from 'lucide-react';
 import { api } from '../api';
-import type { Contact, Status } from '../types';
-import { serviceStyle, STATUS_STYLE, ago, displayPhone, waLink } from '../config';
+import type { Contact } from '../types';
+import { useStages } from '../stages';
+import { serviceStyle, stageBadge, ago, displayPhone, waLink } from '../config';
 
 interface Props {
   contacts: Contact[];
@@ -15,7 +16,8 @@ interface Props {
 export default function Crm({ contacts, includeTest, onIncludeTest, onOpen, onChanged }: Props) {
   const [search, setSearch] = useState('');
   const [service, setService] = useState<string>('ALL');
-  const [status, setStatus] = useState<'ALL' | Status>('ALL');
+  const stages = useStages();
+  const [status, setStatus] = useState<string>('ALL');
 
   const serviceOptions = useMemo(() => {
     const m = new Map<string, string>();
@@ -29,7 +31,7 @@ export default function Crm({ contacts, includeTest, onIncludeTest, onOpen, onCh
       (c) =>
         (!q || (c.name ?? '').toLowerCase().includes(q) || c.phone.includes(q) || (c.targetCountry ?? '').toLowerCase().includes(q)) &&
         (service === 'ALL' || c.service === service) &&
-        (status === 'ALL' || c.status === status)
+        (status === 'ALL' || (c.pipeline ?? 'answering') === status)
     );
   }, [contacts, search, service, status]);
 
@@ -59,10 +61,11 @@ export default function Crm({ contacts, includeTest, onIncludeTest, onOpen, onCh
               <option key={id} value={id}>{title}</option>
             ))}
           </select>
-          <select value={status} onChange={(e) => setStatus(e.target.value as 'ALL' | Status)} className={select}>
+          <select value={status} onChange={(e) => setStatus(e.target.value)} className={select}>
             <option value="ALL">All Statuses</option>
-            {(Object.keys(STATUS_STYLE) as Status[]).map((s) => (
-              <option key={s} value={s}>{STATUS_STYLE[s].label}</option>
+            <option value="answering">⏳ Answering</option>
+            {stages.map((s) => (
+              <option key={s.key} value={s.key}>{s.label}</option>
             ))}
           </select>
           <label className="flex items-center space-x-1.5 text-[11px] text-slate-400 cursor-pointer">
@@ -125,8 +128,8 @@ export default function Crm({ contacts, includeTest, onIncludeTest, onOpen, onCh
                       </div>
                     </td>
                     <td className="py-3.5 px-4">
-                      <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold border ${STATUS_STYLE[c.status].cls}`}>
-                        {STATUS_STYLE[c.status].label}
+                      <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold border ${stageBadge(stages, c.pipeline).cls}`}>
+                        {stageBadge(stages, c.pipeline).label}
                       </span>
                     </td>
                     <td className="py-3.5 px-4" onClick={(e) => e.stopPropagation()}>

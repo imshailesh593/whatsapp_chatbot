@@ -1,6 +1,7 @@
 import { prisma } from './prisma';
 import { hashPassword } from './auth';
 import { TRIAL_DAYS } from '../plans';
+import { DEFAULT_STAGES } from '../services/pipeline';
 
 export const DEFAULT_WORKSPACE_ID = 'default-workspace';
 
@@ -23,6 +24,7 @@ export async function createWorkspaceWithOwner(opts: { businessName: string; ema
       name: opts.businessName,
       businessName: opts.businessName,
       botEnabled: false,
+      stages: { create: DEFAULT_STAGES.map((s, position) => ({ ...s, position })) },
       trialEndsAt: new Date(Date.now() + TRIAL_DAYS * 86_400_000),
       adminUsers: { create: { email: opts.email, passwordHash, role: 'owner' } }
     },

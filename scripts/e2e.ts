@@ -74,7 +74,7 @@ async function main() {
       await handleIncomingMessage(A.id, phone, 'Test', 'how much is the fee');
       assert(replies(A.id, phone).at(-1)!.includes('cal.example'), `${svc.key}: fee question -> booking link`);
       await handleIncomingMessage(A.id, phone, 'Test', 'I have already booked');
-      assert((await prisma.lead.findFirst({ where: { workspaceId: A.id, phoneNumber: phone } }))?.isBookedTopmate === true, `${svc.key}: booking flips the flag`);
+      assert((await prisma.lead.findFirst({ where: { workspaceId: A.id, phoneNumber: phone } }))?.stageKey === 'booked', `${svc.key}: booking moves the lead to the Booked stage`);
       await handleIncomingMessage(A.id, phone, 'Test', 'menu');
       assert(replies(A.id, phone).at(-1)!.includes('Welcome to Acme Careers'), `${svc.key}: menu restarts the funnel`);
     }
@@ -112,6 +112,17 @@ async function main() {
     await saveServices(A.id, [{ title: 'Only option', keywords: [], questions: [{ key: 'q', prompt: 'One question?' }] }]);
     await handleIncomingMessage(A.id, mid, 'Mid', 'answer');
     assert(replies(A.id, mid).at(-1)!.includes('Only option'), 'removed service -> customer is sent back to the new menu');
+
+    console.log('\n[pipeline]');
+    await saveServices(A.id, tplA.services);
+    const won = `9122${run}`;
+    await handleIncomingMessage(A.id, won, 'W', 'hi');
+    await handleIncomingMessage(A.id, won, 'W', '5');
+    for (let i = 0; i < 3; i++) await handleIncomingMessage(A.id, won, 'W', 'x');
+    assert((await prisma.lead.findFirst({ where: { workspaceId: A.id, phoneNumber: won } }))?.stageKey === 'new', 'a finished lead starts in "new"');
+    await prisma.lead.updateMany({ where: { workspaceId: A.id, phoneNumber: won }, data: { stageKey: 'won' } });
+    await handleIncomingMessage(A.id, won, 'W', 'I have already booked');
+    assert((await prisma.lead.findFirst({ where: { workspaceId: A.id, phoneNumber: won } }))?.stageKey === 'won', 'a closed (won) lead is not pulled back to Booked');
 
     console.log('\n[lead alerts]');
     await saveServices(A.id, tplA.services);

@@ -134,11 +134,25 @@ async function cleanup() {
   ok(!r.json().contacts.some((c: any) => c.phone.startsWith('SIM-')), 'test contacts hidden by default');
   r = await call(hA, 'GET', '/admin/api/contacts?test=1');
   const c = r.json().contacts.find((x: any) => x.phone === 'SIM-tst');
-  ok(c && c.status === 'COMPLETED' && c.hasLead && c.progress === 100 && c.isTest && c.serviceTitle === 'Braces' && c.answers.age === '34', 'test contact listed as a completed lead with service title + answers');
+  ok(c && c.pipeline === 'new' && c.hasLead && c.progress === 100 && c.isTest && c.serviceTitle === 'Braces' && c.answers.age === '34', 'test contact listed as a completed lead with service title + answers');
   const patch = (payload: any) => call(hA, 'PATCH', '/admin/api/contacts/SIM-tst', payload);
-  r = await patch({ status: 'CONSULTATION_BOOKED', notes: '=1+1 call back' });
-  ok(r.json().contact.status === 'CONSULTATION_BOOKED' && r.json().contact.notes === '=1+1 call back', 'status + notes saved');
-  ok((await patch({ status: 'FOLLOW_UP' })).json().contact.status === 'FOLLOW_UP', 'follow-up status');
+  r = await patch({ stage: 'booked', notes: '=1+1 call back' });
+  ok(r.json().contact.pipeline === 'booked' && r.json().contact.notes === '=1+1 call back', 'stage + notes saved');
+  ok((await patch({ stage: 'follow_up' })).json().contact.pipeline === 'follow_up', 'follow-up stage');
+  ok((await patch({ stage: 'nonsense' })).statusCode === 400, 'unknown stage refused');
+
+  // ---- pipeline editor ----
+  r = await call(hA, 'GET', '/admin/api/stages');
+  ok(r.json().stages.map((s: any) => s.key).join() === 'new,contacted,follow_up,booked,won,lost', 'default pipeline');
+  ok((await call(hA, 'PUT', '/admin/api/stages', { stages: [{ label: 'Only' }] })).statusCode === 400, 'pipeline needs two stages');
+  ok((await call(hA, 'PUT', '/admin/api/stages', { stages: [{ key: 'new', label: 'New' }, { key: 'won', label: 'Won' }] })).statusCode === 400, 'the Booked stage cannot be removed');
+  ok((await call(hA, 'PUT', '/admin/api/stages', { stages: [{ key: 'contacted', label: 'Contacted' }, { key: 'new', label: 'New' }, { key: 'booked', label: 'Booked' }] })).statusCode === 400, 'New lead must stay first');
+  r = await call(hA, 'PUT', '/admin/api/stages', { stages: [{ key: 'new', label: 'Fresh' }, { label: 'Site visit', color: 'cyan' }, { key: 'booked', label: 'Booked' }, { label: 'Closed deal', kind: 'won' }] });
+  ok(r.statusCode === 200 && r.json().stages[1].key === 'site_visit' && r.json().stages[3].kind === 'won', 'pipeline saved with a custom stage');
+  ok((await prisma.lead.findFirst({ where: { workspaceId: wsA, phoneNumber: 'SIM-tst' } }))?.stageKey === 'new', 'leads in a removed stage fall back to New lead');
+  ok((await patch({ stage: 'site_visit' })).json().contact.pipeline === 'site_visit', 'custom stage can be assigned');
+  ok((await call(hB, 'GET', '/admin/api/stages')).json().stages.length === 6, "other workspaces keep their own pipeline");
+  await patch({ stage: 'new' });
   ok((await patch({ paused: true })).json().contact.botActive === false, 'bot paused');
   o = await sim(hA, 'anyone there?');
   ok(o.replies.length === 0, 'paused simulator session gets no reply');

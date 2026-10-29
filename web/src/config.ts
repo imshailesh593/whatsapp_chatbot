@@ -1,4 +1,4 @@
-import type { Status } from './types';
+import type { StageDef } from './types';
 
 const ICONS = ['📚', '🩺', '💼', '✈️', '🌐', '🏠', '🛠️', '📞', '⭐'];
 const BADGES = [
@@ -17,12 +17,24 @@ export function serviceStyle(key: string | null, title: string | null) {
   return { icon: ICONS[h % ICONS.length], shortTitle: title ?? key ?? '', badge: BADGES[h % BADGES.length] };
 }
 
-export const STATUS_STYLE: Record<Status, { label: string; cls: string }> = {
-  CONSULTATION_BOOKED: { label: '🗓 Booked', cls: 'bg-purple-500/20 text-purple-300 border-purple-500/40' },
-  COMPLETED: { label: '✓ Qualified', cls: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40' },
-  IN_PROGRESS: { label: '⏳ Answering', cls: 'bg-amber-500/20 text-amber-300 border-amber-500/40' },
-  FOLLOW_UP: { label: '📞 Follow-up', cls: 'bg-blue-500/20 text-blue-300 border-blue-500/40' }
+export const COLOR_CLS: Record<string, string> = {
+  emerald: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40',
+  blue: 'bg-blue-500/20 text-blue-300 border-blue-500/40',
+  amber: 'bg-amber-500/20 text-amber-300 border-amber-500/40',
+  purple: 'bg-purple-500/20 text-purple-300 border-purple-500/40',
+  green: 'bg-green-500/20 text-green-300 border-green-500/40',
+  rose: 'bg-rose-500/20 text-rose-300 border-rose-500/40',
+  orange: 'bg-orange-500/20 text-orange-300 border-orange-500/40',
+  cyan: 'bg-cyan-500/20 text-cyan-300 border-cyan-500/40',
+  slate: 'bg-slate-500/20 text-slate-300 border-slate-500/40'
 };
+
+/** Label and badge classes for a contact's pipeline stage (null = still answering the questions). */
+export function stageBadge(stages: StageDef[], pipeline: string | null): { label: string; cls: string } {
+  if (pipeline === null) return { label: '⏳ Answering', cls: COLOR_CLS.amber };
+  const s = stages.find((x) => x.key === pipeline);
+  return { label: s?.label ?? pipeline, cls: COLOR_CLS[s?.color ?? 'slate'] ?? COLOR_CLS.slate };
+}
 
 export const humanize = (key: string) => key.replace(/_/g, ' ');
 

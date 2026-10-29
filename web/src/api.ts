@@ -1,4 +1,4 @@
-import type { BillingInfo, AdminRow, AdminUser, ChatMessage, ChatTurn, Contact, Draft, Overview, PatchBody, PlatformWorkspace, ServiceDef, TemplateInfo, WaSnapshot, Workspace } from './types';
+import type { StageDef, BillingInfo, AdminRow, AdminUser, ChatMessage, ChatTurn, Contact, Draft, Overview, PatchBody, PlatformWorkspace, ServiceDef, TemplateInfo, WaSnapshot, Workspace } from './types';
 
 export class UnauthorizedError extends Error {}
 
@@ -30,6 +30,7 @@ export const api = {
   whatsappConnect: () => post<WaSnapshot>('/admin/api/whatsapp/connect', {}),
   whatsappDisconnect: () => post<WaSnapshot>('/admin/api/whatsapp/disconnect', {}),
   overview: () => request<Overview>('/admin/api/overview'),
+  saveStages: (stages: StageDef[]) => request<{ stages: StageDef[] }>('/admin/api/stages', { method: 'PUT', body: JSON.stringify({ stages }) }).then((r) => r.stages),
   alertInfo: () => request<{ emailAvailable: boolean; whatsappReady: boolean }>('/admin/api/alerts'),
   testAlert: () => post<{ whatsapp: string; email: string }>('/admin/api/alerts/test', {}),
   billing: () => request<BillingInfo>('/admin/api/billing'),
