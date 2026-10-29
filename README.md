@@ -5,6 +5,11 @@ with a React admin console at `/admin/`.
 Slot-filling funnel: welcome → service (1-5) → one question at a time → lead saved → Topmate CTA.
 Spec: [mns_institute_whatsapp_automation_blueprint.md](mns_institute_whatsapp_automation_blueprint.md)
 
+## Documentation
+
+- [User Guide](docs/USER_GUIDE.md): for businesses using the bot and their teams (set-up, CRM, hand-off, appointments, broadcasts, billing, referrals).
+- [Owner Guide](docs/OWNER_GUIDE.md): for the platform operator (clients, plans, codes, capacity, deployment, backups, security).
+
 ## Multi-tenant (SaaS)
 
 Each business is a **workspace** with its own menu, questions, branding, team, leads and its own linked WhatsApp number (QR mode, one Baileys session per workspace under `WA_SESSION_PATH/<workspaceId>`).

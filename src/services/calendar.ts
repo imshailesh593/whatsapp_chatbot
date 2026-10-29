@@ -316,7 +316,10 @@ export const nextAppointment = (workspaceId: string, phone: string) =>
 
 export const calendarConnected = async (workspaceId: string) => !!(await prisma.calendarConfig.findUnique({ where: { workspaceId }, select: { workspaceId: true } }));
 
-const BOOK_RE = /\b(book|schedule|appointment|slot|slots|meeting|consult(ation)?|available|availability|fix a time|set up a call|call back)\b/i;
+const BOOK_RE = /\b(book|schedule|appointment|slot|slots|meeting|available|availability|fix a time|set up a call)\b/i;
+// "How much is an appointment?" is a question for the AI, not a request for times
+const PRICE_Q_RE = /\b(how much|fee|fees|cost|price|charges?|rate)\b/i;
+const OFFER_TTL_MS = 30 * 60_000;
 const ALREADY_RE = /already\s+booked|i\s+(have\s+)?booked|booking\s+done|booked\s+(a\s+)?(slot|consultation|appointment|call)/i;
 const CANCEL_RE = /\b(cancel|reschedule)\b.{0,30}\b(appointment|booking|slot|meeting|call|it)\b/i;
 const PAGE = 5;
@@ -325,6 +328,7 @@ const NUMBERS = ['1️⃣', '2️⃣', '3️⃣', '4️⃣', '5️⃣'];
 interface Offer {
   slots: string[];
   page: number;
+  at: number;
 }
 
 /** Marks the lead as Booked unless it is already there or the team has closed it. Returns true if it moved. */
@@ -357,7 +361,9 @@ export async function handleBookingMessage(cfg: BotConfig, session: { id: string
   const send = (body: string) => sendTextMessage(workspaceId, phone, body);
   const clearOffer = () => prisma.session.update({ where: { id: session.id }, data: { slotOffer: Prisma.DbNull } });
   const lower = text.toLowerCase().trim();
-  const offer = (session.slotOffer ?? null) as Offer | null;
+  const raw = (session.slotOffer ?? null) as Offer | null;
+  // Times offered a while ago may be gone: a later "2" must not book them
+  const offer = raw && raw.at && Date.now() - raw.at < OFFER_TTL_MS ? raw : null;
 
   const showSlots = async (page: number) => {
     let all: Date[];
@@ -375,7 +381,7 @@ export async function handleBookingMessage(cfg: BotConfig, session: { id: string
       await send(page === 0 ? 'There are no free times in the coming days. Our team will get in touch to fix a time with you.' : 'That is all the times I have open for now. Our team can arrange another time if you need one.');
       return;
     }
-    await prisma.session.update({ where: { id: session.id }, data: { slotOffer: { slots: slice.map((d) => d.toISOString()), page } satisfies Offer } });
+    await prisma.session.update({ where: { id: session.id }, data: { slotOffer: { slots: slice.map((d) => d.toISOString()), page, at: Date.now() } satisfies Offer } });
     await send(offerText(slice, tz, page, all.length > (page + 1) * PAGE));
   };
 
@@ -443,7 +449,7 @@ export async function handleBookingMessage(cfg: BotConfig, session: { id: string
     return true;
   }
 
-  if (BOOK_RE.test(text) && !ALREADY_RE.test(text) && text.length < 140) {
+  if (BOOK_RE.test(text) && !ALREADY_RE.test(text) && !(text.includes('?') && PRICE_Q_RE.test(text)) && text.length < 140) {
     const a = await nextAppointment(workspaceId, phone);
     if (a && !/\b(another|new|different|change)\b/i.test(text)) {
       await send(`You already have an appointment on ${formatSlot(a.startsAt, tz)}. Reply CANCEL APPOINTMENT to cancel it, or "new appointment" to pick another time.`);

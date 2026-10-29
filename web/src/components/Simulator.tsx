@@ -19,19 +19,19 @@ const SIM_ID = 'console';
 const now = () => new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 let seq = 0;
 
-const QUICK = [
-  { n: '1', label: '📚 1️⃣ Coaching Exam', cls: 'bg-blue-950/40 hover:bg-blue-900/50 border-blue-800/50 text-blue-300' },
-  { n: '2', label: '🩺 2️⃣ Medical Licensing', cls: 'bg-emerald-950/40 hover:bg-emerald-900/50 border-emerald-800/50 text-emerald-300' },
-  { n: '3', label: '💼 3️⃣ International Jobs', cls: 'bg-purple-950/40 hover:bg-purple-900/50 border-purple-800/50 text-purple-300' },
-  { n: '4', label: '✈️ 4️⃣ Visa & PR', cls: 'bg-amber-950/40 hover:bg-amber-900/50 border-amber-800/50 text-amber-300' }
+const TINTS = [
+  'bg-blue-950/40 hover:bg-blue-900/50 border-blue-800/50 text-blue-300',
+  'bg-emerald-950/40 hover:bg-emerald-900/50 border-emerald-800/50 text-emerald-300',
+  'bg-purple-950/40 hover:bg-purple-900/50 border-purple-800/50 text-purple-300',
+  'bg-amber-950/40 hover:bg-amber-900/50 border-amber-800/50 text-amber-300'
 ];
 
 import { useBrand } from '../brand';
-export default function Simulator({ onActivity }: { onActivity: () => void }) {
+export default function Simulator({ onActivity, services }: { onActivity: () => void; services: { id: string; title: string }[] }) {
   const brand = useBrand();
   const [messages, setMessages] = useState<Msg[]>([]);
   const [state, setState] = useState<SimState>({ stage: 'WELCOME', service: null, step: 0, totalSteps: 0 });
-  const [name, setName] = useState('Dr. Samir Khan');
+  const [name, setName] = useState('Test Customer');
   const [text, setText] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -106,14 +106,15 @@ export default function Simulator({ onActivity }: { onActivity: () => void }) {
             <div>
               <span className="text-xs font-medium text-slate-300 block mb-2">1-click service pickers:</span>
               <div className="grid grid-cols-2 gap-2">
-                {QUICK.map((q) => (
-                  <button key={q.n} onClick={() => send(q.n)} disabled={!menuOpen || busy}
-                    className={`p-2 text-left rounded-lg border text-xs transition disabled:opacity-40 ${q.cls}`}>
-                    {q.label}
+                {services.map((s, i) => (
+                  <button key={s.id} onClick={() => send(String(i + 1))} disabled={!menuOpen || busy}
+                    className={`p-2 text-left rounded-lg border text-xs transition disabled:opacity-40 ${TINTS[i % TINTS.length]}`}>
+                    {i + 1}️⃣ {s.title}
                   </button>
                 ))}
+                {services.length === 0 && <p className="col-span-2 text-[11px] text-slate-500">Add a service under Bot &amp; Settings to test it here.</p>}
               </div>
-              <p className="text-[11px] text-slate-500 mt-2">Also try side questions like “What is OET?” (answered by Gemini when its key is set), or type <em>menu</em>.</p>
+              <p className="text-[11px] text-slate-500 mt-2">Also try a side question about your business (answered by Gemini when its key is set), type <em>menu</em> to start over, or ask for “a real person” to test the hand-off.</p>
             </div>
 
             <div className="bg-slate-900 rounded-xl p-3 border border-slate-800 text-xs space-y-2">

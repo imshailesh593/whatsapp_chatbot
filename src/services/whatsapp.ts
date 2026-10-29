@@ -205,7 +205,7 @@ export class WaConnection {
       if (cmd !== '!pause' && cmd !== '!resume') return;
       const key = [...this.jids.entries()].find(([, j]) => j === jid)?.[0] ?? phoneKey(m.key);
       const paused = cmd === '!pause';
-      const r = await prisma.session.updateMany({ where: { workspaceId: wsId, phoneNumber: key }, data: { isAgentPaused: paused } });
+      const r = await prisma.session.updateMany({ where: { workspaceId: wsId, phoneNumber: key }, data: paused ? { isAgentPaused: true } : { isAgentPaused: false, handoffAt: null, handoffSummary: '' } });
       console.log(`[Takeover] ${wsId}/${key} ${paused ? 'paused' : 'resumed'} (${r.count} session)`);
       return;
     }

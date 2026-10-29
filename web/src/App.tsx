@@ -230,7 +230,7 @@ function Console({ user, onSignedOut, onPlatform }: { user: AdminUser; onSignedO
           <Crm contacts={contacts} includeTest={includeTest} onIncludeTest={setIncludeTest} onOpen={setSelected} onChanged={replaceContact} team={team} meId={user.id} />
         )}
         {tab === 'inbox' && <Inbox contacts={contacts} waReady={waReady} onChanged={replaceContact} />}
-        {tab === 'simulator' && <Simulator onActivity={refresh} />}
+        {tab === 'simulator' && <Simulator onActivity={refresh} services={overview?.services ?? []} />}
         {tab === 'analytics' && !isAgent && <Analytics />}
         {tab === 'broadcasts' && !isAgent && overview && <Broadcasts overview={overview} waReady={waReady} />}
         {tab === 'config' && !isAgent && overview && <Settings overview={overview} me={user} onChanged={refresh} />}

@@ -134,6 +134,17 @@ globalThis.fetch = (async (url: any, init: any = {}) => {
     await handleIncomingMessage(W.id, p1, 'Asha', 'book an appointment');
     offer = replies(W.id, p1).at(-1)!;
 
+    // a price question is not a booking request; an old offer does not book
+    const pq = replies(W.id, p1).length;
+    await handleIncomingMessage(W.id, p1, 'Asha', 'How much is an appointment?');
+    ok(!replies(W.id, p1).slice(pq).some((t) => t.includes('Reply with a number')), 'a question about the price of an appointment does not open the time list');
+    await handleIncomingMessage(W.id, p1, 'Asha', 'book an appointment');
+    await prisma.session.updateMany({ where: { workspaceId: W.id, phoneNumber: p1 }, data: { slotOffer: { slots: [new Date(Date.now() + 5 * 86_400_000).toISOString()], page: 0, at: Date.now() - 31 * 60_000 } } });
+    const eb = calls.filter((c) => c.url.includes('/events') && c.method === 'POST').length;
+    await handleIncomingMessage(W.id, p1, 'Asha', '1');
+    ok(calls.filter((c) => c.url.includes('/events') && c.method === 'POST').length === eb, 'times offered more than 30 minutes ago are not booked by a late reply');
+    await handleIncomingMessage(W.id, p1, 'Asha', 'book an appointment');
+
     // someone else takes the first time while Asha is deciding
     const offered = (await prisma.session.findFirst({ where: { workspaceId: W.id, phoneNumber: p1 } }))!.slotOffer as { slots: string[] };
     const first = new Date(offered.slots[0]);
@@ -172,7 +183,7 @@ globalThis.fetch = (async (url: any, init: any = {}) => {
     const p3 = `9163${run}`;
     await finish(p3, 'Chen');
     await handleIncomingMessage(W.id, p3, 'Chen', 'appointment please');
-    await prisma.session.updateMany({ where: { workspaceId: W.id, phoneNumber: { in: [p2, p3] } }, data: { slotOffer: { slots: [o3.slots[0]], page: 0 } } });
+    await prisma.session.updateMany({ where: { workspaceId: W.id, phoneNumber: { in: [p2, p3] } }, data: { slotOffer: { slots: [o3.slots[0]], page: 0, at: Date.now() } } });
     await Promise.all([handleIncomingMessage(W.id, p2, 'Bala', '1'), handleIncomingMessage(W.id, p3, 'Chen', '1')]);
     const taken = await prisma.appointment.count({ where: { workspaceId: W.id, startsAt: new Date(o3.slots[0]), status: 'confirmed' } });
     ok(taken === 1, 'simultaneous bookings of one time: exactly one succeeds');

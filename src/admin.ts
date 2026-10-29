@@ -463,7 +463,7 @@ export function registerAdmin(app: FastifyInstance, opts: { getQr: (workspaceId:
   });
 
   // A business owner redeems a code from the operator (free days or a plan without a payment)
-  app.post('/admin/api/billing/redeem', { preHandler: manager }, async (req, reply) => {
+  app.post('/admin/api/billing/redeem', { preHandler: ownerOnly }, async (req, reply) => {
     if (throttled(attempts, `rc:${wsId(req)}`, 10)) return reply.status(429).send({ error: 'Too many wrong codes. Try again in 15 minutes.' });
     const r = await redeemCoupon(wsId(req), (req.body as any)?.code);
     if (!r.ok) {
