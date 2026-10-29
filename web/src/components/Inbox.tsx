@@ -17,7 +17,9 @@ interface Props {
   onChanged: (c: Contact) => void;
 }
 
+import { useBrand } from '../brand';
 export default function Inbox({ contacts, waReady, onChanged }: Props) {
+  const brand = useBrand();
   const list = useMemo(() => contacts.filter((c) => !c.isTest), [contacts]);
   const [activePhone, setActivePhone] = useState<string | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -161,7 +163,7 @@ export default function Inbox({ contacts, waReady, onChanged }: Props) {
                 m.direction === 'INBOUND' ? 'bg-slate-900 text-slate-200 border-slate-800' : 'bg-[#005c4b] text-emerald-50 border-emerald-900/50'}`}>
                 {m.text}
                 <div className="text-[9px] text-slate-400 mt-1 text-right">
-                  {m.direction === 'INBOUND' ? 'Candidate' : 'MNS'} · {new Date(m.at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                  {m.direction === 'INBOUND' ? 'Customer' : brand.businessName} · {new Date(m.at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                 </div>
               </div>
             </div>

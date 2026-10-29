@@ -172,7 +172,7 @@ export function startWhatsApp(): WaController {
       auth: state,
       version: latest.version,
       logger: pino({ level: 'silent' }),
-      browser: baileys.Browsers.ubuntu('MNS Bot'),
+      browser: baileys.Browsers.ubuntu('Lead Bot'),
       markOnlineOnConnect: false,
       syncFullHistory: false
     });

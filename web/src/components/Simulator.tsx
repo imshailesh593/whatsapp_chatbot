@@ -26,7 +26,9 @@ const QUICK = [
   { n: '4', label: '✈️ 4️⃣ Visa & PR', cls: 'bg-amber-950/40 hover:bg-amber-900/50 border-amber-800/50 text-amber-300' }
 ];
 
+import { useBrand } from '../brand';
 export default function Simulator({ onActivity }: { onActivity: () => void }) {
+  const brand = useBrand();
   const [messages, setMessages] = useState<Msg[]>([]);
   const [state, setState] = useState<SimState>({ stage: 'WELCOME', service: null, step: 0, totalSteps: 0 });
   const [name, setName] = useState('Dr. Samir Khan');
@@ -131,9 +133,9 @@ export default function Simulator({ onActivity }: { onActivity: () => void }) {
             <div className="w-20 h-4 bg-slate-950 rounded-full mx-auto mb-2 opacity-60" />
             <div className="flex items-center justify-between">
               <div className="flex items-center space-x-2.5">
-                <div className="w-9 h-9 rounded-full bg-emerald-300 text-slate-900 font-bold flex items-center justify-center text-xs shadow">MNS</div>
+                <div className="w-9 h-9 rounded-full bg-emerald-300 text-slate-900 font-bold flex items-center justify-center text-xs shadow">{brand.businessName.slice(0, 3).toUpperCase()}</div>
                 <div>
-                  <h4 className="font-semibold text-xs leading-none">MNS INSTITUTE</h4>
+                  <h4 className="font-semibold text-xs leading-none">{brand.businessName}</h4>
                   <p className="text-[10px] text-emerald-100 opacity-90 mt-0.5">{busy ? 'typing…' : 'online'}</p>
                 </div>
               </div>

@@ -3,7 +3,9 @@ import { Globe } from 'lucide-react';
 import { api } from '../api';
 import type { AdminUser } from '../types';
 
+import { useBrand } from '../brand';
 export default function Login({ onDone }: { onDone: (user: AdminUser) => void }) {
+  const brand = useBrand();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -34,7 +36,7 @@ export default function Login({ onDone }: { onDone: (user: AdminUser) => void })
             <Globe className="w-5 h-5 text-slate-950" />
           </div>
           <div>
-            <div className="font-extrabold text-white">MNS INSTITUTE</div>
+            <div className="font-extrabold text-white">{brand.businessName}</div>
             <div className="text-[11px] text-slate-400">Lead Intelligence Console</div>
           </div>
         </div>

@@ -9,6 +9,7 @@ import Simulator from './components/Simulator';
 import Inbox from './components/Inbox';
 import Settings from './components/Settings';
 import Dossier from './components/Dossier';
+import { useBrand } from './brand';
 
 type Tab = 'crm' | 'simulator' | 'inbox' | 'config';
 
@@ -25,6 +26,7 @@ export default function App() {
 }
 
 function Console({ user, onSignedOut }: { user: AdminUser; onSignedOut: () => void }) {
+  const brand = useBrand();
   const [tab, setTab] = useState<Tab>('crm');
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [overview, setOverview] = useState<Overview | null>(null);
@@ -101,10 +103,12 @@ function Console({ user, onSignedOut }: { user: AdminUser; onSignedOut: () => vo
               </div>
               <div>
                 <div className="flex items-center space-x-2">
-                  <span className="font-extrabold text-base tracking-tight text-white">MNS INSTITUTE</span>
-                  <span className="hidden sm:inline text-xs px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 font-semibold tracking-wide">
-                    JOBS & LICENSING
-                  </span>
+                  <span className="font-extrabold text-base tracking-tight text-white">{brand.businessName}</span>
+                  {brand.tagline && (
+                    <span className="hidden sm:inline text-xs px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 font-semibold tracking-wide">
+                      {brand.tagline}
+                    </span>
+                  )}
                 </div>
                 <p className="text-[11px] text-slate-400">WhatsApp Lead Intelligence Console</p>
               </div>

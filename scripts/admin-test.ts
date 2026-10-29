@@ -1,3 +1,4 @@
+import { BUSINESS_NAME } from '../src/brand';
 // Exercises the dashboard API via Fastify inject() against the real DB (no WhatsApp).
 import dotenv from 'dotenv';
 dotenv.config();
@@ -64,7 +65,7 @@ setTransport({ sendText: async (_to, text) => void sent.push(text) });
   const sim = async (text: string) => (await app.inject({ method: 'POST', url: '/admin/api/simulate', headers: h, payload: { id: 'tst', name: 'Sim <b>', text } })).json();
   await app.inject({ method: 'POST', url: '/admin/api/simulate/reset', headers: h, payload: { id: 'tst' } });
   let o = await sim('hi');
-  ok(o.replies[0].includes('Welcome to MNS INSTITUTE'), 'simulator: welcome from real engine');
+  ok(o.replies[0].includes('Welcome to ' + BUSINESS_NAME), 'simulator: welcome from real engine');
   o = await sim('2');
   ok(o.replies[0] === QUESTION_BRANCHES.LICENSING[0].question && o.state.totalSteps === 6, 'simulator: licensing Q1, 6 steps');
   for (let i = 0; i < 6; i++) o = await sim(`ans${i}`);

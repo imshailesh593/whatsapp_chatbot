@@ -1,7 +1,7 @@
 {
-  "name": "mns-whatsapp-bot",
+  "name": "whatsapp-lead-bot",
   "version": "1.0.0",
-  "description": "WhatsApp Bot for MNS Institute using Fastify and Prisma",
+  "description": "WhatsApp lead-qualification bot with admin console (Fastify, Prisma, Baileys, Gemini)",
   "main": "dist/server.js",
   "scripts": {
     "build": "tsc",

@@ -1,4 +1,5 @@
 import fs from 'fs';
+import { BUSINESS_NAME, BUSINESS_TAGLINE } from './brand';
 import path from 'path';
 import { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import fastifyStatic from '@fastify/static';
@@ -126,6 +127,9 @@ export function registerAdmin(app: FastifyInstance, opts: {
   };
 
   // ---- auth ----
+  // Public: the login screen needs the business name before anyone is signed in
+  app.get('/admin/api/brand', async () => ({ businessName: BUSINESS_NAME, tagline: BUSINESS_TAGLINE }));
+
   app.post('/admin/api/login', async (req, reply) => {
     if (!enabled) return reply.status(404).send();
     const email = normalizeEmail((req.body as any)?.email);
@@ -332,7 +336,7 @@ export function registerAdmin(app: FastifyInstance, opts: {
         ].map(cell).join(',');
       })
     );
-    reply.header('Content-Disposition', 'attachment; filename="mns-leads.csv"');
+    reply.header('Content-Disposition', 'attachment; filename="leads.csv"');
     return reply.type('text/csv; charset=utf-8').send('﻿' + lines.join('\r\n'));
   });
 

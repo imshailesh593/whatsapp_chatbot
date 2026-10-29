@@ -1,3 +1,4 @@
+import { BUSINESS_NAME } from '../src/brand';
 // Engine-level end-to-end test against the real database with a fake WhatsApp transport.
 // Usage: npx tsx scripts/e2e.ts   (needs DATABASE_URL; GEMINI_API_KEY optional)
 import dotenv from 'dotenv';
@@ -34,7 +35,7 @@ async function main() {
     console.log(`\n[${svc}] ${phone}`);
 
     await handleIncomingMessage(phone, 'Test', 'Hi');
-    assert(replies(phone)[0].includes('Welcome to MNS INSTITUTE'), 'welcome sent');
+    assert(replies(phone)[0].includes('Welcome to ' + BUSINESS_NAME), 'welcome sent');
 
     await handleIncomingMessage(phone, 'Test', 'banana');
     assert(/valid number/.test(replies(phone)[1]), 'invalid selection re-prompted');
@@ -60,7 +61,7 @@ async function main() {
     assert((await prisma.lead.findFirst({ where: { phoneNumber: phone } }))?.isBookedTopmate === true, 'booking flips isBookedTopmate');
 
     await handleIncomingMessage(phone, 'Test', 'menu');
-    assert(replies(phone).at(-1)!.includes('Welcome to MNS INSTITUTE'), 'menu restarts the funnel');
+    assert(replies(phone).at(-1)!.includes('Welcome to ' + BUSINESS_NAME), 'menu restarts the funnel');
   }
 
   console.log('\n[side question mid-flow]');

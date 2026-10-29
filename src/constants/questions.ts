@@ -59,13 +59,17 @@ export const SERVICE_KEYWORDS: [RegExp, string][] = [
   [/\bother\b|\bgeneral\b/, 'GENERAL']
 ];
 
+import { BUSINESS_NAME, BUSINESS_TAGLINE } from "../brand";
+
 export const TOPMATE_URL = process.env.TOPMATE_URL || "https://topmate.io/mnsinstitute/";
+
+const WELCOME_INTRO = process.env.WELCOME_INTRO || "We help students and professionals with international exam preparation, medical licensing, overseas job opportunities, and Visa/PR guidance.";
 
 export const FORM_URL = process.env.FORM_URL || "https://tally.so/r/7Rrl70";
 
-export const WELCOME_MESSAGE = `Hello 👋 Welcome to MNS INSTITUTE & MNS INSTITUTE JOBS! 🌍
+export const WELCOME_MESSAGE = `Hello 👋 Welcome to ${BUSINESS_NAME}! 🌍
 
-We help students and professionals with international exam preparation, medical licensing, overseas job opportunities, and Visa/PR guidance.
+${WELCOME_INTRO}
 
 📝 Please fill out this short form so our team can understand your profile:
 👉 ${FORM_URL}
@@ -94,7 +98,7 @@ If you have already booked a consultation, please let us know here.
 
 *Fees will be adjusted in the process.*
 
-MNS INSTITUTE | Your Global Career Support Partner 🌍`;
+${BUSINESS_NAME}${BUSINESS_TAGLINE ? ` | ${BUSINESS_TAGLINE}` : ""} 🌍`;
 
 export const CONSULTATION_REMINDER_MESSAGE = `You can schedule your one-to-one consultation directly with our senior consultant using this link:\n👉 ${TOPMATE_URL}\n\n*Note: Your consultation fees will be adjusted in the subsequent processing charges.*`;
 

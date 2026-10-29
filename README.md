@@ -1,9 +1,13 @@
-# MNS Institute WhatsApp Bot
+# WhatsApp Lead Bot
 
 WhatsApp linked-device protocol via **Baileys** (no browser; QR-linked number) + PostgreSQL (Prisma) + Gemini for free-form questions,
 with a React admin console at `/admin/`.
 Slot-filling funnel: welcome → service (1-5) → one question at a time → lead saved → Topmate CTA.
 Spec: [mns_institute_whatsapp_automation_blueprint.md](mns_institute_whatsapp_automation_blueprint.md)
+
+## Branding
+
+Nothing about the business is hard-coded in the UI or in the bot's greeting, sign-off and AI prompt. Set `BUSINESS_NAME`, `BUSINESS_TAGLINE`, `BUSINESS_DESCRIPTION` (and optionally `WELCOME_INTRO`, `FORM_URL`, `TOPMATE_URL`) in `.env`. The service menu and question sets live in `src/constants/questions.ts`.
 
 ## Admin console (`/admin/`)
 Sign in with an admin email and password (add or remove admins under *Questionnaires & Settings*, change your own password from the account menu). Everything runs on the live database:
