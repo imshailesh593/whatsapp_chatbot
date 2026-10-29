@@ -60,6 +60,7 @@ model Workspace {
   adminUsers AdminUser[]
   usage      Usage[]
   stages     Stage[]
+  broadcasts Broadcast[]
   payments   Payment[]
 
   @@map("saas_workspaces")
@@ -105,6 +106,8 @@ model Session {
   currentStep       Int          @default(0) @map("current_step")
   answers           Json         @default("{}")
   isAgentPaused     Boolean      @default(false) @map("is_agent_paused")
+  /// Customer replied STOP: never include in broadcasts
+  optedOut          Boolean      @default(false) @map("opted_out")
   lastInteractionAt DateTime     @default(now()) @map("last_interaction_at")
   createdAt         DateTime     @default(now()) @map("created_at")
   updatedAt         DateTime     @updatedAt @map("updated_at")
@@ -173,6 +176,7 @@ model Usage {
   period        String
   conversations Int       @default(0)
   aiReplies     Int       @default(0)
+  broadcasts    Int       @default(0)
 
   @@unique([workspaceId, period])
   @@map("saas_usage")
@@ -218,4 +222,46 @@ model Stage {
   @@unique([workspaceId, key])
   @@index([workspaceId, position])
   @@map("saas_stages")
+}
+
+/// A one-to-many message to customers who already chatted with the business
+model Broadcast {
+  id          String    @id @default(uuid())
+  workspaceId String    @map("workspace_id")
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  name        String
+  text        String
+  filters     Json      @default("{}")
+  /// draft | scheduled | sending | paused | done | canceled
+  status      String    @default("draft")
+  note        String    @default("")
+  total       Int       @default(0)
+  sent        Int       @default(0)
+  failed      Int       @default(0)
+  createdBy   String    @default("")
+  scheduledAt DateTime? @map("scheduled_at")
+  startedAt   DateTime? @map("started_at")
+  finishedAt  DateTime? @map("finished_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  recipients BroadcastRecipient[]
+
+  @@index([workspaceId, createdAt])
+  @@index([status])
+  @@map("saas_broadcasts")
+}
+
+model BroadcastRecipient {
+  id          String    @id @default(uuid())
+  broadcastId String    @map("broadcast_id")
+  broadcast   Broadcast @relation(fields: [broadcastId], references: [id], onDelete: Cascade)
+  phone       String
+  name        String?
+  /// pending | sent | failed | skipped
+  status      String    @default("pending")
+  error       String    @default("")
+  sentAt      DateTime? @map("sent_at")
+
+  @@index([broadcastId, status])
+  @@map("saas_broadcast_recipients")
 }

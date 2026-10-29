@@ -5,11 +5,11 @@ import type { Workspace } from '../types';
 
 type Fields = Pick<
   Workspace,
-  'businessName' | 'tagline' | 'description' | 'welcomeIntro' | 'tone' | 'languages' | 'bookingLabel' | 'bookingUrl' | 'bookingNote' | 'formUrl' | 'knowledge' | 'notifyEmail' | 'notifyPhone'
+  'timezone' | 'businessName' | 'tagline' | 'description' | 'welcomeIntro' | 'tone' | 'languages' | 'bookingLabel' | 'bookingUrl' | 'bookingNote' | 'formUrl' | 'knowledge' | 'notifyEmail' | 'notifyPhone'
 >;
 
 const pick = (w: Workspace): Fields => ({
-  businessName: w.businessName, tagline: w.tagline, description: w.description, welcomeIntro: w.welcomeIntro, tone: w.tone,
+  timezone: w.timezone, businessName: w.businessName, tagline: w.tagline, description: w.description, welcomeIntro: w.welcomeIntro, tone: w.tone,
   languages: w.languages, bookingLabel: w.bookingLabel, bookingUrl: w.bookingUrl, bookingNote: w.bookingNote, formUrl: w.formUrl,
   knowledge: w.knowledge, notifyEmail: w.notifyEmail, notifyPhone: w.notifyPhone
 });
@@ -95,6 +95,7 @@ export default function BusinessProfile({ workspace, onSaved }: { workspace: Wor
             {[...new Set(['friendly', 'professional', 'formal', 'casual', f.tone])].map((t) => <option key={t} value={t}>{t}</option>)}
           </select>
         </div>
+        <div><label className={label}>Time zone (broadcasts go out 9:00-20:00 here)</label><input value={f.timezone} maxLength={60} onChange={set('timezone')} className={input} placeholder="Asia/Kolkata" /></div>
         <div><label className={label}>Languages customers use</label><input value={f.languages} maxLength={80} onChange={set('languages')} className={input} /></div>
         <div><label className={label}>Booking / payment link</label><input value={f.bookingUrl} maxLength={300} onChange={set('bookingUrl')} className={input} placeholder="https://cal.com/you" /></div>
         <div><label className={label}>What it is called (&ldquo;schedule a ___&rdquo;)</label><input value={f.bookingLabel} maxLength={80} onChange={set('bookingLabel')} className={input} placeholder="consultation" /></div>

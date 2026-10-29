@@ -20,6 +20,7 @@ import {
 } from './botConfig';
 
 const RESET_COMMANDS = ['reset', 'menu', 'restart', 'start'];
+const OPT_OUT_COMMANDS = ['stop', 'unsubscribe', 'stop all'];
 const BOOKED_RE = /already\s+booked|i\s+(have\s+)?booked|booking\s+done|booked\s+(a\s+)?(slot|consultation|appointment|call)/i;
 
 const looksLikeQuestion = (t: string) => t.includes('?') && t.length > 3;
@@ -76,11 +77,18 @@ export async function handleIncomingMessage(
   if (!isCapturing() && !accessState(cfg.ws).active) return;
   if (cfg.services.length === 0) return;
 
+  // Customers can leave broadcast lists at any time; they can come back with START / MENU
+  if (OPT_OUT_COMMANDS.includes(lower)) {
+    await prisma.session.update({ where: key, data: { optedOut: true } });
+    if (!session.isAgentPaused) await send(phoneNumber, "You have been unsubscribed from our updates. Reply START any time if you want to chat with us again.");
+    return;
+  }
+
   // 2. Global reset commands
   if (RESET_COMMANDS.includes(lower)) {
     await prisma.session.update({
       where: key,
-      data: { stage: SessionStage.AWAITING_SERVICE_SELECTION, selectedService: null, currentStep: 0, answers: {} }
+      data: { stage: SessionStage.AWAITING_SERVICE_SELECTION, selectedService: null, currentStep: 0, answers: {}, optedOut: false }
     });
     await send(phoneNumber, welcomeMessage(cfg));
     return;

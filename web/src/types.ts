@@ -151,7 +151,7 @@ export interface BillingPlan {
   name: string;
   blurb: string;
   price: { INR: number; USD: number };
-  limits: { conversations: number; aiReplies: number; seats: number };
+  limits: { conversations: number; aiReplies: number; seats: number; broadcasts: number };
 }
 
 export interface BillingInfo {
@@ -164,9 +164,25 @@ export interface BillingInfo {
   currentPeriodEnd: string | null;
   cancelAtPeriodEnd: boolean;
   provider: string | null;
-  limits: { conversations: number | null; aiReplies: number | null; seats: number | null };
-  usage: { conversations: number; aiReplies: number; seats: number };
+  limits: { conversations: number | null; aiReplies: number | null; seats: number | null; broadcasts: number | null };
+  usage: { conversations: number; aiReplies: number; seats: number; broadcasts: number };
   providers: { stripe: boolean; razorpay: boolean };
   plans: BillingPlan[];
   payments: { id: string; amount: number; currency: string; status: string; plan: string; at: string }[];
+}
+
+export interface BroadcastInfo {
+  id: string;
+  name: string;
+  text: string;
+  status: 'draft' | 'scheduled' | 'sending' | 'paused' | 'done' | 'canceled';
+  note: string;
+  total: number;
+  sent: number;
+  failed: number;
+  scheduledAt: string | null;
+  startedAt: string | null;
+  finishedAt: string | null;
+  createdAt: string;
+  createdBy: string;
 }

@@ -7,6 +7,7 @@ import { startWhatsApp, waFor, waSummary } from './services/whatsapp';
 import { prisma } from './lib/prisma';
 import { registerAdmin } from './admin';
 import { DEFAULT_WORKSPACE_ID } from './lib/workspaces';
+import { startBroadcastWorker } from './services/broadcast';
 
 dotenv.config();
 
@@ -46,12 +47,14 @@ app.get('/qr/status', async (req, reply) => {
   return reply.header('Cache-Control', 'no-store').send({ status: waFor(DEFAULT_WORKSPACE_ID).status, qr: await qrDataUrl(DEFAULT_WORKSPACE_ID) });
 });
 
+const broadcasts = startBroadcastWorker();
 let client: { stop(): Promise<void> } | null = null;
 startWhatsApp()
   .then((c) => (client = c))
   .catch((err) => console.error('WhatsApp start failed:', err));
 
 const shutdown = async () => {
+  broadcasts.stop();
   await app.close();
   await client?.stop();
   await prisma.$disconnect();

@@ -4,10 +4,10 @@ import type { Workspace } from '@prisma/client';
 
 export async function getUsage(workspaceId: string) {
   const row = await prisma.usage.findUnique({ where: { workspaceId_period: { workspaceId, period: currentPeriod() } } });
-  return { conversations: row?.conversations ?? 0, aiReplies: row?.aiReplies ?? 0 };
+  return { conversations: row?.conversations ?? 0, aiReplies: row?.aiReplies ?? 0, broadcasts: row?.broadcasts ?? 0 };
 }
 
-async function bump(workspaceId: string, field: 'conversations' | 'aiReplies'): Promise<void> {
+async function bump(workspaceId: string, field: 'conversations' | 'aiReplies' | 'broadcasts'): Promise<void> {
   const period = currentPeriod();
   await prisma.usage.upsert({
     where: { workspaceId_period: { workspaceId, period } },
@@ -21,6 +21,14 @@ export async function admitConversation(ws: Workspace): Promise<boolean> {
   const { limits } = accessState(ws);
   if (limits.conversations !== Infinity && (await getUsage(ws.id)).conversations >= limits.conversations) return false;
   await bump(ws.id, 'conversations');
+  return true;
+}
+
+/** May one more broadcast message go out this month? Counts it when allowed. */
+export async function admitBroadcast(ws: Workspace): Promise<boolean> {
+  const { limits } = accessState(ws);
+  if (limits.broadcasts !== Infinity && (await getUsage(ws.id)).broadcasts >= limits.broadcasts) return false;
+  await bump(ws.id, 'broadcasts');
   return true;
 }
 

@@ -18,17 +18,19 @@ export interface Limits {
   aiReplies: number;
   /** Team members (owner included) */
   seats: number;
+  /** Broadcast messages sent per month */
+  broadcasts: number;
 }
 
 export const PLANS: PlanDef[] = [
-  { id: 'starter', name: 'Starter', price: { INR: 99_900, USD: 1_200 }, limits: { conversations: 300, aiReplies: 300, seats: 2 }, blurb: 'One number, a small team, getting started.' },
-  { id: 'growth', name: 'Growth', price: { INR: 299_900, USD: 3_500 }, limits: { conversations: 1_500, aiReplies: 2_000, seats: 5 }, blurb: 'For businesses with steady enquiries.' },
-  { id: 'scale', name: 'Scale', price: { INR: 799_900, USD: 9_500 }, limits: { conversations: 6_000, aiReplies: 10_000, seats: 15 }, blurb: 'High volume and bigger teams.' }
+  { id: 'starter', name: 'Starter', price: { INR: 99_900, USD: 1_200 }, limits: { conversations: 300, aiReplies: 300, seats: 2, broadcasts: 200 }, blurb: 'One number, a small team, getting started.' },
+  { id: 'growth', name: 'Growth', price: { INR: 299_900, USD: 3_500 }, limits: { conversations: 1_500, aiReplies: 2_000, seats: 5, broadcasts: 1_000 }, blurb: 'For businesses with steady enquiries.' },
+  { id: 'scale', name: 'Scale', price: { INR: 799_900, USD: 9_500 }, limits: { conversations: 6_000, aiReplies: 10_000, seats: 15, broadcasts: 5_000 }, blurb: 'High volume and bigger teams.' }
 ];
 
 export const TRIAL_DAYS = 14;
 export const GRACE_DAYS = 3;
-const UNLIMITED: Limits = { conversations: Infinity, aiReplies: Infinity, seats: Infinity };
+const UNLIMITED: Limits = { conversations: Infinity, aiReplies: Infinity, seats: Infinity, broadcasts: Infinity };
 
 export const planById = (id: string) => PLANS.find((p) => p.id === id);
 

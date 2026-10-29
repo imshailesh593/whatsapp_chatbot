@@ -26,6 +26,7 @@ import { waFor } from './services/whatsapp';
 import { PRODUCT_NAME } from './brand';
 import { sendTestAlert, smtpConfigured } from './services/alerts';
 import { getStages, saveStages, stageExists } from './services/pipeline';
+import { createBroadcast, previewAudience, setStatus as setBroadcastStatus } from './services/broadcast';
 import { transportReady } from './services/transport';
 import { PLANS, accessState, planById } from './plans';
 import { getUsage } from './services/usage';
@@ -137,6 +138,13 @@ function pickWorkspaceFields(body: Record<string, unknown>): { data: Partial<Rec
       }
     }
     if (f === 'businessName' && !v) return { error: 'Business name cannot be empty' };
+    if (f === 'timezone' && v) {
+      try {
+        new Intl.DateTimeFormat('en', { timeZone: v });
+      } catch {
+        return { error: 'Time zone not recognised. Use a name like Asia/Kolkata or Europe/London' };
+      }
+    }
     data[f] = v;
   }
   return { data };
@@ -374,7 +382,7 @@ export function registerAdmin(app: FastifyInstance, opts: { getQr: (workspaceId:
       currentPeriodEnd: w.currentPeriodEnd?.toISOString() ?? null,
       cancelAtPeriodEnd: w.cancelAtPeriodEnd,
       provider: w.billingProvider,
-      limits: { conversations: num(access.limits.conversations), aiReplies: num(access.limits.aiReplies), seats: num(access.limits.seats) },
+      limits: { conversations: num(access.limits.conversations), aiReplies: num(access.limits.aiReplies), seats: num(access.limits.seats), broadcasts: num(access.limits.broadcasts) },
       usage: { ...usage, seats },
       providers: providersAvailable(),
       plans: PLANS.map((p) => ({ id: p.id, name: p.name, blurb: p.blurb, price: p.price, limits: p.limits })),
@@ -564,6 +572,40 @@ export function registerAdmin(app: FastifyInstance, opts: { getQr: (workspaceId:
   app.put('/admin/api/stages', { preHandler: manager }, async (req, reply) => {
     try {
       return { stages: await saveStages(wsId(req), (req.body as any)?.stages) };
+    } catch (err) {
+      return reply.status(400).send({ error: (err as Error).message });
+    }
+  });
+
+  // ---- broadcasts ----
+  const broadcastView = (b: any) => ({
+    id: b.id, name: b.name, text: b.text, status: b.status, note: b.note, total: b.total, sent: b.sent, failed: b.failed,
+    filters: b.filters, scheduledAt: b.scheduledAt?.toISOString() ?? null, startedAt: b.startedAt?.toISOString() ?? null,
+    finishedAt: b.finishedAt?.toISOString() ?? null, createdAt: b.createdAt.toISOString(), createdBy: b.createdBy
+  });
+  app.get('/admin/api/broadcasts', { preHandler: manager }, async (req) => ({
+    broadcasts: (await prisma.broadcast.findMany({ where: { workspaceId: wsId(req) }, orderBy: { createdAt: 'desc' }, take: 50 })).map(broadcastView)
+  }));
+  app.post('/admin/api/broadcasts/audience', { preHandler: manager }, async (req) => previewAudience(wsId(req), (req.body as any)?.filters));
+  app.post('/admin/api/broadcasts', { preHandler: manager }, async (req, reply) => {
+    try {
+      return { broadcast: broadcastView(await createBroadcast(wsId(req), me(req).email, (req.body ?? {}) as any)) };
+    } catch (err) {
+      return reply.status(400).send({ error: (err as Error).message });
+    }
+  });
+  app.get('/admin/api/broadcasts/:id', { preHandler: manager }, async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const b = await prisma.broadcast.findFirst({ where: { id, workspaceId: wsId(req) } });
+    if (!b) return reply.status(404).send({ error: 'Broadcast not found' });
+    const recipients = await prisma.broadcastRecipient.findMany({ where: { broadcastId: id }, orderBy: { id: 'asc' }, take: 200 });
+    return { broadcast: broadcastView(b), recipients: recipients.map((r) => ({ phone: r.phone, name: r.name, status: r.status, error: r.error, sentAt: r.sentAt?.toISOString() ?? null })) };
+  });
+  app.post('/admin/api/broadcasts/:id/:action', { preHandler: manager }, async (req, reply) => {
+    const { id, action } = req.params as { id: string; action: string };
+    if (!['start', 'pause', 'resume', 'cancel'].includes(action)) return reply.status(404).send();
+    try {
+      return { broadcast: broadcastView(await setBroadcastStatus(wsId(req), id, action as any)) };
     } catch (err) {
       return reply.status(400).send({ error: (err as Error).message });
     }

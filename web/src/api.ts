@@ -1,4 +1,4 @@
-import type { StageDef, BillingInfo, AdminRow, AdminUser, ChatMessage, ChatTurn, Contact, Draft, Overview, PatchBody, PlatformWorkspace, ServiceDef, TemplateInfo, WaSnapshot, Workspace } from './types';
+import type { BroadcastInfo, StageDef, BillingInfo, AdminRow, AdminUser, ChatMessage, ChatTurn, Contact, Draft, Overview, PatchBody, PlatformWorkspace, ServiceDef, TemplateInfo, WaSnapshot, Workspace } from './types';
 
 export class UnauthorizedError extends Error {}
 
@@ -31,6 +31,10 @@ export const api = {
   whatsappDisconnect: () => post<WaSnapshot>('/admin/api/whatsapp/disconnect', {}),
   overview: () => request<Overview>('/admin/api/overview'),
   saveStages: (stages: StageDef[]) => request<{ stages: StageDef[] }>('/admin/api/stages', { method: 'PUT', body: JSON.stringify({ stages }) }).then((r) => r.stages),
+  broadcasts: () => request<{ broadcasts: BroadcastInfo[] }>('/admin/api/broadcasts').then((r) => r.broadcasts),
+  audience: (filters: unknown) => post<{ count: number; sample: { name: string | null; phone: string }[] }>('/admin/api/broadcasts/audience', { filters }),
+  createBroadcast: (body: unknown) => post<{ broadcast: BroadcastInfo }>('/admin/api/broadcasts', body),
+  broadcastAction: (id: string, action: string) => post<{ broadcast: BroadcastInfo }>(`/admin/api/broadcasts/${encodeURIComponent(id)}/${action}`, {}),
   alertInfo: () => request<{ emailAvailable: boolean; whatsappReady: boolean }>('/admin/api/alerts'),
   testAlert: () => post<{ whatsapp: string; email: string }>('/admin/api/alerts/test', {}),
   billing: () => request<BillingInfo>('/admin/api/billing'),

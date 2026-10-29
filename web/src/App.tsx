@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Building2, Calendar, CheckCircle2, Clock, ExternalLink, Globe, MessageSquare, ShieldCheck, Smartphone, Users } from 'lucide-react';
+import { Building2, Megaphone, Calendar, CheckCircle2, Clock, ExternalLink, Globe, MessageSquare, ShieldCheck, Smartphone, Users } from 'lucide-react';
 import { api, UnauthorizedError } from './api';
 import type { AdminUser, BillingInfo, Contact, Overview } from './types';
 import AccountMenu from './components/AccountMenu';
@@ -11,10 +11,11 @@ import Settings from './components/Settings';
 import Dossier from './components/Dossier';
 import Onboarding from './components/Onboarding';
 import Platform from './components/Platform';
+import Broadcasts from './components/Broadcasts';
 import { BrandContext } from './brand';
 import { StagesContext } from './stages';
 
-type Tab = 'crm' | 'simulator' | 'inbox' | 'config' | 'platform';
+type Tab = 'crm' | 'simulator' | 'inbox' | 'broadcasts' | 'config' | 'platform';
 
 export default function App() {
   const [user, setUser] = useState<AdminUser | null | undefined>(undefined);
@@ -169,6 +170,7 @@ function Console({ user, onSignedOut }: { user: AdminUser; onSignedOut: () => vo
             {tabBtn('simulator', <Smartphone className="w-4 h-4 text-emerald-400" />, 'Bot Simulator', (
               <span className="ml-1 px-1.5 rounded text-[9px] bg-emerald-500/20 text-emerald-300 font-bold">TEST</span>
             ))}
+            {!isAgent && tabBtn('broadcasts', <Megaphone className="w-4 h-4" />, 'Broadcasts')}
             {!isAgent && tabBtn('config', <ShieldCheck className="w-4 h-4" />, 'Bot & Settings')}
             {user.isSuperAdmin && tabBtn('platform', <Building2 className="w-4 h-4" />, 'All businesses')}
           </div>
@@ -214,6 +216,7 @@ function Console({ user, onSignedOut }: { user: AdminUser; onSignedOut: () => vo
         )}
         {tab === 'inbox' && <Inbox contacts={contacts} waReady={waReady} onChanged={replaceContact} />}
         {tab === 'simulator' && <Simulator onActivity={refresh} />}
+        {tab === 'broadcasts' && !isAgent && overview && <Broadcasts overview={overview} waReady={waReady} />}
         {tab === 'config' && !isAgent && overview && <Settings overview={overview} me={user} onChanged={refresh} />}
         {tab === 'platform' && user.isSuperAdmin && <Platform />}
       </main>

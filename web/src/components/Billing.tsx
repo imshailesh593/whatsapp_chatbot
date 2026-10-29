@@ -91,10 +91,11 @@ export default function Billing({ me }: { me: AdminUser }) {
         </p>
       )}
 
-      <div className="mt-4 grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <Bar label="New conversations this month" used={b.usage.conversations} limit={b.limits.conversations} />
         <Bar label="AI answers this month" used={b.usage.aiReplies} limit={b.limits.aiReplies} />
         <Bar label="Team members" used={b.usage.seats} limit={b.limits.seats} />
+        <Bar label="Broadcast messages this month" used={b.usage.broadcasts} limit={b.limits.broadcasts} />
       </div>
 
       {!internal && (
@@ -115,6 +116,7 @@ export default function Billing({ me }: { me: AdminUser }) {
                     <li>{p.limits.conversations.toLocaleString()} new conversations / month</li>
                     <li>{p.limits.aiReplies.toLocaleString()} AI answers / month</li>
                     <li>{p.limits.seats} team members</li>
+                    <li>{p.limits.broadcasts.toLocaleString()} broadcast messages / month</li>
                     <li>1 WhatsApp number</li>
                   </ul>
                   {owner && !current && (

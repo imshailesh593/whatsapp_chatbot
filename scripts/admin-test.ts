@@ -247,6 +247,26 @@ async function cleanup() {
   invalidateConfig(wsA);
   ok((await call(hA, 'POST', '/admin/api/admins', { email: `s2${DOMAIN}`, password: 'seat password 1', role: 'agent' })).statusCode === 402, 'seat limit of the plan is enforced');
 
+  // ---- broadcasts API ----
+  const lead = await prisma.session.create({ data: { workspaceId: wsA, phoneNumber: '910000000077', contactName: 'Zed Lead', selectedService: 'CHECK_UP' } });
+  await prisma.lead.create({ data: { workspaceId: wsA, sessionId: lead.id, phoneNumber: '910000000077', serviceCategory: 'CHECK_UP', collectedData: {} } });
+  ok((await call(hAg2, 'GET', '/admin/api/broadcasts')).statusCode === 403, 'agents cannot see broadcasts');
+  r = await call(hA, 'POST', '/admin/api/broadcasts/audience', { filters: {} });
+  ok(r.json().count === 1 && r.json().sample[0].phone === '910000000077', 'audience preview counts finished leads only (no simulator contacts)');
+  ok((await call(hB, 'POST', '/admin/api/broadcasts/audience', { filters: {} })).json().count === 0, "another workspace's customers are never in the audience");
+  ok((await call(hA, 'POST', '/admin/api/broadcasts', { name: '', text: 'x' })).statusCode === 400, 'broadcast needs a name');
+  ok((await call(hA, 'POST', '/admin/api/broadcasts', { name: 'N', text: 'x'.repeat(1001) })).statusCode === 400, 'overlong message refused');
+  r = await call(hA, 'POST', '/admin/api/broadcasts', { name: 'Promo', text: 'Hi {name}!' });
+  const bid = r.json().broadcast.id;
+  ok(r.statusCode === 200 && r.json().broadcast.status === 'draft' && r.json().broadcast.total === 1, 'draft created');
+  ok((await call(hB, 'GET', '/admin/api/broadcasts/' + bid)).statusCode === 404 && (await call(hB, 'POST', '/admin/api/broadcasts/' + bid + '/start')).statusCode === 400, "other workspaces cannot read or start it");
+  ok((await call(hA, 'POST', '/admin/api/broadcasts/' + bid + '/pause')).statusCode === 400, 'cannot pause a draft');
+  ok((await call(hA, 'POST', '/admin/api/broadcasts/' + bid + '/start')).json().broadcast.status === 'sending', 'start');
+  ok((await call(hA, 'POST', '/admin/api/broadcasts/' + bid + '/cancel')).json().broadcast.status === 'canceled', 'cancel');
+  r = await call(hA, 'GET', '/admin/api/broadcasts/' + bid);
+  ok(r.json().recipients.length === 1 && r.json().recipients[0].status === 'skipped', 'detail lists recipients');
+  ok((await call(hA, 'PUT', '/admin/api/workspace', { timezone: 'Mars/Phobos' })).statusCode === 400 && (await call(hA, 'PUT', '/admin/api/workspace', { timezone: 'Asia/Kolkata' })).statusCode === 200, 'time zone is validated');
+
   // ---- platform admin ----
   await prisma.adminUser.create({ data: { email: `root${DOMAIN}`, passwordHash: await hashPassword('platform admin pw 1'), workspaceId: wsB, role: 'owner', isSuperAdmin: true } });
   const hRoot = cookieOf(await login(`root${DOMAIN}`, 'platform admin pw 1'));
