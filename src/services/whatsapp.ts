@@ -68,7 +68,8 @@ export function migrateLegacyAuth(defaultWorkspaceId: string): void {
 /** True when this workspace's phone has completed linking before (so it should reconnect on boot). */
 function wasLinked(dir: string): boolean {
   try {
-    return JSON.parse(fs.readFileSync(path.join(dir, 'creds.json'), 'utf8'))?.registered === true;
+    // `me` is set once pairing succeeded (the `registered` flag stays false for linked devices)
+    return !!JSON.parse(fs.readFileSync(path.join(dir, 'creds.json'), 'utf8'))?.me;
   } catch {
     return false;
   }
