@@ -2,6 +2,8 @@ import nodemailer from 'nodemailer';
 import { prisma } from '../lib/prisma';
 import { loadConfig } from './botConfig';
 import { sendRaw, transportReady } from './transport';
+import { getSetting } from './settings';
+import { DEFAULT_WORKSPACE_ID } from '../lib/workspaces';
 
 export const smtpConfigured = () => !!(process.env.SMTP_HOST && process.env.SMTP_FROM);
 
@@ -34,12 +36,15 @@ export async function deliverAlert(workspaceId: string, subject: string, body: s
   const { ws } = await loadConfig(workspaceId);
   const result: AlertResult = { whatsapp: 'skipped: no WhatsApp number set', email: 'skipped: no email set' };
 
+  // Platform switch: send alerts from the operator's own WhatsApp number instead of the client's
+  const viaPlatform = (await getSetting<boolean>('platformSender', false)) && workspaceId !== DEFAULT_WORKSPACE_ID;
+  const sender = viaPlatform ? DEFAULT_WORKSPACE_ID : workspaceId;
   if (ws.notifyPhone.trim()) {
     if (!validPhone(ws.notifyPhone)) result.whatsapp = 'skipped: the alert number is not a valid phone number';
-    else if (!transportReady(workspaceId)) result.whatsapp = 'skipped: WhatsApp is not connected';
+    else if (!transportReady(sender)) result.whatsapp = viaPlatform ? 'skipped: the platform WhatsApp number is not connected' : 'skipped: WhatsApp is not connected';
     else {
       try {
-        await sendRaw(workspaceId, digits(ws.notifyPhone), `${subject}\n\n${body}`);
+        await sendRaw(sender, digits(ws.notifyPhone), viaPlatform ? `[${ws.businessName}]\n${subject}\n\n${body}` : `${subject}\n\n${body}`);
         result.whatsapp = 'sent';
       } catch (err) {
         result.whatsapp = `failed: ${(err as Error).message}`;

@@ -28,6 +28,8 @@ import { sendTestAlert, smtpConfigured } from './services/alerts';
 import { getStages, saveStages, stageExists } from './services/pipeline';
 import QRCode from 'qrcode';
 import { analytics } from './services/analytics';
+import { platformDashboard } from './services/platformStats';
+import { getSetting, setSetting } from './services/settings';
 import { cleanTags, logLeadEvent } from './services/crm';
 import { EVENTS, assertPublicUrl, createApiKey, createWebhook, deliverDue, dispatchEvent, leadSnapshot } from './services/integrations';
 import { createBroadcast, previewAudience, setStatus as setBroadcastStatus } from './services/broadcast';
@@ -911,6 +913,42 @@ export function registerAdmin(app: FastifyInstance, opts: { getQr: (workspaceId:
     invalidateConfig(id);
     return null;
   }
+
+  app.get('/admin/api/super/dashboard', { preHandler: superOnly }, async (req) => {
+    const d = parseInt(String((req.query as any).days ?? '30'), 10);
+    return platformDashboard([7, 30, 90].includes(d) ? d : 30);
+  });
+
+  app.get('/admin/api/super/payments', { preHandler: superOnly }, async () => {
+    const rows = await prisma.payment.findMany({ orderBy: { createdAt: 'desc' }, take: 100, include: { workspace: { select: { businessName: true } } } });
+    return { payments: rows.map((p) => ({ id: p.id, business: p.workspace.businessName, provider: p.provider, plan: p.plan, amount: p.amount, currency: p.currency, status: p.status, at: p.createdAt.toISOString() })) };
+  });
+
+  app.get('/admin/api/super/subscriptions', { preHandler: superOnly }, async () => {
+    const rows = await prisma.workspace.findMany({ where: { plan: { in: ['starter', 'growth', 'scale'] } }, orderBy: { currentPeriodEnd: 'asc' }, include: { adminUsers: { where: { role: 'owner' }, take: 1 } } });
+    return {
+      subscriptions: rows.map((w) => ({
+        id: w.id, business: w.businessName, owner: w.adminUsers[0]?.email ?? null, plan: w.plan, status: w.planStatus, access: accessState(w).reason,
+        provider: w.billingProvider, renews: w.currentPeriodEnd?.toISOString() ?? null, cancelAtPeriodEnd: w.cancelAtPeriodEnd, priceInr: planById(w.plan)?.price.INR ?? 0
+      }))
+    };
+  });
+
+  app.get('/admin/api/super/plans', { preHandler: superOnly }, async () => {
+    const counts = await prisma.workspace.groupBy({ by: ['plan'], _count: { _all: true } });
+    const n = new Map(counts.map((c) => [c.plan, c._count._all]));
+    return { plans: PLANS.map((p) => ({ id: p.id, name: p.name, price: p.price, limits: p.limits, integrations: p.integrations, clients: n.get(p.id) ?? 0 })), trial: n.get('trial') ?? 0, internal: n.get('internal') ?? 0 };
+  });
+
+  app.get('/admin/api/super/settings', { preHandler: superOnly }, async () => ({ platformSender: await getSetting<boolean>('platformSender', false) }));
+  app.put('/admin/api/super/settings', { preHandler: superOnly }, async (req) => {
+    const b = (req.body ?? {}) as { platformSender?: boolean };
+    if (typeof b.platformSender === 'boolean') {
+      await setSetting('platformSender', b.platformSender);
+      await audit(req, 'setting.platformSender', null, b.platformSender ? 'alerts sent from the platform WhatsApp number' : 'alerts sent from each client number');
+    }
+    return { platformSender: await getSetting<boolean>('platformSender', false) };
+  });
 
   app.get('/admin/api/super/overview', { preHandler: superOnly }, async () => {
     const rows = await prisma.workspace.findMany();

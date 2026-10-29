@@ -10,16 +10,23 @@ import Inbox from './components/Inbox';
 import Settings from './components/Settings';
 import Dossier from './components/Dossier';
 import Onboarding from './components/Onboarding';
-import Platform from './components/Platform';
+import PlatformShell from './components/PlatformShell';
 import Broadcasts from './components/Broadcasts';
 import Analytics from './components/Analytics';
 import { BrandContext } from './brand';
 import { StagesContext } from './stages';
 
-type Tab = 'crm' | 'simulator' | 'inbox' | 'broadcasts' | 'analytics' | 'config' | 'platform';
+type Tab = 'crm' | 'simulator' | 'inbox' | 'broadcasts' | 'analytics' | 'config';
+
+type Mode = 'platform' | 'business';
 
 export default function App() {
   const [user, setUser] = useState<AdminUser | null | undefined>(undefined);
+  const [mode, setMode] = useState<Mode>(() => (localStorage.getItem('mode') === 'business' ? 'business' : 'platform'));
+  const switchMode = (m: Mode) => {
+    localStorage.setItem('mode', m);
+    setMode(m);
+  };
 
   useEffect(() => {
     api.me().then((r) => setUser(r.authed && r.user ? r.user : null)).catch(() => setUser(null));
@@ -28,7 +35,11 @@ export default function App() {
   if (user === undefined) return <div className="min-h-screen bg-slate-900" />;
   if (!user) return <Login onDone={setUser} />;
   const signOut = () => api.logout().finally(() => setUser(null));
+  const platformMode = user.isSuperAdmin && mode === 'platform';
   const reloadUser = () => api.me().then((r) => setUser(r.authed && r.user ? r.user : null)).catch(() => undefined);
+  if (platformMode) {
+    return <PlatformShell user={user} onBusiness={() => switchMode('business')} onSignOut={signOut} />;
+  }
   if (user.workspace && !user.workspace.onboardingCompleted) {
     return user.role === 'agent' ? (
       <div className="min-h-screen bg-slate-900 text-slate-200 flex flex-col items-center justify-center gap-3 p-6 text-center">
@@ -39,12 +50,12 @@ export default function App() {
       <Onboarding user={user} onDone={reloadUser} onSignOut={signOut} />
     );
   }
-  return <Console user={user} onSignedOut={() => setUser(null)} />;
+  return <Console user={user} onSignedOut={() => setUser(null)} onPlatform={user.isSuperAdmin ? () => switchMode('platform') : undefined} />;
 }
 
 const daysLeft = (iso: string | null) => (iso ? Math.max(0, Math.ceil((new Date(iso).getTime() - Date.now()) / 86_400_000)) : 0);
 
-function Console({ user, onSignedOut }: { user: AdminUser; onSignedOut: () => void }) {
+function Console({ user, onSignedOut, onPlatform }: { user: AdminUser; onSignedOut: () => void; onPlatform?: () => void }) {
   const [tab, setTab] = useState<Tab>('crm');
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [overview, setOverview] = useState<Overview | null>(null);
@@ -161,6 +172,7 @@ function Console({ user, onSignedOut }: { user: AdminUser; onSignedOut: () => vo
                   <ExternalLink className="w-3.5 h-3.5" />
                 </a>
               )}
+              {onPlatform && <button onClick={onPlatform} className="hidden md:flex items-center space-x-1.5 text-xs font-semibold text-emerald-300 bg-emerald-950/40 border border-emerald-800/60 px-3 py-1.5 rounded-lg hover:bg-emerald-900/40"><Building2 className="w-3.5 h-3.5" /><span>Platform admin</span></button>}
               <AccountMenu user={user} onSignOut={() => api.logout().finally(onSignedOut)} />
             </div>
           </div>
@@ -176,7 +188,6 @@ function Console({ user, onSignedOut }: { user: AdminUser; onSignedOut: () => vo
             {!isAgent && tabBtn('analytics', <BarChart3 className="w-4 h-4" />, 'Analytics')}
             {!isAgent && tabBtn('broadcasts', <Megaphone className="w-4 h-4" />, 'Broadcasts')}
             {!isAgent && tabBtn('config', <ShieldCheck className="w-4 h-4" />, 'Bot & Settings')}
-            {user.isSuperAdmin && tabBtn('platform', <Building2 className="w-4 h-4" />, 'All businesses')}
           </div>
         </div>
       </header>
@@ -223,7 +234,6 @@ function Console({ user, onSignedOut }: { user: AdminUser; onSignedOut: () => vo
         {tab === 'analytics' && !isAgent && <Analytics />}
         {tab === 'broadcasts' && !isAgent && overview && <Broadcasts overview={overview} waReady={waReady} />}
         {tab === 'config' && !isAgent && overview && <Settings overview={overview} me={user} onChanged={refresh} />}
-        {tab === 'platform' && user.isSuperAdmin && <Platform />}
       </main>
 
       {selectedContact && (

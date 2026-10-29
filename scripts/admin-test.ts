@@ -329,6 +329,13 @@ async function cleanup() {
   ok((await call(hRoot, 'POST', `/admin/api/super/workspaces/${wsA}/bot`, { enabled: false })).statusCode === 200 && (await prisma.workspace.findUnique({ where: { id: wsA } }))!.botEnabled === false, 'platform admin can suspend a bot');
 
   // ---- platform admin tools ----
+  r = await call(hRoot, 'GET', '/admin/api/super/dashboard?days=7');
+  ok(r.statusCode === 200 && r.json().revenueDaily.length === 7 && r.json().monthlyRevenue.length === 12 && r.json().kpi.totalClients >= 2 && typeof r.json().kpi.mrr === 'number', 'platform dashboard: KPIs and chart series');
+  ok((await call(hRoot, 'GET', '/admin/api/super/dashboard?days=5')).json().period === 30, 'dashboard: unknown period falls back to 30');
+  ok((await call(hRoot, 'GET', '/admin/api/super/payments')).json().payments.length >= 2 && (await call(hRoot, 'GET', '/admin/api/super/subscriptions')).statusCode === 200 && (await call(hRoot, 'GET', '/admin/api/super/plans')).json().plans.length === 3, 'payments, subscriptions and plans lists');
+  ok((await call(hA, 'GET', '/admin/api/super/dashboard')).statusCode === 403 && (await call(hA, 'PUT', '/admin/api/super/settings', { platformSender: true })).statusCode === 403, 'tenants cannot open platform dashboards or settings');
+  ok((await call(hRoot, 'GET', '/admin/api/super/settings')).json().platformSender === false, 'platform sender is off by default');
+  ok((await call(hRoot, 'PUT', '/admin/api/super/settings', { platformSender: true })).json().platformSender === true && (await call(hRoot, 'PUT', '/admin/api/super/settings', { platformSender: false })).json().platformSender === false, 'platform sender can be switched on and off');
   r = await call(hRoot, 'GET', '/admin/api/super/overview');
   ok(r.statusCode === 200 && r.json().businesses >= 2 && typeof r.json().mrrInr === 'number', 'platform overview: counts and revenue');
   ok((await call(hA, 'GET', '/admin/api/super/overview')).statusCode === 403 && (await call(hA, 'POST', '/admin/api/super/workspaces', {})).statusCode === 403, 'tenants cannot use platform tools');

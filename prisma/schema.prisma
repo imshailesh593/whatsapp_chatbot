@@ -357,3 +357,11 @@ model AuditLog {
   @@index([createdAt])
   @@map("saas_audit_log")
 }
+
+/// Platform-wide switches (key -> JSON value)
+model Setting {
+  key   String @id
+  value Json
+
+  @@map("saas_settings")
+}

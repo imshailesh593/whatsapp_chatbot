@@ -8,6 +8,7 @@ import { setTransport, captureReplies } from '../src/services/transport';
 import { handleIncomingMessage } from '../src/services/engine';
 import { loadConfig, resolveService, saveServices, invalidateConfig, sanitizeServices } from '../src/services/botConfig';
 import { getTemplate } from '../src/templates';
+import { setSetting } from '../src/services/settings';
 import { deliverAlert, sendTestAlert } from '../src/services/alerts';
 
 const extra: string[] = [];
@@ -148,6 +149,22 @@ async function main() {
     await handleIncomingMessage(A.id, ap, 'Priya', 'I have already booked');
     await new Promise((r) => setTimeout(r, 300));
     assert(replies(A.id, '919000000001').length === n1, 'booking alert is not repeated');
+    // platform switch: alerts leave from the operator's own number instead of the client's
+    await setSetting('platformSender', true);
+    await prisma.workspace.update({ where: { id: A.id }, data: { notifyPhone: '919000000002' } });
+    invalidateConfig(A.id);
+    const platformWs = await prisma.workspace.findUnique({ where: { id: 'default-workspace' } });
+    if (platformWs) {
+      wire('default-workspace');
+      const viaA = replies(A.id, '919000000002').length;
+      const viaP = await deliverAlert(A.id, 'Hello', 'World');
+      assert(viaP.whatsapp === 'sent' && replies('default-workspace', '919000000002').some((t) => t.startsWith('[Acme Careers]')) && replies(A.id, '919000000002').length === viaA, 'platform switch on: the alert is sent from the platform number, labelled with the business name');
+      setTransport('default-workspace', null);
+      assert((await deliverAlert(A.id, 'x', 'y')).whatsapp.startsWith('skipped: the platform WhatsApp number'), 'platform number offline: alert skipped with a clear reason');
+    }
+    await setSetting('platformSender', false);
+    await prisma.workspace.update({ where: { id: A.id }, data: { notifyPhone: '+91 90000 00001' } });
+    invalidateConfig(A.id);
     const none = await deliverAlert(B.id, 'x', 'y');
     assert(none.whatsapp.startsWith('skipped') && none.email.startsWith('skipped'), 'no channels configured: nothing sent, no error');
     await prisma.workspace.update({ where: { id: A.id }, data: { notifyPhone: 'abc' } });
