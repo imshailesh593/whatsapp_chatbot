@@ -25,6 +25,7 @@ const sent: string[] = [];
 const DOMAIN = '@admin-test.local';
 
 async function cleanup() {
+  await prisma.auditLog.deleteMany({ where: { actor: { endsWith: DOMAIN } } });
   await prisma.billingEvent.deleteMany({ where: { OR: [{ id: { startsWith: 'stripe:evt_' } }, { id: { startsWith: 'razorpay:rz_' } }] } });
   await prisma.workspace.deleteMany({ where: { adminUsers: { some: { email: { endsWith: DOMAIN } } } } });
   await prisma.adminUser.deleteMany({ where: { email: { endsWith: DOMAIN } } });
@@ -326,6 +327,33 @@ async function cleanup() {
   r = await call(hRoot, 'GET', '/admin/api/super/workspaces');
   ok(r.statusCode === 200 && r.json().workspaces.some((w: any) => w.id === wsA) && r.json().workspaces.some((w: any) => w.id === wsB), 'platform admin lists all workspaces');
   ok((await call(hRoot, 'POST', `/admin/api/super/workspaces/${wsA}/bot`, { enabled: false })).statusCode === 200 && (await prisma.workspace.findUnique({ where: { id: wsA } }))!.botEnabled === false, 'platform admin can suspend a bot');
+
+  // ---- platform admin tools ----
+  r = await call(hRoot, 'GET', '/admin/api/super/overview');
+  ok(r.statusCode === 200 && r.json().businesses >= 2 && typeof r.json().mrrInr === 'number', 'platform overview: counts and revenue');
+  ok((await call(hA, 'GET', '/admin/api/super/overview')).statusCode === 403 && (await call(hA, 'POST', '/admin/api/super/workspaces', {})).statusCode === 403, 'tenants cannot use platform tools');
+  ok((await call(hRoot, 'POST', '/admin/api/super/workspaces', { businessName: 'X', email: 'bad', password: 'long enough pw' })).statusCode === 400 && (await call(hRoot, 'POST', '/admin/api/super/workspaces', { businessName: 'X', email: `root${DOMAIN}`, password: 'long enough pw' })).statusCode === 409, 'creating a business validates the owner email');
+  r = await call(hRoot, 'POST', '/admin/api/super/workspaces', { businessName: 'Created By Root', email: `made${DOMAIN}`, password: 'temporary password 1', plan: 'starter', days: 45 });
+  const madeId = r.json().id;
+  ok(r.statusCode === 200 && !!madeId, 'platform admin creates a business with an owner');
+  const madeLogin = await login(`made${DOMAIN}`, 'temporary password 1');
+  ok(madeLogin.statusCode === 200 && madeLogin.json().user.role === 'owner' && madeLogin.json().user.workspace.botEnabled === false, 'the new owner can sign in; the bot starts paused');
+  r = await call(hRoot, 'GET', '/admin/api/super/workspaces/' + madeId);
+  ok(r.json().plan === 'starter' && r.json().planStatus === 'active' && r.json().users.length === 1 && r.json().limits.conversations === 300, 'detail shows plan, limits and people');
+  const madeUserId = r.json().users[0].id;
+  ok((await call(hRoot, 'POST', '/admin/api/super/users/' + madeUserId + '/password', { password: 'short' })).statusCode === 400, 'password reset needs 10+ characters');
+  ok((await call(hRoot, 'POST', '/admin/api/super/users/' + madeUserId + '/password', { password: 'brand new owner pw' })).statusCode === 200 && (await login(`made${DOMAIN}`, 'brand new owner pw')).statusCode === 200 && (await login(`made${DOMAIN}`, 'temporary password 1')).statusCode === 401, 'owner password reset by the platform admin');
+  r = await call(hRoot, 'POST', '/admin/api/super/workspaces/' + madeId + '/impersonate');
+  const imp = cookieOf(r);
+  ok(r.statusCode === 200 && (await call(imp, 'GET', '/admin/api/me')).json().user.email === `made${DOMAIN}`, 'sign in as owner switches the session to that business');
+  ok((await call(hRoot, 'POST', '/admin/api/super/workspaces/' + madeId + '/delete', { confirm: 'wrong name' })).statusCode === 400, 'delete needs the exact business name');
+  ok((await call(hRoot, 'POST', '/admin/api/super/workspaces/' + wsB + '/delete', { confirm: 'Bravo Test' })).statusCode === 400, 'cannot delete your own business');
+  ok((await call(hRoot, 'POST', '/admin/api/super/workspaces/default-workspace/delete', { confirm: 'x' })).statusCode === 400, 'the default workspace cannot be deleted');
+  ok((await call(hRoot, 'POST', '/admin/api/super/workspaces/' + madeId + '/delete', { confirm: 'Created By Root' })).statusCode === 200, 'platform admin deletes a business');
+  ok((await login(`made${DOMAIN}`, 'brand new owner pw')).statusCode === 401 && (await prisma.workspace.count({ where: { id: madeId } })) === 0, 'its users and data are gone');
+  r = await call(hRoot, 'GET', '/admin/api/super/audit');
+  const acts = r.json().entries.map((e: any) => e.action);
+  ok(['workspace.create', 'user.password_reset', 'impersonate', 'workspace.delete'].every((a) => acts.includes(a)), 'every operator action is in the audit log');
 
   for (let i = 0; i < 10; i++) await login(`victim${DOMAIN}`, 'x');
   ok((await login(`victim${DOMAIN}`, 'x')).statusCode === 429, 'repeated failures are throttled');

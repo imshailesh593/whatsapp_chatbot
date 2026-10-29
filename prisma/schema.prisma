@@ -344,3 +344,16 @@ model LeadEvent {
   @@index([leadId, createdAt])
   @@map("saas_lead_events")
 }
+
+/// Platform-operator actions (creating / deleting businesses, plan changes, impersonation)
+model AuditLog {
+  id          String   @id @default(uuid())
+  actor       String
+  action      String
+  workspaceId String?  @map("workspace_id")
+  detail      String   @default("")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@index([createdAt])
+  @@map("saas_audit_log")
+}

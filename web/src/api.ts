@@ -1,4 +1,4 @@
-import type { LeadEventInfo, AnalyticsData, ApiKeyInfo, IntegrationsInfo, WebhookInfo, BroadcastInfo, StageDef, BillingInfo, AdminRow, AdminUser, ChatMessage, ChatTurn, Contact, Draft, Overview, PatchBody, PlatformWorkspace, ServiceDef, TemplateInfo, WaSnapshot, Workspace } from './types';
+import type { AuditEntry, PlatformDetail, PlatformOverview, LeadEventInfo, AnalyticsData, ApiKeyInfo, IntegrationsInfo, WebhookInfo, BroadcastInfo, StageDef, BillingInfo, AdminRow, AdminUser, ChatMessage, ChatTurn, Contact, Draft, Overview, PatchBody, PlatformWorkspace, ServiceDef, TemplateInfo, WaSnapshot, Workspace } from './types';
 
 export class UnauthorizedError extends Error {}
 
@@ -52,6 +52,14 @@ export const api = {
   checkout: (plan: string, provider: 'stripe' | 'razorpay') => post<{ url: string }>('/admin/api/billing/checkout', { plan, provider }),
   billingPortal: () => post<{ url: string }>('/admin/api/billing/portal', {}),
   cancelSubscription: () => post<{ ok: true }>('/admin/api/billing/cancel', {}),
+  platformOverview: () => request<PlatformOverview>('/admin/api/super/overview'),
+  platformDetail: (id: string) => request<PlatformDetail>(`/admin/api/super/workspaces/${encodeURIComponent(id)}`),
+  platformCreate: (body: { businessName: string; email: string; password: string; plan: string; days: number }) => post<{ id: string }>('/admin/api/super/workspaces', body),
+  platformDelete: (id: string, confirm: string) => post<{ ok: true }>(`/admin/api/super/workspaces/${encodeURIComponent(id)}/delete`, { confirm }),
+  platformImpersonate: (id: string) => post<{ ok: true }>(`/admin/api/super/workspaces/${encodeURIComponent(id)}/impersonate`, {}),
+  platformResetPassword: (userId: string, password: string) => post<{ ok: true }>(`/admin/api/super/users/${encodeURIComponent(userId)}/password`, { password }),
+  platformRemoveUser: (userId: string) => request<{ ok: true }>(`/admin/api/super/users/${encodeURIComponent(userId)}`, { method: 'DELETE' }),
+  platformAudit: () => request<{ entries: AuditEntry[] }>('/admin/api/super/audit').then((r) => r.entries),
   platformPlan: (id: string, plan: string, days: number) => post<{ ok: true }>(`/admin/api/super/workspaces/${encodeURIComponent(id)}/plan`, { plan, days }),
   saveWorkspace: (body: Partial<Workspace>) => request<{ workspace: Workspace }>('/admin/api/workspace', { method: 'PUT', body: JSON.stringify(body) }).then((r) => r.workspace),
   saveServices: (services: ServiceDef[]) => request<{ services: unknown }>('/admin/api/services', { method: 'PUT', body: JSON.stringify({ services }) }),

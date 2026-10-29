@@ -159,7 +159,45 @@ export interface PlatformWorkspace {
   leads: number;
   contacts: number;
   users: number;
+  conversationsThisMonth: number;
+  lastActivity: string | null;
+  trialEndsAt: string | null;
+  currentPeriodEnd: string | null;
   createdAt: string;
+}
+
+export interface PlatformOverview {
+  businesses: number;
+  paying: number;
+  trialing: number;
+  lapsed: number;
+  whatsappConnected: number;
+  leads: number;
+  mrrInr: number;
+}
+
+export interface PlatformDetail {
+  id: string;
+  businessName: string;
+  plan: string;
+  planStatus: string;
+  billingProvider: string | null;
+  trialEndsAt: string | null;
+  currentPeriodEnd: string | null;
+  limits: { conversations: number | null; aiReplies: number | null; broadcasts: number | null };
+  usage: { conversations: number; aiReplies: number; broadcasts: number };
+  users: { id: string; email: string; role: string; isSuperAdmin: boolean; lastLoginAt: string | null }[];
+  payments: { id: string; amount: number; currency: string; status: string; plan: string; at: string }[];
+  audit: { id: string; actor: string; action: string; detail: string; at: string }[];
+}
+
+export interface AuditEntry {
+  id: string;
+  actor: string;
+  action: string;
+  workspaceId: string | null;
+  detail: string;
+  at: string;
 }
 
 export interface BillingPlan {

@@ -32,7 +32,7 @@ import { cleanTags, logLeadEvent } from './services/crm';
 import { EVENTS, assertPublicUrl, createApiKey, createWebhook, deliverDue, dispatchEvent, leadSnapshot } from './services/integrations';
 import { createBroadcast, previewAudience, setStatus as setBroadcastStatus } from './services/broadcast';
 import { transportReady } from './services/transport';
-import { PLANS, accessState, planById } from './plans';
+import { PLANS, accessState, currentPeriod, planById } from './plans';
 import { getUsage } from './services/usage';
 import { cancelSubscription, handleRazorpayWebhook, handleStripeWebhook, openPortal, providersAvailable, startCheckout } from './services/billing';
 
@@ -897,12 +897,48 @@ export function registerAdmin(app: FastifyInstance, opts: { getQr: (workspaceId:
     return reply.type('text/csv; charset=utf-8').send('﻿' + lines.join('\r\n'));
   });
 
-  // ---- platform admin (you): every tenant at a glance ----
+  // ---- platform admin (you): every business, plans, support tools ----
+  const audit = (req: FastifyRequest, action: string, workspaceId: string | null, detail = '') =>
+    prisma.auditLog.create({ data: { actor: me(req).email, action, workspaceId, detail: detail.slice(0, 300) } }).catch(() => undefined);
+
+  /** Puts a business on a plan without a payment (pilots, extensions, comps). Returns an error message or null. */
+  async function grantPlan(id: string, plan: string, daysRaw: unknown): Promise<string | null> {
+    const days = Math.min(Math.max(Math.floor(Number(daysRaw) || 30), 1), 3650);
+    const end = new Date(Date.now() + days * 86_400_000);
+    if (plan === 'trial') await prisma.workspace.update({ where: { id }, data: { plan: 'trial', planStatus: 'trialing', trialEndsAt: end } });
+    else if (plan === 'internal' || planById(plan)) await prisma.workspace.update({ where: { id }, data: { plan, planStatus: 'active', currentPeriodEnd: end, cancelAtPeriodEnd: false } });
+    else return 'Unknown plan';
+    invalidateConfig(id);
+    return null;
+  }
+
+  app.get('/admin/api/super/overview', { preHandler: superOnly }, async () => {
+    const rows = await prisma.workspace.findMany();
+    const paid = rows.filter((w) => planById(w.plan) && w.planStatus === 'active' && accessState(w).active);
+    const mrr = paid.reduce((sum, w) => sum + (planById(w.plan)?.price.INR ?? 0), 0);
+    return {
+      businesses: rows.length,
+      paying: paid.length,
+      trialing: rows.filter((w) => w.planStatus === 'trialing' && accessState(w).active).length,
+      lapsed: rows.filter((w) => w.plan !== 'internal' && !accessState(w).active).length,
+      whatsappConnected: rows.filter((w) => waFor(w.id).status === 'ready').length,
+      leads: await prisma.lead.count(),
+      mrrInr: mrr
+    };
+  });
+
   app.get('/admin/api/super/workspaces', { preHandler: superOnly }, async () => {
-    const rows = await prisma.workspace.findMany({
-      orderBy: { createdAt: 'desc' },
-      include: { _count: { select: { leads: true, sessions: true, adminUsers: true } }, adminUsers: { where: { role: 'owner' }, take: 1 } }
-    });
+    const period = currentPeriod();
+    const [rows, usage, activity] = await Promise.all([
+      prisma.workspace.findMany({
+        orderBy: { createdAt: 'desc' },
+        include: { _count: { select: { leads: true, sessions: true, adminUsers: true } }, adminUsers: { where: { role: 'owner' }, orderBy: { createdAt: 'asc' }, take: 1 } }
+      }),
+      prisma.usage.findMany({ where: { period } }),
+      prisma.session.groupBy({ by: ['workspaceId'], _max: { lastInteractionAt: true } })
+    ]);
+    const used = new Map(usage.map((u) => [u.workspaceId, u.conversations]));
+    const last = new Map(activity.map((x) => [x.workspaceId, x._max.lastInteractionAt]));
     return {
       workspaces: rows.map((w) => ({
         id: w.id,
@@ -915,12 +951,60 @@ export function registerAdmin(app: FastifyInstance, opts: { getQr: (workspaceId:
         plan: w.plan,
         planStatus: w.planStatus,
         planAccess: accessState(w).reason,
+        trialEndsAt: w.trialEndsAt?.toISOString() ?? null,
+        currentPeriodEnd: w.currentPeriodEnd?.toISOString() ?? null,
         onboardingCompleted: w.onboardingCompleted,
         leads: w._count.leads,
         contacts: w._count.sessions,
         users: w._count.adminUsers,
+        conversationsThisMonth: used.get(w.id) ?? 0,
+        lastActivity: last.get(w.id)?.toISOString() ?? null,
         createdAt: w.createdAt.toISOString()
       }))
+    };
+  });
+
+  app.post('/admin/api/super/workspaces', { preHandler: superOnly }, async (req, reply) => {
+    const b = (req.body ?? {}) as { businessName?: string; email?: string; password?: string; plan?: string; days?: number };
+    const businessName = String(b.businessName ?? '').replace(/\s+/g, ' ').trim().slice(0, 80);
+    const email = normalizeEmail(b.email);
+    const password = String(b.password ?? '');
+    if (!businessName) return reply.status(400).send({ error: 'Enter the business name' });
+    if (!isValidEmail(email)) return reply.status(400).send({ error: 'Enter a valid owner email' });
+    if (password.length < MIN_PASSWORD_LENGTH) return reply.status(400).send({ error: `Password must be at least ${MIN_PASSWORD_LENGTH} characters` });
+    if (await prisma.adminUser.findUnique({ where: { email } })) return reply.status(409).send({ error: 'That email already has an account' });
+    const ws = await createWorkspaceWithOwner({ businessName, email, password });
+    if (b.plan && b.plan !== 'trial') {
+      const err = await grantPlan(ws.id, String(b.plan), b.days);
+      if (err) return reply.status(400).send({ error: err });
+    }
+    await audit(req, 'workspace.create', ws.id, `${businessName} (${email}) on ${b.plan || 'trial'}`);
+    return { id: ws.id };
+  });
+
+  app.get('/admin/api/super/workspaces/:id', { preHandler: superOnly }, async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const w = await prisma.workspace.findUnique({ where: { id }, include: { adminUsers: { orderBy: { createdAt: 'asc' } } } });
+    if (!w) return reply.status(404).send({ error: 'Workspace not found' });
+    const [usage, payments, log] = await Promise.all([
+      getUsage(id),
+      prisma.payment.findMany({ where: { workspaceId: id }, orderBy: { createdAt: 'desc' }, take: 10 }),
+      prisma.auditLog.findMany({ where: { workspaceId: id }, orderBy: { createdAt: 'desc' }, take: 15 })
+    ]);
+    const lim = accessState(w).limits;
+    return {
+      id: w.id,
+      businessName: w.businessName,
+      plan: w.plan,
+      planStatus: w.planStatus,
+      billingProvider: w.billingProvider,
+      trialEndsAt: w.trialEndsAt?.toISOString() ?? null,
+      currentPeriodEnd: w.currentPeriodEnd?.toISOString() ?? null,
+      limits: { conversations: lim.conversations === Infinity ? null : lim.conversations, aiReplies: lim.aiReplies === Infinity ? null : lim.aiReplies, broadcasts: lim.broadcasts === Infinity ? null : lim.broadcasts },
+      usage,
+      users: w.adminUsers.map((u) => ({ id: u.id, email: u.email, role: u.role, isSuperAdmin: u.isSuperAdmin, lastLoginAt: u.lastLoginAt?.toISOString() ?? null })),
+      payments: payments.map((p) => ({ id: p.id, amount: p.amount, currency: p.currency, status: p.status, plan: p.plan, at: p.createdAt.toISOString() })),
+      audit: log.map((l) => ({ id: l.id, actor: l.actor, action: l.action, detail: l.detail, at: l.createdAt.toISOString() }))
     };
   });
 
@@ -928,29 +1012,71 @@ export function registerAdmin(app: FastifyInstance, opts: { getQr: (workspaceId:
     const { id } = req.params as { id: string };
     const w = await prisma.workspace.findUnique({ where: { id } });
     if (!w) return reply.status(404).send({ error: 'Workspace not found' });
-    await prisma.workspace.update({ where: { id }, data: { botEnabled: !!(req.body as any)?.enabled } });
+    const enabled = !!(req.body as any)?.enabled;
+    await prisma.workspace.update({ where: { id }, data: { botEnabled: enabled } });
     invalidateConfig(id);
+    await audit(req, enabled ? 'bot.enable' : 'bot.suspend', id, w.businessName);
     return { ok: true };
   });
 
-  // Operator tool: put a business on a plan without a payment (pilot customers, extensions, comps)
   app.post('/admin/api/super/workspaces/:id/plan', { preHandler: superOnly }, async (req, reply) => {
     const { id } = req.params as { id: string };
     const b = (req.body ?? {}) as { plan?: string; days?: number };
-    const w = await prisma.workspace.findUnique({ where: { id } });
-    if (!w) return reply.status(404).send({ error: 'Workspace not found' });
-    const days = Math.min(Math.max(Math.floor(Number(b.days) || 30), 1), 3650);
-    const end = new Date(Date.now() + days * 86_400_000);
-    if (b.plan === 'trial') {
-      await prisma.workspace.update({ where: { id }, data: { plan: 'trial', planStatus: 'trialing', trialEndsAt: end } });
-    } else if (b.plan === 'internal' || planById(String(b.plan))) {
-      await prisma.workspace.update({ where: { id }, data: { plan: String(b.plan), planStatus: 'active', currentPeriodEnd: end, cancelAtPeriodEnd: false } });
-    } else {
-      return reply.status(400).send({ error: 'Unknown plan' });
-    }
-    invalidateConfig(id);
+    if (!(await prisma.workspace.findUnique({ where: { id } }))) return reply.status(404).send({ error: 'Workspace not found' });
+    const err = await grantPlan(id, String(b.plan), b.days);
+    if (err) return reply.status(400).send({ error: err });
+    await audit(req, 'plan.set', id, `${b.plan} for ${Math.floor(Number(b.days) || 30)} days`);
     return { ok: true };
   });
+
+  // Permanently removes a business and everything it owns (chats, leads, team, WhatsApp link)
+  app.post('/admin/api/super/workspaces/:id/delete', { preHandler: superOnly }, async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const w = await prisma.workspace.findUnique({ where: { id } });
+    if (!w) return reply.status(404).send({ error: 'Workspace not found' });
+    if (id === 'default-workspace' || id === wsId(req)) return reply.status(400).send({ error: 'You cannot delete your own business' });
+    if (String((req.body as any)?.confirm ?? '').trim() !== w.businessName) return reply.status(400).send({ error: 'Type the exact business name to confirm' });
+    await waFor(id).disconnect().catch(() => undefined);
+    await prisma.workspace.delete({ where: { id } });
+    invalidateConfig(id);
+    await audit(req, 'workspace.delete', null, w.businessName);
+    return { ok: true };
+  });
+
+  app.post('/admin/api/super/users/:id/password', { preHandler: superOnly }, async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const password = String((req.body as any)?.password ?? '');
+    if (password.length < MIN_PASSWORD_LENGTH) return reply.status(400).send({ error: `Password must be at least ${MIN_PASSWORD_LENGTH} characters` });
+    const u = await prisma.adminUser.findUnique({ where: { id } });
+    if (!u) return reply.status(404).send({ error: 'User not found' });
+    await prisma.adminUser.update({ where: { id }, data: { passwordHash: await hashPassword(password) } });
+    await audit(req, 'user.password_reset', u.workspaceId, u.email);
+    return { ok: true };
+  });
+
+  app.delete('/admin/api/super/users/:id', { preHandler: superOnly }, async (req, reply) => {
+    const { id } = req.params as { id: string };
+    if (id === me(req).id) return reply.status(400).send({ error: 'You cannot remove your own account' });
+    const u = await prisma.adminUser.findUnique({ where: { id } });
+    if (!u) return reply.status(404).send({ error: 'User not found' });
+    await prisma.adminUser.delete({ where: { id } });
+    await audit(req, 'user.remove', u.workspaceId, u.email);
+    return { ok: true };
+  });
+
+  // Support tool: continue as the business owner. Replaces your own session; sign out and back in to return.
+  app.post('/admin/api/super/workspaces/:id/impersonate', { preHandler: superOnly }, async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const owner = await prisma.adminUser.findFirst({ where: { workspaceId: id }, orderBy: [{ role: 'asc' }, { createdAt: 'asc' }] });
+    if (!owner) return reply.status(404).send({ error: 'This business has no users' });
+    await audit(req, 'impersonate', id, `as ${owner.email}`);
+    setSession(req, reply, owner.id);
+    return { ok: true };
+  });
+
+  app.get('/admin/api/super/audit', { preHandler: superOnly }, async () => ({
+    entries: (await prisma.auditLog.findMany({ orderBy: { createdAt: 'desc' }, take: 50 })).map((l) => ({ id: l.id, actor: l.actor, action: l.action, workspaceId: l.workspaceId, detail: l.detail, at: l.createdAt.toISOString() }))
+  }));
 
   // ---- SPA (built from /web) ----
   app.get('/admin', async (_req, reply) => reply.redirect('/admin/'));
