@@ -171,6 +171,32 @@ export interface BillingInfo {
   payments: { id: string; amount: number; currency: string; status: string; plan: string; at: string }[];
 }
 
+export interface WebhookInfo {
+  id: string;
+  url: string;
+  events: string[];
+  active: boolean;
+  secret: string;
+  createdAt: string;
+  last: { status: string; error: string; at: string } | null;
+}
+
+export interface ApiKeyInfo {
+  id: string;
+  name: string;
+  prefix: string;
+  lastUsedAt: string | null;
+  createdAt: string;
+}
+
+export interface IntegrationsInfo {
+  enabled: boolean;
+  events: string[];
+  phone: string | null;
+  webhooks: WebhookInfo[];
+  apiKeys: ApiKeyInfo[];
+}
+
 export interface BroadcastInfo {
   id: string;
   name: string;

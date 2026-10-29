@@ -61,6 +61,8 @@ model Workspace {
   usage      Usage[]
   stages     Stage[]
   broadcasts Broadcast[]
+  webhooks   Webhook[]
+  apiKeys    ApiKey[]
   payments   Payment[]
 
   @@map("saas_workspaces")
@@ -108,6 +110,8 @@ model Session {
   isAgentPaused     Boolean      @default(false) @map("is_agent_paused")
   /// Customer replied STOP: never include in broadcasts
   optedOut          Boolean      @default(false) @map("opted_out")
+  /// Campaign tag from a click-to-chat link ("(ref: summer24)" in the first message)
+  source            String?
   lastInteractionAt DateTime     @default(now()) @map("last_interaction_at")
   createdAt         DateTime     @default(now()) @map("created_at")
   updatedAt         DateTime     @updatedAt @map("updated_at")
@@ -264,4 +268,55 @@ model BroadcastRecipient {
 
   @@index([broadcastId, status])
   @@map("saas_broadcast_recipients")
+}
+
+/// Outgoing webhook: Zapier, Make, n8n, a Google Apps Script, the customer's own server
+model Webhook {
+  id          String    @id @default(uuid())
+  workspaceId String    @map("workspace_id")
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  url         String
+  secret      String
+  events      String[]
+  active      Boolean   @default(true)
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  deliveries WebhookDelivery[]
+
+  @@index([workspaceId])
+  @@map("saas_webhooks")
+}
+
+model WebhookDelivery {
+  id            String    @id @default(uuid())
+  webhookId     String    @map("webhook_id")
+  webhook       Webhook   @relation(fields: [webhookId], references: [id], onDelete: Cascade)
+  event         String
+  payload       Json
+  /// pending | ok | failed
+  status        String    @default("pending")
+  attempts      Int       @default(0)
+  responseCode  Int?      @map("response_code")
+  error         String    @default("")
+  nextAttemptAt DateTime  @default(now()) @map("next_attempt_at")
+  createdAt     DateTime  @default(now()) @map("created_at")
+
+  @@index([status, nextAttemptAt])
+  @@index([webhookId, createdAt])
+  @@map("saas_webhook_deliveries")
+}
+
+/// API key for the public REST API. Only a hash is stored; the key is shown once on creation.
+model ApiKey {
+  id          String    @id @default(uuid())
+  workspaceId String    @map("workspace_id")
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  name        String
+  prefix      String
+  hash        String    @unique
+  lastUsedAt  DateTime? @map("last_used_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  @@index([workspaceId])
+  @@map("saas_api_keys")
 }

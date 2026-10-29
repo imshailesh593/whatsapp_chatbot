@@ -26,6 +26,8 @@ import { waFor } from './services/whatsapp';
 import { PRODUCT_NAME } from './brand';
 import { sendTestAlert, smtpConfigured } from './services/alerts';
 import { getStages, saveStages, stageExists } from './services/pipeline';
+import QRCode from 'qrcode';
+import { EVENTS, assertPublicUrl, createApiKey, createWebhook, deliverDue, dispatchEvent, leadSnapshot } from './services/integrations';
 import { createBroadcast, previewAudience, setStatus as setBroadcastStatus } from './services/broadcast';
 import { transportReady } from './services/transport';
 import { PLANS, accessState, planById } from './plans';
@@ -577,6 +579,106 @@ export function registerAdmin(app: FastifyInstance, opts: { getQr: (workspaceId:
     }
   });
 
+  // ---- integrations: webhooks, API keys, click-to-chat ----
+  const needIntegrations = async (req: FastifyRequest, reply: FastifyReply) => {
+    const w = await prisma.workspace.findUniqueOrThrow({ where: { id: wsId(req) } });
+    if (!accessState(w).integrations) {
+      reply.status(402).send({ error: 'Webhooks and the API are available on Growth and Scale plans. Upgrade in Settings.' });
+      return true;
+    }
+    return false;
+  };
+  const hookView = (h: any) => ({ id: h.id, url: h.url, events: h.events, active: h.active, secret: h.secret, createdAt: h.createdAt.toISOString() });
+
+  app.get('/admin/api/integrations', { preHandler: manager }, async (req) => {
+    const w = await prisma.workspace.findUniqueOrThrow({ where: { id: wsId(req) } });
+    const [hooks, keys] = await Promise.all([
+      prisma.webhook.findMany({ where: { workspaceId: w.id }, orderBy: { createdAt: 'asc' }, include: { deliveries: { orderBy: { createdAt: 'desc' }, take: 1 } } }),
+      prisma.apiKey.findMany({ where: { workspaceId: w.id }, orderBy: { createdAt: 'asc' } })
+    ]);
+    return {
+      enabled: accessState(w).integrations,
+      events: EVENTS,
+      phone: waFor(w.id).phone,
+      webhooks: hooks.map((h) => ({ ...hookView(h), last: h.deliveries[0] ? { status: h.deliveries[0].status, error: h.deliveries[0].error, at: h.deliveries[0].createdAt.toISOString() } : null })),
+      apiKeys: keys.map((k) => ({ id: k.id, name: k.name, prefix: k.prefix, lastUsedAt: k.lastUsedAt?.toISOString() ?? null, createdAt: k.createdAt.toISOString() }))
+    };
+  });
+
+  app.post('/admin/api/webhooks', { preHandler: manager }, async (req, reply) => {
+    if (await needIntegrations(req, reply)) return;
+    try {
+      return { webhook: hookView(await createWebhook(wsId(req), (req.body ?? {}) as any)) };
+    } catch (err) {
+      return reply.status(400).send({ error: (err as Error).message });
+    }
+  });
+
+  app.patch('/admin/api/webhooks/:id', { preHandler: manager }, async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const b = (req.body ?? {}) as { active?: boolean; events?: string[] };
+    const h = await prisma.webhook.findFirst({ where: { id, workspaceId: wsId(req) } });
+    if (!h) return reply.status(404).send({ error: 'Webhook not found' });
+    const events = Array.isArray(b.events) ? b.events.filter((e) => (EVENTS as readonly string[]).includes(e)) : undefined;
+    if (events && events.length === 0) return reply.status(400).send({ error: 'Choose at least one event' });
+    return { webhook: hookView(await prisma.webhook.update({ where: { id }, data: { ...(typeof b.active === 'boolean' ? { active: b.active } : {}), ...(events ? { events } : {}) } })) };
+  });
+
+  app.delete('/admin/api/webhooks/:id', { preHandler: manager }, async (req, reply) => {
+    const r = await prisma.webhook.deleteMany({ where: { id: (req.params as { id: string }).id, workspaceId: wsId(req) } });
+    return r.count ? { ok: true } : reply.status(404).send({ error: 'Webhook not found' });
+  });
+
+  app.get('/admin/api/webhooks/:id/deliveries', { preHandler: manager }, async (req, reply) => {
+    const { id } = req.params as { id: string };
+    if (!(await prisma.webhook.findFirst({ where: { id, workspaceId: wsId(req) } }))) return reply.status(404).send({ error: 'Webhook not found' });
+    const rows = await prisma.webhookDelivery.findMany({ where: { webhookId: id }, orderBy: { createdAt: 'desc' }, take: 20 });
+    return { deliveries: rows.map((d) => ({ id: d.id, event: d.event, status: d.status, attempts: d.attempts, responseCode: d.responseCode, error: d.error, at: d.createdAt.toISOString() })) };
+  });
+
+  // Sends a sample "lead.created" so the owner can see their receiver working (uses their newest real lead, or sample data)
+  app.post('/admin/api/webhooks/:id/test', { preHandler: manager }, async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const h = await prisma.webhook.findFirst({ where: { id, workspaceId: wsId(req) } });
+    if (!h) return reply.status(404).send({ error: 'Webhook not found' });
+    try {
+      await assertPublicUrl(h.url);
+    } catch (err) {
+      return reply.status(400).send({ error: (err as Error).message });
+    }
+    const latest = await prisma.lead.findFirst({ where: { workspaceId: wsId(req), phoneNumber: { not: { startsWith: 'SIM-' } } }, orderBy: { createdAt: 'desc' }, select: { sessionId: true } });
+    const lead = latest ? await leadSnapshot(wsId(req), latest.sessionId) : null;
+    const payload = {
+      id: 'test-' + Date.now(), event: 'lead.created', test: true, createdAt: new Date().toISOString(), workspace: { id: wsId(req) },
+      lead: lead ?? { phone: '910000000000', name: 'Sample Customer', service: 'Sample service', answers: { 'What do you need?': 'A sample answer' }, stage: 'new', stageLabel: 'New lead', source: null, notes: null, createdAt: new Date().toISOString() }
+    };
+    const d = await prisma.webhookDelivery.create({ data: { webhookId: id, event: 'lead.created', payload: payload as any } });
+    await deliverDue();
+    const done = await prisma.webhookDelivery.findUniqueOrThrow({ where: { id: d.id } });
+    return { status: done.status, responseCode: done.responseCode, error: done.error };
+  });
+
+  app.post('/admin/api/api-keys', { preHandler: manager }, async (req, reply) => {
+    if (await needIntegrations(req, reply)) return;
+    try {
+      const { row, key } = await createApiKey(wsId(req), (req.body as any)?.name);
+      return { key, apiKey: { id: row.id, name: row.name, prefix: row.prefix, createdAt: row.createdAt.toISOString(), lastUsedAt: null } };
+    } catch (err) {
+      return reply.status(400).send({ error: (err as Error).message });
+    }
+  });
+  app.delete('/admin/api/api-keys/:id', { preHandler: manager }, async (req, reply) => {
+    const r = await prisma.apiKey.deleteMany({ where: { id: (req.params as { id: string }).id, workspaceId: wsId(req) } });
+    return r.count ? { ok: true } : reply.status(404).send({ error: 'Key not found' });
+  });
+
+  // QR code for a click-to-chat link
+  app.post('/admin/api/chat-link/qr', { preHandler: guard }, async (req, reply) => {
+    const url = String((req.body as any)?.url ?? '');
+    if (!/^https:\/\/wa\.me\//.test(url) || url.length > 600) return reply.status(400).send({ error: 'Not a WhatsApp link' });
+    return { qr: await QRCode.toDataURL(url, { width: 320, margin: 1 }) };
+  });
+
   // ---- broadcasts ----
   const broadcastView = (b: any) => ({
     id: b.id, name: b.name, text: b.text, status: b.status, note: b.note, total: b.total, sent: b.sent, failed: b.failed,
@@ -656,6 +758,7 @@ export function registerAdmin(app: FastifyInstance, opts: { getQr: (workspaceId:
       if (b.notes !== undefined) data.counsellorNotes = String(b.notes).slice(0, 4000) || null;
       if (b.stage !== undefined) data.stageKey = b.stage;
       await prisma.lead.update({ where: { id: session.lead.id }, data });
+      if (b.stage !== undefined && b.stage !== session.lead.stageKey) void dispatchEvent(w, 'lead.stage_changed', session.id, { previousStage: session.lead.stageKey });
     }
     const fresh = await prisma.session.findUnique({ where: key, include: { lead: true } });
     return { contact: toContact(fresh!, await loadConfig(w)) };

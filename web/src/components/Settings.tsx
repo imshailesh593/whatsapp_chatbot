@@ -5,6 +5,7 @@ import BusinessProfile from './BusinessProfile';
 import BotBuilder from './BotBuilder';
 import Billing from './Billing';
 import PipelineEditor from './PipelineEditor';
+import Integrations from './Integrations';
 
 export default function Settings({ overview, me, onChanged }: { overview: Overview; me: AdminUser; onChanged: () => void }) {
   return (
@@ -13,6 +14,7 @@ export default function Settings({ overview, me, onChanged }: { overview: Overvi
       <BusinessProfile workspace={overview.workspace} onSaved={onChanged} />
       <BotBuilder overview={overview} onSaved={onChanged} />
       <PipelineEditor stages={overview.stages} onSaved={onChanged} />
+      <Integrations />
       <Billing me={me} />
       <Admins me={me} />
     </div>

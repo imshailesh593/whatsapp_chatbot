@@ -1,4 +1,4 @@
-import type { BroadcastInfo, StageDef, BillingInfo, AdminRow, AdminUser, ChatMessage, ChatTurn, Contact, Draft, Overview, PatchBody, PlatformWorkspace, ServiceDef, TemplateInfo, WaSnapshot, Workspace } from './types';
+import type { ApiKeyInfo, IntegrationsInfo, WebhookInfo, BroadcastInfo, StageDef, BillingInfo, AdminRow, AdminUser, ChatMessage, ChatTurn, Contact, Draft, Overview, PatchBody, PlatformWorkspace, ServiceDef, TemplateInfo, WaSnapshot, Workspace } from './types';
 
 export class UnauthorizedError extends Error {}
 
@@ -35,6 +35,15 @@ export const api = {
   audience: (filters: unknown) => post<{ count: number; sample: { name: string | null; phone: string }[] }>('/admin/api/broadcasts/audience', { filters }),
   createBroadcast: (body: unknown) => post<{ broadcast: BroadcastInfo }>('/admin/api/broadcasts', body),
   broadcastAction: (id: string, action: string) => post<{ broadcast: BroadcastInfo }>(`/admin/api/broadcasts/${encodeURIComponent(id)}/${action}`, {}),
+  integrations: () => request<IntegrationsInfo>('/admin/api/integrations'),
+  createWebhook: (url: string, events: string[]) => post<{ webhook: WebhookInfo }>('/admin/api/webhooks', { url, events }),
+  patchWebhook: (id: string, body: { active?: boolean; events?: string[] }) => request<{ webhook: WebhookInfo }>(`/admin/api/webhooks/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(body) }),
+  deleteWebhook: (id: string) => request<{ ok: true }>(`/admin/api/webhooks/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+  testWebhook: (id: string) => post<{ status: string; responseCode: number | null; error: string }>(`/admin/api/webhooks/${encodeURIComponent(id)}/test`, {}),
+  deliveries: (id: string) => request<{ deliveries: { id: string; event: string; status: string; attempts: number; responseCode: number | null; error: string; at: string }[] }>(`/admin/api/webhooks/${encodeURIComponent(id)}/deliveries`).then((r) => r.deliveries),
+  createApiKey: (name: string) => post<{ key: string; apiKey: ApiKeyInfo }>('/admin/api/api-keys', { name }),
+  deleteApiKey: (id: string) => request<{ ok: true }>(`/admin/api/api-keys/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+  chatLinkQr: (url: string) => post<{ qr: string }>('/admin/api/chat-link/qr', { url }),
   alertInfo: () => request<{ emailAvailable: boolean; whatsappReady: boolean }>('/admin/api/alerts'),
   testAlert: () => post<{ whatsapp: string; email: string }>('/admin/api/alerts/test', {}),
   billing: () => request<BillingInfo>('/admin/api/billing'),

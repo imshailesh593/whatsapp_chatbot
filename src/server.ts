@@ -8,6 +8,8 @@ import { prisma } from './lib/prisma';
 import { registerAdmin } from './admin';
 import { DEFAULT_WORKSPACE_ID } from './lib/workspaces';
 import { startBroadcastWorker } from './services/broadcast';
+import { startWebhookWorker } from './services/integrations';
+import { registerPublicApi } from './publicApi';
 
 dotenv.config();
 
@@ -19,6 +21,7 @@ const qrDataUrl = async (workspaceId: string) => {
 };
 
 registerAdmin(app, { getQr: qrDataUrl });
+registerPublicApi(app);
 
 app.get('/health', async () => ({ ok: true, whatsapp: waFor(DEFAULT_WORKSPACE_ID).status, connections: waSummary() }));
 
@@ -48,6 +51,7 @@ app.get('/qr/status', async (req, reply) => {
 });
 
 const broadcasts = startBroadcastWorker();
+const webhooks = startWebhookWorker();
 let client: { stop(): Promise<void> } | null = null;
 startWhatsApp()
   .then((c) => (client = c))
@@ -55,6 +59,7 @@ startWhatsApp()
 
 const shutdown = async () => {
   broadcasts.stop();
+  webhooks.stop();
   await app.close();
   await client?.stop();
   await prisma.$disconnect();

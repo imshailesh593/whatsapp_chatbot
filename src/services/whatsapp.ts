@@ -79,6 +79,8 @@ function wasLinked(dir: string): boolean {
 export class WaConnection {
   status: WaStatus = 'off';
   qr: string | null = null;
+  /** The linked number (digits), once connected; used for click-to-chat links */
+  phone: string | null = null;
   private sock: any = null;
   private stopped = false;
   private attempt = 0;
@@ -265,6 +267,7 @@ export class WaConnection {
       if (connection === 'open') {
         this.status = 'ready';
         this.qr = null;
+        this.phone = sock.user?.id ? userPart(String(sock.user.id)) : this.phone;
         this.attempt = 0;
         console.log(`[wa ${this.workspaceId.slice(0, 8)}] connected`);
       }

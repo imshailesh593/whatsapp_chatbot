@@ -6,6 +6,7 @@ import { accessState } from '../plans';
 import { admitAiReply, admitConversation } from './usage';
 import { notifyBooked, notifyNewLead } from './alerts';
 import { getStages } from './pipeline';
+import { dispatchEvent } from './integrations';
 import {
   loadConfig,
   resolveService,
@@ -66,7 +67,9 @@ export async function handleIncomingMessage(
   if (!session) {
     // Trial over / subscription lapsed, or this month's conversation allowance is used: do not start new chats
     if (!isCapturing() && (!accessState(cfg.ws).active || !(await admitConversation(cfg.ws)))) return;
-    session = await prisma.session.create({ data: { workspaceId, phoneNumber, contactName: contactName || null } });
+    // A click-to-chat link can carry a campaign tag: "... (ref: summer24)"
+    const source = /\(ref:\s*([A-Za-z0-9_-]{1,30})\)/i.exec(text)?.[1]?.toLowerCase() ?? null;
+    session = await prisma.session.create({ data: { workspaceId, phoneNumber, contactName: contactName || null, source } });
   } else {
     await prisma.session.update({ where: key, data: { lastInteractionAt: new Date() } });
   }
@@ -167,7 +170,10 @@ export async function handleIncomingMessage(
           })
         ]);
         await send(phoneNumber, completionMessage(cfg));
-        if (!isCapturing()) void notifyNewLead(workspaceId, session.id);
+        if (!isCapturing()) {
+          void notifyNewLead(workspaceId, session.id);
+          void dispatchEvent(workspaceId, 'lead.created', session.id);
+        }
       }
       break;
     }
@@ -179,7 +185,10 @@ export async function handleIncomingMessage(
         const lead = await prisma.lead.findFirst({ where: { workspaceId, phoneNumber }, select: { id: true, stageKey: true } });
         const kind = lead ? (await getStages(workspaceId)).find((st) => st.key === lead.stageKey)?.kind ?? 'open' : 'open';
         const moved = !!lead && lead.stageKey !== 'booked' && kind === 'open';
-        if (moved) await prisma.lead.update({ where: { id: lead!.id }, data: { stageKey: 'booked' } });
+        if (moved) {
+          await prisma.lead.update({ where: { id: lead!.id }, data: { stageKey: 'booked' } });
+          if (!isCapturing()) void dispatchEvent(workspaceId, 'lead.stage_changed', session.id, { previousStage: lead!.stageKey });
+        }
         await send(phoneNumber, bookedConfirmationMessage());
         if (!isCapturing() && moved) void notifyBooked(workspaceId, phoneNumber);
       } else if (hasBooking && /consultation|appointment|book|fee/.test(lower)) {

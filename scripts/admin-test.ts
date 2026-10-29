@@ -267,6 +267,25 @@ async function cleanup() {
   ok(r.json().recipients.length === 1 && r.json().recipients[0].status === 'skipped', 'detail lists recipients');
   ok((await call(hA, 'PUT', '/admin/api/workspace', { timezone: 'Mars/Phobos' })).statusCode === 400 && (await call(hA, 'PUT', '/admin/api/workspace', { timezone: 'Asia/Kolkata' })).statusCode === 200, 'time zone is validated');
 
+  // ---- integrations API ----
+  ok((await call(hA, 'POST', '/admin/api/webhooks', { url: 'https://8.8.8.8/hook' })).statusCode === 402, 'Starter plan: webhooks are not included');
+  ok((await call(hA, 'POST', '/admin/api/api-keys', { name: 'x' })).statusCode === 402, 'Starter plan: API keys are not included');
+  await prisma.workspace.update({ where: { id: wsA }, data: { plan: 'growth' } });
+  invalidateConfig(wsA);
+  ok((await call(hA, 'POST', '/admin/api/webhooks', { url: 'https://127.0.0.1/hook' })).statusCode === 400, 'webhook to a private address refused');
+  ok((await call(hA, 'POST', '/admin/api/webhooks', { url: 'http://8.8.8.8/hook' })).statusCode === 400, 'plain http refused');
+  r = await call(hA, 'POST', '/admin/api/webhooks', { url: 'https://8.8.8.8/hook', events: ['lead.created'] });
+  const hookId = r.json().webhook.id;
+  ok(r.statusCode === 200 && r.json().webhook.secret.startsWith('whsec_'), 'webhook created');
+  ok((await call(hA, 'GET', '/admin/api/integrations')).json().webhooks.length === 1 && (await call(hB, 'GET', '/admin/api/integrations')).json().webhooks.length === 0, 'webhooks are per workspace');
+  ok((await call(hB, 'DELETE', '/admin/api/webhooks/' + hookId)).statusCode === 404 && (await call(hB, 'POST', '/admin/api/webhooks/' + hookId + '/test')).statusCode === 404, "another workspace cannot touch the webhook");
+  ok((await call(hAg2, 'GET', '/admin/api/integrations')).statusCode === 403, 'agents cannot see integrations');
+  r = await call(hA, 'POST', '/admin/api/api-keys', { name: 'CRM' });
+  ok(/^lk_[a-f0-9]{48}$/.test(r.json().key) && r.json().apiKey.prefix === r.json().key.slice(0, 9), 'API key created and returned once');
+  ok(!JSON.stringify((await call(hA, 'GET', '/admin/api/integrations')).json()).includes(r.json().key), 'the full key is never listed again');
+  ok((await call(hA, 'POST', '/admin/api/chat-link/qr', { url: 'https://evil.example/x' })).statusCode === 400 && (await call(hA, 'POST', '/admin/api/chat-link/qr', { url: 'https://wa.me/919000000000?text=hi' })).json().qr.startsWith('data:image/png'), 'QR only for WhatsApp links');
+  ok((await call(hA, 'DELETE', '/admin/api/webhooks/' + hookId)).statusCode === 200, 'webhook deleted');
+
   // ---- platform admin ----
   await prisma.adminUser.create({ data: { email: `root${DOMAIN}`, passwordHash: await hashPassword('platform admin pw 1'), workspaceId: wsB, role: 'owner', isSuperAdmin: true } });
   const hRoot = cookieOf(await login(`root${DOMAIN}`, 'platform admin pw 1'));
