@@ -234,10 +234,10 @@ export default function Crm({ contacts, includeTest, onIncludeTest, onOpen, onCh
                             ? 'bg-emerald-950/40 border-emerald-700/50 text-emerald-400 hover:bg-emerald-900/50'
                             : 'bg-rose-950/40 border-rose-700/50 text-rose-400 hover:bg-rose-900/50'
                         }`}
-                        title={c.botActive ? 'Bot is answering. Click to pause and take over.' : 'Bot paused (human mode). Click to resume.'}
+                        title={c.botActive ? 'Bot is answering. Click to pause and take over.' : c.handoffAt ? 'The customer asked for a person. Click to hand the chat back to the bot.' : 'Bot paused (human mode). Click to resume.'}
                       >
                         {c.botActive ? <Zap className="w-3 h-3" /> : <UserCheck className="w-3 h-3" />}
-                        <span>{c.botActive ? 'Bot Active' : 'Human Mode'}</span>
+                        <span>{c.botActive ? 'Bot Active' : c.handoffAt ? 'Needs a person' : 'Human Mode'}</span>
                       </button>
                     </td>
                     <td className="py-3.5 px-4 text-right" onClick={(e) => e.stopPropagation()}>

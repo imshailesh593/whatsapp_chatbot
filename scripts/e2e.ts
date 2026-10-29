@@ -10,6 +10,7 @@ import { loadConfig, resolveService, saveServices, invalidateConfig, sanitizeSer
 import { getTemplate } from '../src/templates';
 import { setSetting } from '../src/services/settings';
 import { deliverAlert, sendTestAlert } from '../src/services/alerts';
+import { wantsHuman } from '../src/services/handoff';
 
 const extra: string[] = [];
 const sent: { ws: string; to: string; text: string }[] = [];
@@ -174,6 +175,40 @@ async function main() {
     await prisma.workspace.update({ where: { id: A.id }, data: { notifyPhone: '' } });
     invalidateConfig(A.id);
     assert((await deliverAlert(A.id, 'x', 'y')).email.startsWith('skipped: email sending'), 'email without SMTP is reported, not thrown');
+
+    console.log('\n[human hand-off]');
+    assert(wantsHuman('can I talk to a real person?') && wantsHuman('human please') && wantsHuman('mujhe manager se baat karni hai'), 'asking for a person is recognised');
+    assert(!wantsHuman('I am a travel agent') && !wantsHuman('my agent said it costs 5000') && !wantsHuman('yes') && !wantsHuman('Please call me'), 'ordinary messages are not mistaken for it');
+    await prisma.workspace.update({ where: { id: A.id }, data: { notifyPhone: '919000000003' } });
+    invalidateConfig(A.id);
+    const hp = `9177${run}`;
+    await handleIncomingMessage(A.id, hp, 'Ravi', 'hi');
+    await handleIncomingMessage(A.id, hp, 'Ravi', '5');
+    await handleIncomingMessage(A.id, hp, 'Ravi', 'I need help with my papers');
+    await handleIncomingMessage(A.id, hp, 'Ravi', 'Can I speak to a real person please');
+    assert(replies(A.id, hp).at(-1)!.includes('our team to take over'), 'the customer is told a person will reply');
+    const hs = await prisma.session.findFirst({ where: { workspaceId: A.id, phoneNumber: hp } });
+    assert(hs!.isAgentPaused && !!hs!.handoffAt, 'the bot is paused for that chat and the hand-off is recorded');
+    await new Promise((r) => setTimeout(r, 600));
+    const hs2 = await prisma.session.findFirst({ where: { workspaceId: A.id, phoneNumber: hp } });
+    assert(hs2!.handoffSummary.includes('papers') || hs2!.handoffSummary.length > 10, 'a briefing is stored for the team');
+    const brief = replies(A.id, '919000000003').find((t) => t.includes('wants to talk to a person'));
+    assert(!!brief && brief.includes('Ravi') && brief.includes('bot is paused'), 'the owner is alerted with who it is and what to do');
+    const nh = replies(A.id, hp).length;
+    await handleIncomingMessage(A.id, hp, 'Ravi', 'hello? anyone there');
+    assert(replies(A.id, hp).length === nh, 'while a person has the chat the bot stays silent');
+    await prisma.workspace.update({ where: { id: A.id }, data: { handoffEnabled: false } });
+    invalidateConfig(A.id);
+    const hq = `9178${run}`;
+    await handleIncomingMessage(A.id, hq, 'Sam', 'hi');
+    await handleIncomingMessage(A.id, hq, 'Sam', 'I want to talk to a human');
+    assert(!(await prisma.session.findFirst({ where: { workspaceId: A.id, phoneNumber: hq } }))!.isAgentPaused, 'hand-off switched off: the bot keeps going');
+    await prisma.workspace.update({ where: { id: A.id }, data: { handoffEnabled: true, handoffMessage: 'Hold on, fetching a colleague.', notifyPhone: '' } });
+    invalidateConfig(A.id);
+    const hr = `9179${run}`;
+    await handleIncomingMessage(A.id, hr, 'Lee', 'hi');
+    await handleIncomingMessage(A.id, hr, 'Lee', 'connect me to an agent');
+    assert(replies(A.id, hr).at(-1) === 'Hold on, fetching a colleague.', 'a custom hand-off message is used');
 
     console.log('\n[plan access and limits]');
     const C = await prisma.workspace.create({

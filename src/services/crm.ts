@@ -3,7 +3,7 @@ import { loadConfig } from './botConfig';
 import { accessState } from '../plans';
 import { deliverAlert } from './alerts';
 
-export type LeadEventType = 'created' | 'stage' | 'owner' | 'tags' | 'follow_up' | 'note';
+export type LeadEventType = 'created' | 'stage' | 'owner' | 'tags' | 'follow_up' | 'note' | 'handoff' | 'appointment';
 
 export async function logLeadEvent(leadId: string, workspaceId: string, type: LeadEventType, detail = '', actor = 'bot'): Promise<void> {
   try {

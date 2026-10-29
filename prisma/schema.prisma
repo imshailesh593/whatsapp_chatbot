@@ -40,6 +40,13 @@ model Workspace {
   onboardingCompleted    Boolean   @default(false) @map("onboarding_completed")
   /// False until the owner presses "Go live"; a paused workspace never auto-replies
   botEnabled             Boolean   @default(true) @map("bot_enabled")
+  handoffEnabled         Boolean   @default(true) @map("handoff_enabled")
+  handoffMessage         String    @default("") @map("handoff_message")
+  /// Short code in this business referral link
+  referralCode           String?   @unique @map("referral_code")
+  /// Workspace that referred this one (plain text so deleting a referrer does not touch the referred)
+  referredById           String?   @map("referred_by_id")
+  payoutDetails          String    @default("") @map("payout_details")
   /// trial | starter | growth | scale | internal (unlimited, for the operator's own business)
   plan                   String    @default("trial")
   /// trialing | active | past_due | canceled
@@ -64,6 +71,9 @@ model Workspace {
   webhooks          Webhook[]
   apiKeys           ApiKey[]
   payments          Payment[]
+  calendar          CalendarConfig?
+  appointments      Appointment[]
+  commissions       AffiliateCommission[]
   couponRedemptions CouponRedemption[]
 
   @@map("saas_workspaces")
@@ -109,6 +119,11 @@ model Session {
   currentStep       Int          @default(0) @map("current_step")
   answers           Json         @default("{}")
   isAgentPaused     Boolean      @default(false) @map("is_agent_paused")
+  /// Set when the customer asked for a person: the bot stepped back and the team was alerted
+  handoffAt         DateTime?    @map("handoff_at")
+  handoffSummary    String       @default("") @map("handoff_summary")
+  /// Appointment times currently offered to the customer (ISO strings) while they choose one
+  slotOffer         Json?        @map("slot_offer")
   /// Customer replied STOP: never include in broadcasts
   optedOut          Boolean      @default(false) @map("opted_out")
   /// Campaign tag from a click-to-chat link ("(ref: summer24)" in the first message)
@@ -396,4 +411,65 @@ model CouponRedemption {
 
   @@unique([couponId, workspaceId])
   @@map("saas_coupon_redemptions")
+}
+
+/// Commission owed to a referring business when a business it referred pays (pending -> approved -> paid, or void)
+model AffiliateCommission {
+  id           String    @id @default(uuid())
+  affiliateId  String    @map("affiliate_id")
+  affiliate    Workspace @relation(fields: [affiliateId], references: [id], onDelete: Cascade)
+  referredId   String    @map("referred_id")
+  referredName String    @default("") @map("referred_name")
+  paymentId    String    @unique @map("payment_id")
+  /// Smallest currency unit
+  amount       Int
+  currency     String
+  status       String    @default("pending")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  paidAt       DateTime? @map("paid_at")
+
+  @@index([affiliateId, status])
+  @@index([referredId])
+  @@map("saas_affiliate_commissions")
+}
+
+/// A business's linked Google Calendar and its booking rules
+model CalendarConfig {
+  workspaceId   String    @id @map("workspace_id")
+  workspace     Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  /// Encrypted with the server secret
+  refreshToken  String    @map("refresh_token")
+  googleEmail   String    @default("") @map("google_email")
+  calendarId    String    @default("primary") @map("calendar_id")
+  slotMinutes   Int       @default(30) @map("slot_minutes")
+  bufferMinutes Int       @default(0) @map("buffer_minutes")
+  /// ISO weekdays, 1 = Monday ... 7 = Sunday
+  workDays      String    @default("1,2,3,4,5") @map("work_days")
+  workStart     String    @default("09:00") @map("work_start")
+  workEnd       String    @default("18:00") @map("work_end")
+  noticeHours   Int       @default(4) @map("notice_hours")
+  daysAhead     Int       @default(14) @map("days_ahead")
+  reminderHours Int       @default(2) @map("reminder_hours")
+  createdAt     DateTime  @default(now()) @map("created_at")
+
+  @@map("saas_calendar_configs")
+}
+
+model Appointment {
+  id            String    @id @default(uuid())
+  workspaceId   String    @map("workspace_id")
+  workspace     Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  phoneNumber   String    @map("phone_number")
+  name          String?
+  startsAt      DateTime  @map("starts_at")
+  endsAt        DateTime  @map("ends_at")
+  googleEventId String?   @map("google_event_id")
+  /// confirmed | canceled
+  status        String    @default("confirmed")
+  reminderSent  Boolean   @default(false) @map("reminder_sent")
+  createdAt     DateTime  @default(now()) @map("created_at")
+
+  @@index([workspaceId, startsAt])
+  @@index([status, startsAt])
+  @@map("saas_appointments")
 }

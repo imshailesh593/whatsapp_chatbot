@@ -36,6 +36,8 @@ import { createBroadcast, previewAudience, setStatus as setBroadcastStatus } fro
 import { transportReady } from './services/transport';
 import { PLANS, accessState, currentPeriod, planById } from './plans';
 import { createCoupon, grantPlan, redeemCoupon } from './services/coupons';
+import { affiliateAdminOverview, getAffiliateSettings, referralOverview, referrerFor, saveAffiliateSettings, setCommissionStatus } from './services/affiliate';
+import { authUrl, cancelAppointment, cleanRules, completeConnection, disconnect as disconnectCalendar, formatSlot, googleConfigured, readState } from './services/calendar';
 import { getUsage } from './services/usage';
 import { cancelSubscription, handleRazorpayWebhook, handleStripeWebhook, openPortal, providersAvailable, startCheckout } from './services/billing';
 
@@ -88,6 +90,8 @@ function toContact(s: SessionWithLead, cfg: BotConfig, owners: Map<string, strin
     progress,
     targetCountry: locationKey ? answers[locationKey] : null,
     botActive: !s.isAgentPaused,
+    handoffAt: s.handoffAt?.toISOString() ?? null,
+    handoffSummary: s.handoffAt ? s.handoffSummary : '',
     answers: labelAnswers(answers, service?.questions),
     notes: lead?.counsellorNotes ?? null,
     hasLead: !!lead,
@@ -115,7 +119,8 @@ const WS_FIELDS = [
   'languages',
   'timezone',
   'notifyEmail',
-  'notifyPhone'
+  'notifyPhone',
+  'handoffMessage'
 ] as const;
 const WS_MAX: Record<(typeof WS_FIELDS)[number], number> = {
   industry: 60,
@@ -132,7 +137,8 @@ const WS_MAX: Record<(typeof WS_FIELDS)[number], number> = {
   languages: 80,
   timezone: 60,
   notifyEmail: 254,
-  notifyPhone: 40
+  notifyPhone: 40,
+  handoffMessage: 300
 };
 const URL_FIELDS = new Set(['formUrl', 'bookingUrl']);
 
@@ -180,6 +186,8 @@ const publicWorkspace = (w: Workspace) => ({
   timezone: w.timezone,
   notifyEmail: w.notifyEmail,
   notifyPhone: w.notifyPhone,
+  handoffEnabled: w.handoffEnabled,
+  handoffMessage: w.handoffMessage,
   onboardingCompleted: w.onboardingCompleted,
   botEnabled: w.botEnabled
 });
@@ -290,7 +298,7 @@ export function registerAdmin(app: FastifyInstance, opts: { getQr: (workspaceId:
   // Self-service sign-up: creates a new workspace (paused until the owner goes live) and its owner
   app.post('/admin/api/signup', async (req, reply) => {
     if (!enabled || process.env.SIGNUP_ENABLED === '0') return reply.status(404).send();
-    const b = (req.body ?? {}) as { businessName?: string; email?: string; password?: string };
+    const b = (req.body ?? {}) as { businessName?: string; email?: string; password?: string; ref?: string };
     const ip = clientIp(req);
     if (throttled(signups, `ip:${ip}`, 5)) return reply.status(429).send({ error: 'Too many sign-ups from this network. Try again later.' });
     const businessName = String(b.businessName ?? '').replace(/\s+/g, ' ').trim().slice(0, 80);
@@ -301,7 +309,8 @@ export function registerAdmin(app: FastifyInstance, opts: { getQr: (workspaceId:
     if (password.length < MIN_PASSWORD_LENGTH) return reply.status(400).send({ error: `Password must be at least ${MIN_PASSWORD_LENGTH} characters` });
     if (await prisma.adminUser.findUnique({ where: { email } })) return reply.status(409).send({ error: 'An account with this email already exists. Sign in instead.' });
     bump(signups, `ip:${ip}`, 60 * 60_000);
-    const ws = await createWorkspaceWithOwner({ businessName, email, password });
+    const referredById = await referrerFor(b.ref);
+    const ws = await createWorkspaceWithOwner({ businessName, email, password, referredById, bonusTrialDays: (await getAffiliateSettings()).bonusDays });
     const owner = ws.adminUsers[0];
     setSession(req, reply, owner.id);
     return { ok: true, user: await meView({ id: owner.id, email, workspaceId: ws.id, role: 'owner', isSuperAdmin: false }) };
@@ -375,6 +384,83 @@ export function registerAdmin(app: FastifyInstance, opts: { getQr: (workspaceId:
   const publicUrl = (req: FastifyRequest) =>
     process.env.PUBLIC_URL || `${req.headers['x-forwarded-proto'] ?? 'http'}://${req.headers['x-forwarded-host'] ?? req.headers.host}`;
   const num = (n: number) => (n === Infinity ? null : n);
+
+  // ---- refer and earn ----
+  app.get('/admin/api/referral', { preHandler: guard }, async (req) => referralOverview(wsId(req), publicUrl(req)));
+  app.put('/admin/api/referral', { preHandler: ownerOnly }, async (req) => {
+    const details = String((req.body as any)?.payoutDetails ?? '').replace(/\r/g, '').trim().slice(0, 300);
+    await prisma.workspace.update({ where: { id: wsId(req) }, data: { payoutDetails: details } });
+    return { ok: true };
+  });
+
+  // ---- Google Calendar booking ----
+  app.get('/admin/api/calendar', { preHandler: guard }, async (req) => {
+    const w = wsId(req);
+    const [cal, appts, ws] = await Promise.all([
+      prisma.calendarConfig.findUnique({ where: { workspaceId: w } }),
+      prisma.appointment.findMany({ where: { workspaceId: w, status: 'confirmed', startsAt: { gt: new Date(Date.now() - 86_400_000) } }, orderBy: { startsAt: 'asc' }, take: 50 }),
+      prisma.workspace.findUniqueOrThrow({ where: { id: w }, select: { timezone: true } })
+    ]);
+    return {
+      googleAvailable: googleConfigured(),
+      connected: !!cal,
+      email: cal?.googleEmail ?? '',
+      timezone: ws.timezone,
+      settings: cal ? { slotMinutes: cal.slotMinutes, bufferMinutes: cal.bufferMinutes, workDays: cal.workDays.split(',').map(Number), workStart: cal.workStart, workEnd: cal.workEnd, noticeHours: cal.noticeHours, daysAhead: cal.daysAhead, reminderHours: cal.reminderHours } : null,
+      appointments: appts.map((a) => ({ id: a.id, phone: a.phoneNumber, name: a.name, startsAt: a.startsAt.toISOString(), when: formatSlot(a.startsAt, ws.timezone), past: a.startsAt.getTime() < Date.now() }))
+    };
+  });
+
+  app.get('/admin/api/calendar/connect', { preHandler: manager }, async (req, reply) => {
+    if (!googleConfigured()) return reply.status(400).send({ error: 'Google sign-in is not set up on this server yet. Ask the platform operator to add the Google keys.' });
+    return { url: authUrl(wsId(req), publicUrl(req)) };
+  });
+
+  // Google sends the owner back here. No session cookie is needed: the signed state says which business it is.
+  app.get('/admin/api/calendar/callback', async (req, reply) => {
+    const q = req.query as { code?: string; state?: string; error?: string };
+    const w = readState(String(q.state ?? ''));
+    if (!w || q.error || !q.code) return reply.redirect('/admin/?calendar=denied');
+    try {
+      await completeConnection(w, q.code, publicUrl(req));
+      await prisma.auditLog.create({ data: { actor: 'calendar', action: 'calendar.connect', workspaceId: w, detail: '' } }).catch(() => undefined);
+      return reply.redirect('/admin/?calendar=connected');
+    } catch (err) {
+      console.error('[calendar] connect failed:', (err as Error).message);
+      return reply.redirect('/admin/?calendar=error');
+    }
+  });
+
+  app.put('/admin/api/calendar', { preHandler: manager }, async (req, reply) => {
+    const cal = await prisma.calendarConfig.findUnique({ where: { workspaceId: wsId(req) } });
+    if (!cal) return reply.status(409).send({ error: 'Connect Google Calendar first' });
+    let data;
+    try {
+      data = cleanRules((req.body ?? {}) as Record<string, unknown>);
+    } catch (err) {
+      return reply.status(400).send({ error: (err as Error).message });
+    }
+    if ((data.workStart ?? cal.workStart) >= (data.workEnd ?? cal.workEnd)) return reply.status(400).send({ error: 'Closing time must be after opening time' });
+    await prisma.calendarConfig.update({ where: { workspaceId: wsId(req) }, data });
+    return { ok: true };
+  });
+
+  app.post('/admin/api/calendar/disconnect', { preHandler: manager }, async (req) => {
+    await disconnectCalendar(wsId(req));
+    return { ok: true };
+  });
+
+  app.post('/admin/api/appointments/:id/cancel', { preHandler: manager }, async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const gone = await cancelAppointment(wsId(req), id);
+    if (!gone) return reply.status(404).send({ error: 'Appointment not found' });
+    const ws = await prisma.workspace.findUniqueOrThrow({ where: { id: wsId(req) }, select: { timezone: true, businessName: true } });
+    // Tell the customer, if the number is connected (best effort)
+    if (waFor(wsId(req)).status === 'ready') {
+      void sendTextMessage(wsId(req), gone.phoneNumber, `Your appointment with ${ws.businessName} on ${formatSlot(gone.startsAt, ws.timezone)} has been cancelled. Message us any time to book another.`).catch(() => undefined);
+    }
+    return { ok: true };
+  });
 
   // A business owner redeems a code from the operator (free days or a plan without a payment)
   app.post('/admin/api/billing/redeem', { preHandler: manager }, async (req, reply) => {
@@ -477,7 +563,8 @@ export function registerAdmin(app: FastifyInstance, opts: { getQr: (workspaceId:
   app.put('/admin/api/workspace', { preHandler: manager }, async (req, reply) => {
     const picked = pickWorkspaceFields((req.body ?? {}) as Record<string, unknown>);
     if ('error' in picked) return reply.status(400).send({ error: picked.error });
-    const w = await prisma.workspace.update({ where: { id: wsId(req) }, data: picked.data });
+    const flag = (req.body as any)?.handoffEnabled;
+    const w = await prisma.workspace.update({ where: { id: wsId(req) }, data: { ...picked.data, ...(typeof flag === 'boolean' ? { handoffEnabled: flag } : {}) } });
     invalidateConfig(w.id);
     return { workspace: publicWorkspace(w) };
   });
@@ -797,7 +884,8 @@ export function registerAdmin(app: FastifyInstance, opts: { getQr: (workspaceId:
     if (!session) return reply.status(404).send({ error: 'Contact not found' });
 
     if (typeof b.paused === 'boolean') {
-      await prisma.session.update({ where: key, data: { isAgentPaused: b.paused } });
+      // Switching the bot back on ends a hand-off
+      await prisma.session.update({ where: key, data: b.paused ? { isAgentPaused: true } : { isAgentPaused: false, handoffAt: null, handoffSummary: '' } });
     }
     const crmEdit = b.ownerId !== undefined || b.tags !== undefined || b.followUpAt !== undefined;
     if (b.notes !== undefined || b.stage !== undefined || crmEdit) {
@@ -1156,6 +1244,25 @@ export function registerAdmin(app: FastifyInstance, opts: { getQr: (workspaceId:
     if (!c) return reply.status(404).send({ error: 'Code not found' });
     await prisma.coupon.delete({ where: { id } });
     await audit(req, 'coupon.delete', null, c.code);
+    return { ok: true };
+  });
+
+  app.get('/admin/api/super/affiliates', { preHandler: superOnly }, async () => affiliateAdminOverview());
+  app.put('/admin/api/super/affiliates/settings', { preHandler: superOnly }, async (req, reply) => {
+    try {
+      const s = await saveAffiliateSettings((req.body ?? {}) as Record<string, unknown>);
+      await audit(req, 'affiliate.settings', null, `${s.enabled ? 'on' : 'off'} · ${s.percent}% · ${s.months} payments · +${s.bonusDays} days`);
+      return s;
+    } catch (err) {
+      return reply.status(400).send({ error: (err as Error).message });
+    }
+  });
+  app.post('/admin/api/super/commissions/:id/status', { preHandler: superOnly }, async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const status = String((req.body as any)?.status ?? '');
+    const err = await setCommissionStatus(id, status);
+    if (err) return reply.status(err === 'Commission not found' ? 404 : 400).send({ error: err });
+    await audit(req, 'commission.' + status, null, id);
     return { ok: true };
   });
 

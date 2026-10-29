@@ -1,4 +1,4 @@
-import type { CouponInfo, PlatformSettingsInfo, AuditEntry, PlatformDetail, PlatformOverview, LeadEventInfo, AnalyticsData, ApiKeyInfo, IntegrationsInfo, WebhookInfo, BroadcastInfo, StageDef, BillingInfo, AdminRow, AdminUser, ChatMessage, ChatTurn, Contact, Draft, Overview, PatchBody, PlatformWorkspace, ServiceDef, TemplateInfo, WaSnapshot, Workspace } from './types';
+import type { AffiliateAdmin, ReferralInfo, CalendarInfo, CouponInfo, PlatformSettingsInfo, AuditEntry, PlatformDetail, PlatformOverview, LeadEventInfo, AnalyticsData, ApiKeyInfo, IntegrationsInfo, WebhookInfo, BroadcastInfo, StageDef, BillingInfo, AdminRow, AdminUser, ChatMessage, ChatTurn, Contact, Draft, Overview, PatchBody, PlatformWorkspace, ServiceDef, TemplateInfo, WaSnapshot, Workspace } from './types';
 
 export class UnauthorizedError extends Error {}
 
@@ -19,8 +19,8 @@ const post = <T,>(url: string, body: unknown) => request<T>(url, { method: 'POST
 export const api = {
   me: () => request<{ authed: boolean; user?: AdminUser }>('/admin/api/me'),
   login: (email: string, password: string) => post<{ ok: true; user: AdminUser }>('/admin/api/login', { email, password }),
-  signup: (businessName: string, email: string, password: string) =>
-    post<{ ok: true; user: AdminUser }>('/admin/api/signup', { businessName, email, password }),
+  signup: (businessName: string, email: string, password: string, ref?: string) =>
+    post<{ ok: true; user: AdminUser }>('/admin/api/signup', { businessName, email, password, ref }),
   changePassword: (current: string, next: string) => post<{ ok: true }>('/admin/api/password', { current, next }),
   admins: () => request<{ admins: AdminRow[] }>('/admin/api/admins').then((r) => r.admins),
   addAdmin: (email: string, password: string, role: 'admin' | 'agent') => post<{ admin: { id: string; email: string } }>('/admin/api/admins', { email, password, role }),
@@ -48,6 +48,16 @@ export const api = {
   leadEvents: (phone: string) => request<{ events: LeadEventInfo[] }>(`/admin/api/contacts/${encodeURIComponent(phone)}/events`).then((r) => r.events),
   alertInfo: () => request<{ emailAvailable: boolean; whatsappReady: boolean }>('/admin/api/alerts'),
   testAlert: () => post<{ whatsapp: string; email: string }>('/admin/api/alerts/test', {}),
+  calendar: () => request<CalendarInfo>('/admin/api/calendar'),
+  calendarConnect: () => request<{ url: string }>('/admin/api/calendar/connect'),
+  calendarSave: (s: NonNullable<CalendarInfo['settings']>) => request<{ ok: true }>('/admin/api/calendar', { method: 'PUT', body: JSON.stringify(s) }),
+  calendarDisconnect: () => post<{ ok: true }>('/admin/api/calendar/disconnect', {}),
+  cancelAppointment: (id: string) => post<{ ok: true }>(`/admin/api/appointments/${id}/cancel`, {}),
+  referral: () => request<ReferralInfo>('/admin/api/referral'),
+  saveReferralPayout: (payoutDetails: string) => request<{ ok: true }>('/admin/api/referral', { method: 'PUT', body: JSON.stringify({ payoutDetails }) }),
+  platformAffiliates: () => request<AffiliateAdmin>('/admin/api/super/affiliates'),
+  platformAffiliateSettings: (body: Partial<AffiliateAdmin['settings']>) => request<AffiliateAdmin['settings']>('/admin/api/super/affiliates/settings', { method: 'PUT', body: JSON.stringify(body) }),
+  platformCommissionStatus: (id: string, status: string) => post<{ ok: true }>(`/admin/api/super/commissions/${id}/status`, { status }),
   redeemCode: (code: string) => post<{ ok: true; plan: string; days: number }>('/admin/api/billing/redeem', { code }),
   platformCoupons: () => request<{ coupons: CouponInfo[] }>('/admin/api/super/coupons').then((r) => r.coupons),
   platformCreateCoupon: (body: { code?: string; plan: string; days: number; maxRedemptions?: number | null; expiresAt?: string | null; note?: string }) => post<{ ok: true; code: string }>('/admin/api/super/coupons', body),

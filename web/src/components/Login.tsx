@@ -6,7 +6,17 @@ import { useProduct } from '../brand';
 
 export default function Login({ onDone }: { onDone: (user: AdminUser) => void }) {
   const product = useProduct();
-  const [mode, setMode] = useState<'signin' | 'signup'>('signin');
+  // A referral link (/admin/?ref=CODE) opens the sign-up form and remembers the code
+  const ref = (() => {
+    try {
+      const fromUrl = new URLSearchParams(window.location.search).get('ref');
+      if (fromUrl) sessionStorage.setItem('lk_ref', fromUrl);
+      return sessionStorage.getItem('lk_ref') ?? '';
+    } catch {
+      return '';
+    }
+  })();
+  const [mode, setMode] = useState<'signin' | 'signup'>(ref ? 'signup' : 'signin');
   const [businessName, setBusinessName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -19,7 +29,7 @@ export default function Login({ onDone }: { onDone: (user: AdminUser) => void })
     setBusy(true);
     setError('');
     try {
-      const res = signup ? await api.signup(businessName, email, password) : await api.login(email, password);
+      const res = signup ? await api.signup(businessName, email, password, ref || undefined) : await api.login(email, password);
       onDone(res.user);
     } catch (err) {
       setError((err as Error).message);

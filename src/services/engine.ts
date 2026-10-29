@@ -5,9 +5,10 @@ import { answerFreeform } from './gemini';
 import { accessState } from '../plans';
 import { admitAiReply, admitConversation } from './usage';
 import { notifyBooked, notifyNewLead } from './alerts';
-import { getStages } from './pipeline';
 import { dispatchEvent } from './integrations';
 import { logLeadEvent } from './crm';
+import { startHandoff, wantsHuman } from './handoff';
+import { calendarConnected, handleBookingMessage, markLeadBooked } from './calendar';
 import {
   loadConfig,
   resolveService,
@@ -85,6 +86,12 @@ export async function handleIncomingMessage(
   if (OPT_OUT_COMMANDS.includes(lower)) {
     await prisma.session.update({ where: key, data: { optedOut: true } });
     if (!session.isAgentPaused) await send(phoneNumber, "You have been unsubscribed from our updates. Reply START any time if you want to chat with us again.");
+    return;
+  }
+
+  // The customer asks for a person: step back, tell them, and brief the team
+  if (cfg.ws.handoffEnabled && wantsHuman(text)) {
+    await send(phoneNumber, await startHandoff(cfg, workspaceId, phoneNumber, session.id, { capturing: isCapturing() }));
     return;
   }
 
@@ -181,19 +188,12 @@ export async function handleIncomingMessage(
     }
 
     case SessionStage.COMPLETED: {
+      // A linked Google Calendar: offer real free times and book them
+      if ((await calendarConnected(workspaceId)) && (await handleBookingMessage(cfg, session, text, isCapturing()))) return;
       const hasBooking = !!cfg.ws.bookingUrl.trim();
       if (hasBooking && BOOKED_RE.test(text)) {
         // Move the lead to "Booked" unless it is already there or has been closed (won / lost) by the team
-        const lead = await prisma.lead.findFirst({ where: { workspaceId, phoneNumber }, select: { id: true, stageKey: true } });
-        const kind = lead ? (await getStages(workspaceId)).find((st) => st.key === lead.stageKey)?.kind ?? 'open' : 'open';
-        const moved = !!lead && lead.stageKey !== 'booked' && kind === 'open';
-        if (moved) {
-          await prisma.lead.update({ where: { id: lead!.id }, data: { stageKey: 'booked' } });
-          if (!isCapturing()) {
-            void dispatchEvent(workspaceId, 'lead.stage_changed', session.id, { previousStage: lead!.stageKey });
-            void logLeadEvent(lead!.id, workspaceId, 'stage', `${lead!.stageKey} → booked (customer confirmed)`, 'bot');
-          }
-        }
+        const moved = await markLeadBooked(workspaceId, phoneNumber, session.id, 'customer confirmed', !isCapturing());
         await send(phoneNumber, bookedConfirmationMessage());
         if (!isCapturing() && moved) void notifyBooked(workspaceId, phoneNumber);
       } else if (hasBooking && /consultation|appointment|book|fee/.test(lower)) {

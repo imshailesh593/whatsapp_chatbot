@@ -5,13 +5,13 @@ import type { Workspace } from '../types';
 
 type Fields = Pick<
   Workspace,
-  'timezone' | 'businessName' | 'tagline' | 'description' | 'welcomeIntro' | 'tone' | 'languages' | 'bookingLabel' | 'bookingUrl' | 'bookingNote' | 'formUrl' | 'knowledge' | 'notifyEmail' | 'notifyPhone'
+  'timezone' | 'businessName' | 'tagline' | 'description' | 'welcomeIntro' | 'tone' | 'languages' | 'bookingLabel' | 'bookingUrl' | 'bookingNote' | 'formUrl' | 'knowledge' | 'notifyEmail' | 'notifyPhone' | 'handoffEnabled' | 'handoffMessage'
 >;
 
 const pick = (w: Workspace): Fields => ({
   timezone: w.timezone, businessName: w.businessName, tagline: w.tagline, description: w.description, welcomeIntro: w.welcomeIntro, tone: w.tone,
   languages: w.languages, bookingLabel: w.bookingLabel, bookingUrl: w.bookingUrl, bookingNote: w.bookingNote, formUrl: w.formUrl,
-  knowledge: w.knowledge, notifyEmail: w.notifyEmail, notifyPhone: w.notifyPhone
+  knowledge: w.knowledge, notifyEmail: w.notifyEmail, notifyPhone: w.notifyPhone, handoffEnabled: w.handoffEnabled, handoffMessage: w.handoffMessage
 });
 
 export default function BusinessProfile({ workspace, onSaved }: { workspace: Workspace; onSaved: () => void }) {
@@ -119,6 +119,17 @@ export default function BusinessProfile({ workspace, onSaved }: { workspace: Wor
           <input value={f.notifyPhone} onChange={set('notifyPhone')} className={input} placeholder="919876543210" />
           {alertInfo && !alertInfo.whatsappReady && <p className="text-[11px] text-amber-400 mt-1">Connect WhatsApp first: alerts are sent from your linked number.</p>}
         </div>
+        <div className="sm:col-span-2 border-t border-slate-800 pt-4">
+          <h4 className="text-sm font-bold text-white">Talk to a person</h4>
+          <p className="text-[11px] text-slate-500 mt-1">When a customer asks for a human, the bot stops replying in that chat, you get a short AI briefing on WhatsApp or email, and the chat shows as &ldquo;Needs a person&rdquo;. Switch the bot back on for that chat when you are done.</p>
+        </div>
+        <label className="sm:col-span-2 flex items-center gap-2 text-xs text-slate-300">
+          <input type="checkbox" checked={f.handoffEnabled} onChange={(e) => setF((x) => ({ ...x, handoffEnabled: e.target.checked }))} />
+          <span>Let customers ask for a person</span>
+        </label>
+        {f.handoffEnabled && (
+          <div className="sm:col-span-2"><label className={label}>What the customer is told (optional)</label><input value={f.handoffMessage} maxLength={300} onChange={set('handoffMessage')} className={input} placeholder="Of course. I have asked our team to take over, and a person will reply here shortly." /></div>
+        )}
         <div className="sm:col-span-2 flex flex-wrap items-center gap-3">
           <button type="button" onClick={testAlert} disabled={busy || (!f.notifyEmail && !f.notifyPhone)} className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs rounded-lg border border-slate-700 disabled:opacity-40">Save &amp; send a test alert</button>
           {testResult && (

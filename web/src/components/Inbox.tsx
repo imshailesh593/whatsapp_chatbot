@@ -173,8 +173,9 @@ export default function Inbox({ contacts, waReady, onChanged }: Props) {
           {!active.botActive && (
             <div className="text-center my-2">
               <span className="bg-rose-950/60 text-rose-300 border border-rose-800/60 px-3 py-1 rounded-full text-[10px] font-semibold">
-                ⚠️ Human takeover: bot replies are paused for this number.
+                ⚠️ {active.handoffAt ? 'The customer asked for a person: ' : 'Human takeover: '}bot replies are paused for this number.
               </span>
+              {active.handoffSummary && <p className="mt-2 mx-auto max-w-md text-[11px] text-slate-300 bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-left whitespace-pre-line"><strong className="text-slate-100">Briefing:</strong> {active.handoffSummary}</p>}
             </div>
           )}
         </div>

@@ -1,13 +1,13 @@
 import { ReactNode, useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  Briefcase, ClipboardList, CreditCard, FileText, LayoutDashboard, LogOut, Package, Receipt, Repeat, Settings as Cog, Users, MessageSquare, Banknote, TrendingUp, Building2, UserPlus, Ticket
+  Briefcase, ClipboardList, CreditCard, FileText, LayoutDashboard, LogOut, Package, Receipt, Repeat, Settings as Cog, Users, MessageSquare, Banknote, TrendingUp, Building2, UserPlus, Ticket, Gift
 } from 'lucide-react';
 import { api } from '../api';
 import { ago } from '../config';
-import type { AdminUser, CouponInfo, PlatformSettingsInfo } from '../types';
+import type { AdminUser, AffiliateAdmin, CouponInfo, PlatformSettingsInfo } from '../types';
 import Platform from './Platform';
 
-type View = 'dashboard' | 'clients' | 'subscriptions' | 'payments' | 'plans' | 'coupons' | 'audit' | 'settings';
+type View = 'dashboard' | 'clients' | 'subscriptions' | 'payments' | 'plans' | 'coupons' | 'affiliates' | 'audit' | 'settings';
 
 const NAV: { id: View; label: string; icon: ReactNode }[] = [
   { id: 'dashboard', label: 'Dashboard', icon: <LayoutDashboard className="w-[18px] h-[18px]" /> },
@@ -16,6 +16,7 @@ const NAV: { id: View; label: string; icon: ReactNode }[] = [
   { id: 'payments', label: 'Payments', icon: <Receipt className="w-[18px] h-[18px]" /> },
   { id: 'plans', label: 'Plans', icon: <Package className="w-[18px] h-[18px]" /> },
   { id: 'coupons', label: 'Redeem codes', icon: <Ticket className="w-[18px] h-[18px]" /> },
+  { id: 'affiliates', label: 'Affiliates', icon: <Gift className="w-[18px] h-[18px]" /> },
   { id: 'audit', label: 'Audit log', icon: <ClipboardList className="w-[18px] h-[18px]" /> },
   { id: 'settings', label: 'Settings', icon: <Cog className="w-[18px] h-[18px]" /> }
 ];
@@ -66,6 +67,7 @@ export default function PlatformShell({ user, onBusiness, onSignOut }: { user: A
           {view === 'payments' && <Payments />}
           {view === 'plans' && <Plans />}
           {view === 'coupons' && <Coupons />}
+          {view === 'affiliates' && <Affiliates />}
           {view === 'audit' && <AuditView />}
           {view === 'settings' && <PlatformSettings />}
         </main>
@@ -336,6 +338,74 @@ function Coupons() {
             <td className="py-3 px-4 text-right whitespace-nowrap">
               <button onClick={() => run(() => api.platformCouponActive(c.id, !c.active))} className="text-xs text-green-700 font-semibold mr-3">{c.active ? 'Disable' : 'Enable'}</button>
               <button onClick={() => window.confirm('Delete ' + c.code + '?') && run(() => api.platformDeleteCoupon(c.id))} className="text-xs text-rose-600 font-semibold">Delete</button>
+            </td>
+          </tr>
+        ))}
+      </Table>
+    </div>
+  );
+}
+
+function Affiliates() {
+  const [d, setD] = useState<AffiliateAdmin | null>(null);
+  const [form, setForm] = useState({ percent: '20', months: '12', bonusDays: '7' });
+  const [error, setError] = useState('');
+  const [msg, setMsg] = useState('');
+  const load = useCallback(() => api.platformAffiliates().then((x) => {
+    setD(x);
+    setForm({ percent: String(x.settings.percent), months: String(x.settings.months), bonusDays: String(x.settings.bonusDays) });
+  }).catch((e) => setError((e as Error).message)), []);
+  useEffect(() => { load(); }, [load]);
+
+  const run = async (fn: () => Promise<unknown>, done = '') => {
+    setError('');
+    setMsg('');
+    try { await fn(); if (done) setMsg(done); await load(); } catch (err) { setError((err as Error).message); }
+  };
+  if (!d) return <p className="text-sm text-slate-500">{error || 'Loading…'}</p>;
+  const owed = (t: AffiliateAdmin['affiliates'][number]['totals']) => Object.entries(t).map(([c, v]) => `${money(v.pending + v.approved, c)} owed`).join(' · ') || '—';
+  const paidOut = (t: AffiliateAdmin['affiliates'][number]['totals']) => Object.entries(t).map(([c, v]) => money(v.paid, c)).join(' · ') || '—';
+  const field = 'border border-slate-300 rounded-lg px-3 py-2 text-sm w-24 block mt-1';
+  const act = 'text-xs font-semibold mr-3';
+  return (
+    <div className="space-y-5">
+      <div className={card + ' p-5'}>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h3 className="font-bold text-slate-900">Referral programme</h3>
+            <p className="text-sm text-slate-500 mt-1">Every business gets a sign-up link. Businesses that join through it get bonus trial days, and the referrer earns a share of the referred business&apos;s first payments. You approve each commission and pay it out yourself.</p>
+          </div>
+          <button onClick={() => run(() => api.platformAffiliateSettings({ enabled: !d.settings.enabled }))} className={`px-4 py-2 rounded-lg text-sm font-semibold ${d.settings.enabled ? 'bg-[#4b7f2c] text-white' : 'bg-slate-200 text-slate-700'}`}>{d.settings.enabled ? 'On' : 'Off'}</button>
+        </div>
+        <div className="mt-3 flex flex-wrap items-end gap-3">
+          <label className="text-xs text-slate-600">Commission %<input type="number" min={1} max={80} value={form.percent} onChange={(e) => setForm({ ...form, percent: e.target.value })} className={field} /></label>
+          <label className="text-xs text-slate-600">For the first N payments<input type="number" min={1} max={60} value={form.months} onChange={(e) => setForm({ ...form, months: e.target.value })} className={field} /></label>
+          <label className="text-xs text-slate-600">Bonus trial days<input type="number" min={0} max={90} value={form.bonusDays} onChange={(e) => setForm({ ...form, bonusDays: e.target.value })} className={field} /></label>
+          <button onClick={() => run(() => api.platformAffiliateSettings({ percent: Number(form.percent), months: Number(form.months), bonusDays: Number(form.bonusDays) }), 'Saved')} className="px-4 py-2 bg-[#4b7f2c] hover:bg-green-800 text-white text-sm font-semibold rounded-lg">Save</button>
+        </div>
+        {msg && <p className="text-sm text-green-700 mt-2">{msg}</p>}
+        {error && <p className="text-sm text-rose-600 mt-2" role="alert">{error}</p>}
+      </div>
+
+      <Table head={['Referrer', 'Referred', 'Owed', 'Paid out', 'Pay to']} empty={d.affiliates.length === 0 ? 'No referrals yet.' : undefined}>
+        {d.affiliates.map((a) => (
+          <tr key={a.id}><td className="py-3 px-4 font-semibold text-slate-900">{a.businessName} <span className="font-mono text-xs text-slate-400">{a.code}</span></td><td className="py-3 px-4">{a.referred}</td><td className="py-3 px-4">{owed(a.totals)}</td><td className="py-3 px-4">{paidOut(a.totals)}</td><td className="py-3 px-4 text-slate-600">{a.payoutDetails || <span className="text-amber-600">not given yet</span>}</td></tr>
+        ))}
+      </Table>
+
+      <h3 className="font-bold text-slate-900">Commissions</h3>
+      <Table head={['When', 'Referrer', 'From', 'Amount', 'Status', '']} empty={d.commissions.length === 0 ? 'Nothing earned yet. Commissions appear when a referred business pays.' : undefined}>
+        {d.commissions.map((c) => (
+          <tr key={c.id}>
+            <td className="py-3 px-4 text-slate-600 whitespace-nowrap">{ago(c.at)}</td>
+            <td className="py-3 px-4">{c.affiliate}<div className="text-xs text-slate-400">{c.payoutDetails}</div></td>
+            <td className="py-3 px-4">{c.referred}</td>
+            <td className="py-3 px-4 font-semibold">{money(c.amount, c.currency)}</td>
+            <td className="py-3 px-4">{c.status}</td>
+            <td className="py-3 px-4 text-right whitespace-nowrap">
+              {c.status === 'pending' && <button onClick={() => run(() => api.platformCommissionStatus(c.id, 'approved'))} className={act + ' text-green-700'}>Approve</button>}
+              {c.status === 'approved' && <button onClick={() => window.confirm('Mark as paid? Do this after you have sent the money.') && run(() => api.platformCommissionStatus(c.id, 'paid'))} className={act + ' text-green-700'}>Mark paid</button>}
+              {(c.status === 'pending' || c.status === 'approved') && <button onClick={() => window.confirm('Void this commission?') && run(() => api.platformCommissionStatus(c.id, 'void'))} className={act + ' text-rose-600'}>Void</button>}
             </td>
           </tr>
         ))}

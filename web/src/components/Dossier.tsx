@@ -89,6 +89,13 @@ export default function Dossier({ contact, bookingUrl, onClose, onChanged, team 
         </div>
 
         <div className="p-5 overflow-y-auto space-y-5 text-xs">
+          {contact.handoffAt && !contact.botActive && (
+            <div className="bg-rose-950/40 border border-rose-800/60 rounded-xl p-3.5">
+              <div className="font-bold text-rose-300">🙋 Asked to talk to a person</div>
+              <p className="mt-1 text-slate-300 whitespace-pre-line">{contact.handoffSummary || 'Writing a briefing…'}</p>
+              <p className="mt-2 text-[11px] text-slate-400">The bot is paused for this chat. Use Automation below to hand it back.</p>
+            </div>
+          )}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 bg-slate-950 p-3.5 rounded-xl border border-slate-800">
             <div>
               <label className="text-[11px] font-semibold text-slate-400 block mb-1">Lead Stage</label>

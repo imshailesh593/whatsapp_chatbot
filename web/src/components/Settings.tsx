@@ -6,6 +6,8 @@ import BotBuilder from './BotBuilder';
 import Billing from './Billing';
 import PipelineEditor from './PipelineEditor';
 import Integrations from './Integrations';
+import Appointments from './Appointments';
+import ReferAndEarn from './ReferAndEarn';
 
 export default function Settings({ overview, me, onChanged }: { overview: Overview; me: AdminUser; onChanged: () => void }) {
   return (
@@ -13,9 +15,11 @@ export default function Settings({ overview, me, onChanged }: { overview: Overvi
       <WhatsAppLink onChanged={onChanged} />
       <BusinessProfile workspace={overview.workspace} onSaved={onChanged} />
       <BotBuilder overview={overview} onSaved={onChanged} />
+      <Appointments me={me} />
       <PipelineEditor stages={overview.stages} onSaved={onChanged} />
       <Integrations />
       <Billing me={me} />
+      <ReferAndEarn me={me} />
       <Admins me={me} />
     </div>
   );

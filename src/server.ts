@@ -10,6 +10,7 @@ import { DEFAULT_WORKSPACE_ID } from './lib/workspaces';
 import { startBroadcastWorker } from './services/broadcast';
 import { startWebhookWorker } from './services/integrations';
 import { startFollowUpWorker } from './services/crm';
+import { startAppointmentWorker } from './services/calendar';
 import { registerPublicApi } from './publicApi';
 
 dotenv.config();
@@ -54,6 +55,7 @@ app.get('/qr/status', async (req, reply) => {
 const broadcasts = startBroadcastWorker();
 const webhooks = startWebhookWorker();
 const followUps = startFollowUpWorker();
+const appointments = startAppointmentWorker();
 let client: { stop(): Promise<void> } | null = null;
 startWhatsApp()
   .then((c) => (client = c))
@@ -63,6 +65,7 @@ const shutdown = async () => {
   broadcasts.stop();
   webhooks.stop();
   followUps.stop();
+  appointments.stop();
   await app.close();
   await client?.stop();
   await prisma.$disconnect();

@@ -24,6 +24,8 @@ export interface Contact {
   progress: number;
   targetCountry: string | null;
   botActive: boolean;
+  handoffAt: string | null;
+  handoffSummary: string;
   answers: Record<string, string>;
   notes: string | null;
   hasLead: boolean;
@@ -61,6 +63,8 @@ export interface Workspace {
   timezone: string;
   notifyEmail: string;
   notifyPhone: string;
+  handoffEnabled: boolean;
+  handoffMessage: string;
   onboardingCompleted: boolean;
   botEnabled: boolean;
 }
@@ -297,4 +301,45 @@ export interface CouponInfo {
   active: boolean;
   note: string;
   createdAt: string;
+}
+
+export interface CalendarInfo {
+  googleAvailable: boolean;
+  connected: boolean;
+  email: string;
+  timezone: string;
+  settings: {
+    slotMinutes: number;
+    bufferMinutes: number;
+    workDays: number[];
+    workStart: string;
+    workEnd: string;
+    noticeHours: number;
+    daysAhead: number;
+    reminderHours: number;
+  } | null;
+  appointments: { id: string; phone: string; name: string | null; startsAt: string; when: string; past: boolean }[];
+}
+
+type Totals = Record<string, { pending: number; approved: number; paid: number }>;
+
+export interface ReferralInfo {
+  enabled: boolean;
+  percent: number;
+  months: number;
+  bonusDays: number;
+  code: string;
+  link: string;
+  payoutDetails: string;
+  signedUp: number;
+  paying: number;
+  totals: Totals;
+  referrals: { name: string; joinedAt: string; paying: boolean }[];
+  commissions: { id: string; referred: string; amount: number; currency: string; status: string; at: string; paidAt: string | null }[];
+}
+
+export interface AffiliateAdmin {
+  settings: { enabled: boolean; percent: number; months: number; bonusDays: number };
+  affiliates: { id: string; businessName: string; code: string | null; payoutDetails: string; referred: number; totals: Totals }[];
+  commissions: { id: string; affiliate: string; payoutDetails: string; referred: string; amount: number; currency: string; status: string; at: string; paidAt: string | null }[];
 }

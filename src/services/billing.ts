@@ -1,4 +1,5 @@
 import crypto from 'crypto';
+import { recordCommission } from './affiliate';
 import type { Workspace } from '@prisma/client';
 import { prisma } from '../lib/prisma';
 import { invalidateConfig } from './botConfig';
@@ -129,9 +130,10 @@ async function firstTime(id: string): Promise<boolean> {
 }
 
 async function recordPayment(workspaceId: string, p: { provider: Provider; ref: string; plan: string; amount: number; currency: string; status: string }) {
-  await prisma.payment
+  const row = await prisma.payment
     .create({ data: { workspaceId, provider: p.provider, providerRef: p.ref, plan: p.plan, amount: p.amount, currency: p.currency.toUpperCase(), status: p.status } })
-    .catch(() => undefined); // same payment reported twice
+    .catch(() => null); // same payment reported twice
+  if (row) await recordCommission(row);
 }
 
 const secondsToDate = (s: unknown) => (typeof s === 'number' ? new Date(s * 1000) : null);

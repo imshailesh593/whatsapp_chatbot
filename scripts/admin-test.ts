@@ -19,6 +19,7 @@ import { prisma } from '../src/lib/prisma';
 import { handleIncomingMessage } from '../src/services/engine';
 import { parseDraft } from '../src/services/onboarding';
 import { setSetting } from '../src/services/settings';
+import { recordCommission } from '../src/services/affiliate';
 import { hashPassword } from '../src/lib/auth';
 
 const ok = (c: any, m: string) => { if (!c) throw new Error('FAIL: ' + m); console.log('  ok -', m); };
@@ -360,6 +361,94 @@ async function cleanup() {
   ok((await call(hB, 'POST', '/admin/api/billing/redeem', { code: off })).statusCode === 400, 'a disabled code is refused');
   ok((await call(hRoot, 'DELETE', `/admin/api/super/coupons/${offId}`)).statusCode === 200, 'operator deletes a code');
   await prisma.coupon.deleteMany({});
+
+  // ---- Google Calendar (routes; the booking conversation is covered by calendar-test) ----
+  ok((await app.inject('/admin/api/calendar')).statusCode === 401, 'calendar settings need a login');
+  r = await call(hA, 'GET', '/admin/api/calendar');
+  ok(r.json().connected === false && r.json().googleAvailable === false && r.json().settings === null && r.json().appointments.length === 0, 'a new business has no calendar linked');
+  ok((await call(hA, 'GET', '/admin/api/calendar/connect')).statusCode === 400, 'connecting is refused with a clear message while the server has no Google keys');
+  ok((await app.inject('/admin/api/calendar/callback?code=x&state=forged')).headers.location === '/admin/?calendar=denied', 'a forged sign-in state is turned away');
+  ok((await call(hA, 'PUT', '/admin/api/calendar', { slotMinutes: 30 })).statusCode === 409, 'settings need a linked calendar first');
+  ok((await call(hA, 'POST', '/admin/api/appointments/nope/cancel')).statusCode === 404, 'cancelling an unknown appointment is a 404');
+  process.env.GOOGLE_CLIENT_ID = 'cid';
+  process.env.GOOGLE_CLIENT_SECRET = 'cs';
+  r = await call(hA, 'GET', '/admin/api/calendar/connect');
+  ok(r.statusCode === 200 && r.json().url.startsWith('https://accounts.google.com/') && r.json().url.includes('calendar.events'), 'with keys, connecting returns the Google consent link');
+  await prisma.calendarConfig.create({ data: { workspaceId: wsA, refreshToken: 'x', googleEmail: 'a@b.c' } });
+  ok((await call(hA, 'PUT', '/admin/api/calendar', { slotMinutes: 3 })).statusCode === 400, 'invalid booking rules are refused');
+  ok((await call(hA, 'PUT', '/admin/api/calendar', { workStart: '18:00', workEnd: '09:00' })).statusCode === 400, 'closing before opening is refused');
+  ok((await call(hA, 'PUT', '/admin/api/calendar', { slotMinutes: 45, workDays: [1, 2, 3] })).statusCode === 200, 'booking rules are saved');
+  r = await call(hA, 'GET', '/admin/api/calendar');
+  ok(r.json().connected && r.json().settings.slotMinutes === 45 && r.json().settings.workDays.join() === '1,2,3', 'and read back');
+  ok(!JSON.stringify(r.json()).includes('refresh') && !JSON.stringify(r.json()).includes('"x"'), 'the stored Google token is never sent to the browser');
+  await prisma.calendarConfig.deleteMany({ where: { workspaceId: wsA } });
+  delete process.env.GOOGLE_CLIENT_ID;
+  delete process.env.GOOGLE_CLIENT_SECRET;
+
+  // ---- refer and earn ----
+  await setSetting('affiliate', {});
+  r = await call(hA, 'GET', '/admin/api/referral');
+  const refCode = r.json().code as string;
+  ok(r.json().enabled === false && /^[A-Z2-9]{7}$/.test(refCode) && r.json().link.endsWith('/admin/?ref=' + refCode), 'every business gets a referral code and link (programme off by default)');
+  ok((await call(hA, 'GET', '/admin/api/referral')).json().code === refCode, 'the code is stable');
+  r = await call(J, 'POST', '/admin/api/signup', { businessName: 'Early Bird', email: `early${DOMAIN}`, password: 'early owner password', ref: refCode });
+  ok((await prisma.workspace.findUnique({ where: { id: r.json().user.workspace.id } }))!.referredById === null, 'while the programme is off, referral links are ignored');
+  ok((await call(hA, 'PUT', '/admin/api/super/affiliates/settings', { enabled: true })).statusCode === 403, 'a business cannot change the programme');
+  ok((await call(hRoot, 'PUT', '/admin/api/super/affiliates/settings', { percent: 95 })).statusCode === 400 && (await call(hRoot, 'PUT', '/admin/api/super/affiliates/settings', { months: 0 })).statusCode === 400, 'out-of-range programme settings are refused');
+  r = await call(hRoot, 'PUT', '/admin/api/super/affiliates/settings', { enabled: true, percent: 20, months: 3, bonusDays: 5 });
+  ok(r.statusCode === 200 && r.json().enabled && r.json().percent === 20, 'the operator switches the programme on');
+  r = await call(J, 'POST', '/admin/api/signup', { businessName: 'Referred Co', email: `ref1${DOMAIN}`, password: 'referred owner password', ref: refCode.toLowerCase() });
+  const wsR = r.json().user.workspace.id as string;
+  const refRow = (await prisma.workspace.findUnique({ where: { id: wsR } }))!;
+  ok(refRow.referredById === wsA, 'signing up through the link records who referred the business (case-insensitive)');
+  ok(Math.abs(refRow.trialEndsAt!.getTime() - (Date.now() + 19 * 86_400_000)) < 3_600_000, 'the new business gets the bonus trial days on top of the normal trial');
+  r = await call(J, 'POST', '/admin/api/signup', { businessName: 'Bogus Ref', email: `ref2${DOMAIN}`, password: 'bogus owner password', ref: 'ZZZZZZZ' });
+  const bogus = (await prisma.workspace.findUnique({ where: { id: r.json().user.workspace.id } }))!;
+  ok(r.statusCode === 200 && bogus.referredById === null && Math.abs(bogus.trialEndsAt!.getTime() - (Date.now() + 14 * 86_400_000)) < 3_600_000, 'an unknown code does not block sign-up and gives no bonus');
+
+  const pay = async (amount: number, ref: string, status = 'paid', workspaceId = wsR) => {
+    const p = await prisma.payment.create({ data: { workspaceId, provider: 'stripe', providerRef: ref, plan: 'growth', amount, currency: 'INR', status } });
+    await recordCommission(p);
+    await recordCommission(p); // the same payment reported twice
+    return p;
+  };
+  await pay(299_900, 'aff-1');
+  let ledger = await prisma.affiliateCommission.findMany({ where: { affiliateId: wsA } });
+  ok(ledger.length === 1 && ledger[0].amount === 59_980 && ledger[0].status === 'pending' && ledger[0].currency === 'INR', 'a referred business paying earns the referrer 20%, pending');
+  await pay(299_900, 'aff-failed', 'failed');
+  await pay(299_900, 'aff-2');
+  await pay(299_900, 'aff-3');
+  await pay(299_900, 'aff-4');
+  ok((await prisma.affiliateCommission.count({ where: { affiliateId: wsA } })) === 3, 'commission stops after the configured number of payments');
+  const wsSelf = (await prisma.workspace.findUnique({ where: { id: wsA } }))!;
+  await prisma.workspace.update({ where: { id: wsA }, data: { referredById: wsA } });
+  await pay(100_000, 'aff-self', 'paid', wsA);
+  await prisma.workspace.update({ where: { id: wsA }, data: { referredById: wsSelf.referredById } });
+  ok((await prisma.affiliateCommission.count({ where: { affiliateId: wsA } })) === 3, 'a business never earns from its own payments');
+
+  r = await call(hA, 'GET', '/admin/api/referral');
+  ok(r.json().signedUp === 1 && r.json().paying === 1 && r.json().totals.INR.pending === 179_940, 'the referrer sees sign-ups, paying businesses and what is pending');
+  ok(r.json().referrals[0].name === 'Ref…' && r.json().commissions[0].referred === 'Ref…', 'referred business names are masked');
+  ok(!JSON.stringify(r.json()).includes('Referred Co'), 'the full name of a referred business is not exposed');
+
+  r = await call(hRoot, 'GET', '/admin/api/super/affiliates');
+  const mine = r.json().affiliates.find((a: any) => a.id === wsA);
+  ok(!!mine && mine.referred === 1 && mine.totals.INR.pending === 179_940, 'the operator sees every referrer and what they are owed');
+  const cid = r.json().commissions.find((c: any) => c.referred === 'Referred Co').id as string;
+  ok((await call(hRoot, 'POST', `/admin/api/super/commissions/${cid}/status`, { status: 'paid' })).statusCode === 400, 'a commission cannot be paid before it is approved');
+  ok((await call(hRoot, 'POST', `/admin/api/super/commissions/${cid}/status`, { status: 'approved' })).statusCode === 200, 'approve');
+  ok((await call(hRoot, 'POST', `/admin/api/super/commissions/${cid}/status`, { status: 'paid' })).statusCode === 200, 'mark paid');
+  ok((await call(hRoot, 'POST', `/admin/api/super/commissions/${cid}/status`, { status: 'void' })).statusCode === 400, 'a paid commission is final');
+  ok((await call(hA, 'POST', `/admin/api/super/commissions/${cid}/status`, { status: 'void' })).statusCode === 403, 'a business cannot touch commissions');
+  r = await call(hA, 'GET', '/admin/api/referral');
+  ok(r.json().totals.INR.paid === 59_980 && r.json().totals.INR.pending === 119_960, 'totals follow the status changes');
+  ok((await call(hA, 'PUT', '/admin/api/referral', { payoutDetails: 'UPI: asha@bank' })).statusCode === 200 && (await call(hA, 'GET', '/admin/api/referral')).json().payoutDetails === 'UPI: asha@bank', 'the referrer saves payout details');
+  const ad = (await call(hRoot, 'GET', '/admin/api/super/affiliates')).json().commissions[0];
+  ok(ad.payoutDetails === 'UPI: asha@bank', 'the operator sees where to pay');
+  await call(hRoot, 'PUT', '/admin/api/super/affiliates/settings', { enabled: false });
+  await pay(299_900, 'aff-off');
+  ok((await prisma.affiliateCommission.count({ where: { affiliateId: wsA } })) === 3, 'programme off: no new commission');
+  await setSetting('affiliate', {});
 
   // ---- WhatsApp slots ----
   ok((await call(hRoot, 'PUT', '/admin/api/super/settings', { maxConnections: 0 })).json().max >= 1 && (await call(hRoot, 'PUT', '/admin/api/super/settings', { maxConnections: 5000 })).json().max !== 5000, 'slot limit must be between 1 and 500');

@@ -13,7 +13,7 @@ const slugify = (s: string) =>
     .slice(0, 40) || 'business';
 
 /** Creates a tenant and its first (owner) user. The bot stays paused until the owner goes live. */
-export async function createWorkspaceWithOwner(opts: { businessName: string; email: string; password: string }) {
+export async function createWorkspaceWithOwner(opts: { businessName: string; email: string; password: string; referredById?: string | null; bonusTrialDays?: number }) {
   const base = slugify(opts.businessName);
   let slug = base;
   for (let n = 2; await prisma.workspace.findUnique({ where: { slug } }); n++) slug = `${base}-${n}`;
@@ -25,7 +25,8 @@ export async function createWorkspaceWithOwner(opts: { businessName: string; ema
       businessName: opts.businessName,
       botEnabled: false,
       stages: { create: DEFAULT_STAGES.map((s, position) => ({ ...s, position })) },
-      trialEndsAt: new Date(Date.now() + TRIAL_DAYS * 86_400_000),
+      referredById: opts.referredById ?? null,
+      trialEndsAt: new Date(Date.now() + (TRIAL_DAYS + (opts.referredById ? opts.bonusTrialDays ?? 0 : 0)) * 86_400_000),
       adminUsers: { create: { email: opts.email, passwordHash, role: 'owner' } }
     },
     include: { adminUsers: true }
