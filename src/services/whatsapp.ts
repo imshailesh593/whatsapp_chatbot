@@ -5,7 +5,9 @@ import qrcodeTerminal from 'qrcode-terminal';
 import { handleIncomingMessage } from './engine';
 import { setTransport, sendTextMessage } from './transport';
 import { UNSUPPORTED_MEDIA_MESSAGE } from './botConfig';
+import os from 'os';
 import { prisma } from '../lib/prisma';
+import { getSetting } from './settings';
 
 export type WaStatus = 'starting' | 'qr' | 'authenticated' | 'ready' | 'disconnected' | 'off';
 
@@ -85,6 +87,7 @@ export class WaConnection {
   private stopped = false;
   private attempt = 0;
   private connecting = false;
+  private qrTimer: NodeJS.Timeout | null = null;
   private readonly authDir: string;
   private readonly jids = new Map<string, string>();
   private readonly chains = new Map<string, Promise<void>>();
@@ -112,6 +115,9 @@ export class WaConnection {
     if (this.connecting || this.status !== 'off') return;
     this.connecting = true;
     try {
+      // Each linked number keeps a live session in memory: new links wait for a free slot (existing ones always reconnect)
+      const { used, max } = await connectionSlots();
+      if (used >= max) throw new SlotsFullError();
       this.stopped = false;
       this.attempt = 0;
       await this.open();
@@ -137,11 +143,16 @@ export class WaConnection {
       // already closed
     }
     fs.rmSync(this.authDir, { recursive: true, force: true });
+    if (this.qrTimer) {
+      clearTimeout(this.qrTimer);
+      this.qrTimer = null;
+    }
     this.status = 'off';
     this.qr = null;
   }
 
   async stop(): Promise<void> {
+    if (this.qrTimer) clearTimeout(this.qrTimer);
     this.stopped = true;
     try {
       this.sock?.end(undefined);
@@ -261,12 +272,26 @@ export class WaConnection {
       if (qr) {
         this.status = 'qr';
         this.qr = qr;
+        // An unscanned QR must not hold a slot forever
+        if (!this.qrTimer) {
+          this.qrTimer = setTimeout(() => {
+            this.qrTimer = null;
+            if (this.status === 'qr') {
+              console.log(`[wa ${this.workspaceId.slice(0, 8)}] QR not scanned in 5 minutes, releasing the slot`);
+              void this.disconnect();
+            }
+          }, 5 * 60_000);
+        }
         console.log(`[wa ${this.workspaceId.slice(0, 8)}] QR ready`);
         if (process.env.WA_QR_IN_LOG === '1') qrcodeTerminal.generate(qr, { small: true });
       }
       if (connection === 'open') {
         this.status = 'ready';
         this.qr = null;
+        if (this.qrTimer) {
+          clearTimeout(this.qrTimer);
+          this.qrTimer = null;
+        }
         this.phone = sock.user?.id ? userPart(String(sock.user.id)) : this.phone;
         this.attempt = 0;
         console.log(`[wa ${this.workspaceId.slice(0, 8)}] connected`);
@@ -319,6 +344,24 @@ export async function startWhatsApp(): Promise<{ stop(): Promise<void> }> {
       await Promise.all([...connections.values()].map((c) => c.stop()));
     }
   };
+}
+
+export class SlotsFullError extends Error {
+  constructor() {
+    super('WhatsApp connections are full right now. Please try again later: we have been notified.');
+  }
+}
+
+/** How many numbers are linked (or linking) versus how many this server is set up to hold. */
+export async function connectionSlots(): Promise<{ used: number; max: number }> {
+  const configured = await getSetting<number>('waMaxConnections', 0);
+  const max = configured > 0 ? configured : Number(process.env.WA_MAX_CONNECTIONS) || 20;
+  return { used: [...connections.values()].filter((c) => c.status !== 'off').length, max };
+}
+
+export function serverMemory() {
+  const mem = process.memoryUsage();
+  return { botRssMb: Math.round(mem.rss / 1048576), systemTotalMb: Math.round(os.totalmem() / 1048576), systemFreeMb: Math.round(os.freemem() / 1048576) };
 }
 
 export const waSummary = () => ({

@@ -276,3 +276,12 @@ export interface BroadcastInfo {
   createdAt: string;
   createdBy: string;
 }
+
+export interface PlatformSettingsInfo {
+  platformSender: boolean;
+  used: number;
+  max: number;
+  botRssMb: number;
+  systemTotalMb: number;
+  systemFreeMb: number;
+}

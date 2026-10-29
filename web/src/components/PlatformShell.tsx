@@ -4,7 +4,7 @@ import {
 } from 'lucide-react';
 import { api } from '../api';
 import { ago } from '../config';
-import type { AdminUser } from '../types';
+import type { AdminUser, PlatformSettingsInfo } from '../types';
 import Platform from './Platform';
 
 type View = 'dashboard' | 'clients' | 'subscriptions' | 'payments' | 'plans' | 'audit' | 'settings';
@@ -87,6 +87,21 @@ function Kpi({ label, value, sub, icon, delta }: { label: string; value: string 
   );
 }
 
+function Capacity({ c }: { c: { used: number; max: number; botRssMb: number; systemTotalMb: number; systemFreeMb: number } }) {
+  const pct = Math.min(100, Math.round((c.used / c.max) * 100));
+  const warn = pct >= 80;
+  return (
+    <div className={card + ' p-4 flex flex-wrap items-center gap-x-8 gap-y-3 ' + (warn ? 'border-amber-300 bg-amber-50' : '')}>
+      <div className="min-w-[220px] flex-1">
+        <div className="flex justify-between text-xs mb-1"><span className="font-semibold text-slate-700">WhatsApp slots</span><span className="text-slate-600">{c.used} of {c.max} in use</span></div>
+        <div className="h-2 rounded-full bg-slate-200 overflow-hidden"><div className={'h-full ' + (pct >= 100 ? 'bg-rose-500' : warn ? 'bg-amber-500' : 'bg-[#4b7f2c]')} style={{ width: Math.max(pct, 2) + '%' }} /></div>
+      </div>
+      <div className="text-xs text-slate-600">Bot memory <strong>{c.botRssMb} MB</strong> · server free <strong>{c.systemFreeMb}</strong> of {c.systemTotalMb} MB</div>
+      {warn && <div className="text-xs font-semibold text-amber-800">{pct >= 100 ? 'Full: new customers cannot link a number.' : 'Nearly full.'} Raise the limit in Settings once the server has room.</div>}
+    </div>
+  );
+}
+
 interface Point { label: string; value: number }
 
 /** Bars with a value tooltip on hover, a 3-step y axis and sparse x labels. */
@@ -144,6 +159,7 @@ function LineChart({ data, format = (n: number) => String(n) }: { data: Point[];
 
 interface DashboardData {
   period: number;
+  capacity: { used: number; max: number; botRssMb: number; systemTotalMb: number; systemFreeMb: number };
   kpi: Record<string, any>;
   revenueDaily: Point[];
   newClientsDaily: Point[];
@@ -185,6 +201,8 @@ function Dashboard() {
         <Kpi label="Contacts" value={k.contacts} icon={<ClipboardList className="w-4 h-4" />} />
         <Kpi label="Conversations" value={k.conversations} sub={`started in the last ${days} days`} icon={<Repeat className="w-4 h-4" />} />
       </div>
+
+      <Capacity c={d.capacity} />
 
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-5">
         <div className={card + ' p-5'}><h3 className="font-bold text-slate-900">Revenue by month</h3><p className="text-xs text-slate-500 mb-3">Payments collected, last 12 months (₹)</p><LineChart data={d.monthlyRevenue} format={inr} /></div>
@@ -273,10 +291,13 @@ function AuditView() {
 
 function PlatformSettings() {
   const [on, setOn] = useState<boolean | null>(null);
+  const [cap, setCap] = useState<PlatformSettingsInfo | null>(null);
+  const [maxInput, setMaxInput] = useState('');
+  const [saved, setSaved] = useState('');
   const [wa, setWa] = useState<string>('…');
   const [error, setError] = useState('');
   const load = useCallback(() => {
-    api.platformSettings().then((s) => setOn(s.platformSender)).catch((e) => setError((e as Error).message));
+    api.platformSettings().then((s) => { setOn(s.platformSender); setCap(s); setMaxInput(String(s.max)); }).catch((e) => setError((e as Error).message));
     api.platformWorkspaces().then((w) => setWa(w.find((x) => x.id === 'default-workspace')?.whatsapp ?? 'off')).catch(() => undefined);
   }, []);
   useEffect(() => { load(); }, [load]);
@@ -286,6 +307,19 @@ function PlatformSettings() {
     setError('');
     try {
       setOn((await api.platformSetSettings({ platformSender: !on })).platformSender);
+    } catch (err) {
+      setError((err as Error).message);
+    }
+  }
+
+  async function saveMax() {
+    setError('');
+    setSaved('');
+    try {
+      const s = await api.platformSetSettings({ maxConnections: Number(maxInput) });
+      setCap(s);
+      setMaxInput(String(s.max));
+      setSaved('Saved');
     } catch (err) {
       setError((err as Error).message);
     }
@@ -307,6 +341,18 @@ function PlatformSettings() {
         </div>
         {error && <p className="text-sm text-rose-600 mt-3" role="alert">{error}</p>}
       </div>
+      {cap && (
+        <div className={card + ' p-5'}>
+          <h3 className="font-bold text-slate-900">How many WhatsApp numbers this server holds</h3>
+          <p className="text-sm text-slate-500 mt-1">Every linked number keeps a live session in memory (about 115 MB each). When all slots are used, new customers see a &ldquo;slots full&rdquo; message instead of a QR code, and you get an entry in the audit log. Customers who are already linked are never affected. Unscanned QR codes release their slot after 5 minutes.</p>
+          <div className="mt-3 flex items-center gap-3 flex-wrap">
+            <input type="number" min={1} max={500} value={maxInput} onChange={(e) => setMaxInput(e.target.value)} className="w-24 border border-slate-300 rounded-lg px-3 py-2 text-sm" />
+            <button onClick={saveMax} className="px-4 py-2 bg-[#4b7f2c] hover:bg-green-800 text-white text-sm font-semibold rounded-lg">Save limit</button>
+            <span className="text-sm text-slate-600">{cap.used} in use · server has {cap.systemFreeMb} MB free of {cap.systemTotalMb} MB</span>
+            {saved && <span className="text-sm text-green-700">{saved}</span>}
+          </div>
+        </div>
+      )}
       <p className="text-xs text-slate-500 flex items-center space-x-1.5"><FileText className="w-3.5 h-3.5" /><span>Every change here is written to the audit log.</span></p>
     </div>
   );

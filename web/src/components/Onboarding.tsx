@@ -220,7 +220,7 @@ export default function Onboarding({ user, onDone, onSignOut }: { user: AdminUse
         {step === 2 && (
           <div className="max-w-2xl space-y-4">
             <WhatsAppLink />
-            <p className="text-xs text-slate-400">Use the phone number your customers already message. You can do this later from Settings.</p>
+            <p className="text-xs text-slate-400">Use the phone number your customers already message. It stays your own WhatsApp account, linked like WhatsApp Web, and every reply, broadcast and alert goes out from it. WhatsApp can restrict numbers that send unwanted messages, so keep your messages relevant. You can do this later from Settings.</p>
             <div className="flex gap-2">
               <button onClick={() => setStep(1)} className="px-4 py-2 bg-slate-800 text-slate-200 text-xs rounded-lg border border-slate-700">Back</button>
               <button onClick={() => setStep(3)} className="px-5 py-2 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs rounded-lg">Continue</button>

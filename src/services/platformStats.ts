@@ -1,6 +1,6 @@
 import { prisma } from '../lib/prisma';
 import { accessState, planById } from '../plans';
-import { waFor } from './whatsapp';
+import { connectionSlots, serverMemory, waFor } from './whatsapp';
 
 const dayKey = (d: Date) => d.toISOString().slice(0, 10);
 const monthKey = (d: Date) => d.toISOString().slice(0, 7);
@@ -77,8 +77,10 @@ export async function platformDashboard(period: number) {
   const newClients = workspaces.filter((w) => w.createdAt >= since).length;
   const prevNewClients = workspaces.filter((w) => w.createdAt >= prevSince && w.createdAt < since).length;
 
+  const slots = await connectionSlots();
   return {
     period,
+    capacity: { ...slots, ...serverMemory() },
     kpi: {
       mrr,
       arpu: paid.length ? Math.round(mrr / paid.length) : 0,

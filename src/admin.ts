@@ -22,7 +22,7 @@ import { captureReplies, sendTextMessage } from './services/transport';
 import { invalidateConfig, loadConfig, saveServices, seedDefaultWorkspace, type BotConfig } from './services/botConfig';
 import { onboardingAvailable, onboardingTurn, parseDraft, type ChatTurn, type Draft } from './services/onboarding';
 import { TEMPLATES, getTemplate } from './templates';
-import { waFor } from './services/whatsapp';
+import { SlotsFullError, connectionSlots, serverMemory, waFor } from './services/whatsapp';
 import { PRODUCT_NAME } from './brand';
 import { sendTestAlert, smtpConfigured } from './services/alerts';
 import { getStages, saveStages, stageExists } from './services/pipeline';
@@ -569,8 +569,17 @@ export function registerAdmin(app: FastifyInstance, opts: { getQr: (workspaceId:
   // ---- WhatsApp link (one per workspace) ----
   const waSnapshot = async (id: string) => ({ status: waFor(id).status, qr: await opts.getQr(id) });
   app.get('/admin/api/whatsapp', { preHandler: guard }, async (req, reply) => reply.header('Cache-Control', 'no-store').send(await waSnapshot(wsId(req))));
-  app.post('/admin/api/whatsapp/connect', { preHandler: manager }, async (req) => {
-    await waFor(wsId(req)).connect();
+  app.post('/admin/api/whatsapp/connect', { preHandler: manager }, async (req, reply) => {
+    try {
+      await waFor(wsId(req)).connect();
+    } catch (err) {
+      if (err instanceof SlotsFullError) {
+        console.warn(`[wa] slots full: ${wsId(req)} could not link a number`);
+        void audit(req, 'wa.slots_full', wsId(req), 'a customer tried to link a number but all slots are used');
+        return reply.status(503).send({ error: err.message });
+      }
+      throw err;
+    }
     return waSnapshot(wsId(req));
   });
   app.post('/admin/api/whatsapp/disconnect', { preHandler: manager }, async (req) => {
@@ -940,14 +949,19 @@ export function registerAdmin(app: FastifyInstance, opts: { getQr: (workspaceId:
     return { plans: PLANS.map((p) => ({ id: p.id, name: p.name, price: p.price, limits: p.limits, integrations: p.integrations, clients: n.get(p.id) ?? 0 })), trial: n.get('trial') ?? 0, internal: n.get('internal') ?? 0 };
   });
 
-  app.get('/admin/api/super/settings', { preHandler: superOnly }, async () => ({ platformSender: await getSetting<boolean>('platformSender', false) }));
+  const platformSettings = async () => ({ platformSender: await getSetting<boolean>('platformSender', false), ...(await connectionSlots()), ...serverMemory() });
+  app.get('/admin/api/super/settings', { preHandler: superOnly }, async () => platformSettings());
   app.put('/admin/api/super/settings', { preHandler: superOnly }, async (req) => {
-    const b = (req.body ?? {}) as { platformSender?: boolean };
+    const b = (req.body ?? {}) as { platformSender?: boolean; maxConnections?: number };
+    if (Number.isInteger(b.maxConnections) && b.maxConnections! >= 1 && b.maxConnections! <= 500) {
+      await setSetting('waMaxConnections', b.maxConnections);
+      await audit(req, 'setting.waMaxConnections', null, String(b.maxConnections));
+    }
     if (typeof b.platformSender === 'boolean') {
       await setSetting('platformSender', b.platformSender);
       await audit(req, 'setting.platformSender', null, b.platformSender ? 'alerts sent from the platform WhatsApp number' : 'alerts sent from each client number');
     }
-    return { platformSender: await getSetting<boolean>('platformSender', false) };
+    return platformSettings();
   });
 
   app.get('/admin/api/super/overview', { preHandler: superOnly }, async () => {

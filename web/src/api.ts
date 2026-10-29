@@ -1,4 +1,4 @@
-import type { AuditEntry, PlatformDetail, PlatformOverview, LeadEventInfo, AnalyticsData, ApiKeyInfo, IntegrationsInfo, WebhookInfo, BroadcastInfo, StageDef, BillingInfo, AdminRow, AdminUser, ChatMessage, ChatTurn, Contact, Draft, Overview, PatchBody, PlatformWorkspace, ServiceDef, TemplateInfo, WaSnapshot, Workspace } from './types';
+import type { PlatformSettingsInfo, AuditEntry, PlatformDetail, PlatformOverview, LeadEventInfo, AnalyticsData, ApiKeyInfo, IntegrationsInfo, WebhookInfo, BroadcastInfo, StageDef, BillingInfo, AdminRow, AdminUser, ChatMessage, ChatTurn, Contact, Draft, Overview, PatchBody, PlatformWorkspace, ServiceDef, TemplateInfo, WaSnapshot, Workspace } from './types';
 
 export class UnauthorizedError extends Error {}
 
@@ -56,8 +56,8 @@ export const api = {
   platformSubscriptions: () => request<{ subscriptions: { id: string; business: string; owner: string | null; plan: string; status: string; access: string; provider: string | null; renews: string | null; cancelAtPeriodEnd: boolean; priceInr: number }[] }>('/admin/api/super/subscriptions').then((r) => r.subscriptions),
   platformPayments: () => request<{ payments: { id: string; business: string; provider: string; plan: string; amount: number; currency: string; status: string; at: string }[] }>('/admin/api/super/payments').then((r) => r.payments),
   platformPlans: () => request<{ plans: { id: string; name: string; price: { INR: number; USD: number }; limits: { conversations: number; aiReplies: number; seats: number; broadcasts: number }; integrations: boolean; clients: number }[]; trial: number; internal: number }>('/admin/api/super/plans'),
-  platformSettings: () => request<{ platformSender: boolean }>('/admin/api/super/settings'),
-  platformSetSettings: (body: { platformSender: boolean }) => request<{ platformSender: boolean }>('/admin/api/super/settings', { method: 'PUT', body: JSON.stringify(body) }),
+  platformSettings: () => request<PlatformSettingsInfo>('/admin/api/super/settings'),
+  platformSetSettings: (body: { platformSender?: boolean; maxConnections?: number }) => request<PlatformSettingsInfo>('/admin/api/super/settings', { method: 'PUT', body: JSON.stringify(body) }),
   platformOverview: () => request<PlatformOverview>('/admin/api/super/overview'),
   platformDetail: (id: string) => request<PlatformDetail>(`/admin/api/super/workspaces/${encodeURIComponent(id)}`),
   platformCreate: (body: { businessName: string; email: string; password: string; plan: string; days: number }) => post<{ id: string }>('/admin/api/super/workspaces', body),

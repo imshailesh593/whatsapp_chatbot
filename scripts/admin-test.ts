@@ -18,6 +18,7 @@ import { waFor } from '../src/services/whatsapp';
 import { prisma } from '../src/lib/prisma';
 import { handleIncomingMessage } from '../src/services/engine';
 import { parseDraft } from '../src/services/onboarding';
+import { setSetting } from '../src/services/settings';
 import { hashPassword } from '../src/lib/auth';
 
 const ok = (c: any, m: string) => { if (!c) throw new Error('FAIL: ' + m); console.log('  ok -', m); };
@@ -327,6 +328,19 @@ async function cleanup() {
   r = await call(hRoot, 'GET', '/admin/api/super/workspaces');
   ok(r.statusCode === 200 && r.json().workspaces.some((w: any) => w.id === wsA) && r.json().workspaces.some((w: any) => w.id === wsB), 'platform admin lists all workspaces');
   ok((await call(hRoot, 'POST', `/admin/api/super/workspaces/${wsA}/bot`, { enabled: false })).statusCode === 200 && (await prisma.workspace.findUnique({ where: { id: wsA } }))!.botEnabled === false, 'platform admin can suspend a bot');
+
+  // ---- WhatsApp slots ----
+  ok((await call(hRoot, 'PUT', '/admin/api/super/settings', { maxConnections: 0 })).json().max >= 1 && (await call(hRoot, 'PUT', '/admin/api/super/settings', { maxConnections: 5000 })).json().max !== 5000, 'slot limit must be between 1 and 500');
+  r = await call(hRoot, 'PUT', '/admin/api/super/settings', { maxConnections: 1 });
+  ok(r.json().max === 1 && typeof r.json().botRssMb === 'number' && r.json().systemTotalMb > 0, 'slot limit saved; memory figures reported');
+  const holder = waFor(wsB);
+  holder.status = 'ready'; // pretend business B has a linked number: the only slot is taken
+  r = await call(hA, 'POST', '/admin/api/whatsapp/connect');
+  ok(r.statusCode === 503 && /full/i.test(r.json().error) && waFor(wsA).status === 'off', 'all slots used: a new customer gets a clear message and no session is started');
+  ok((await call(hRoot, 'GET', '/admin/api/super/audit')).json().entries.some((e: any) => e.action === 'wa.slots_full'), 'the refused attempt is recorded for the operator');
+  ok((await call(hRoot, 'GET', '/admin/api/super/dashboard')).json().capacity.used === 1, 'dashboard reports slots in use');
+  holder.status = 'off';
+  await setSetting('waMaxConnections', 0);
 
   // ---- platform admin tools ----
   r = await call(hRoot, 'GET', '/admin/api/super/dashboard?days=7');
