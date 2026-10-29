@@ -6,3 +6,6 @@ dist
 web/node_modules
 web/dist
 .wa_auth
+
+# private credentials sheet: never commit
+credentials.md

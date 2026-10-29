@@ -9,6 +9,7 @@ Spec: [mns_institute_whatsapp_automation_blueprint.md](mns_institute_whatsapp_au
 
 - [User Guide](docs/USER_GUIDE.md): for businesses using the bot and their teams (set-up, CRM, hand-off, appointments, broadcasts, billing, referrals).
 - [Owner Guide](docs/OWNER_GUIDE.md): for the platform operator (clients, plans, codes, capacity, deployment, backups, security).
+- [System architecture](docs/ARCHITECTURE.md): components, data model, flows, billing, deployment, configuration and operations runbook.
 
 ## Multi-tenant (SaaS)
 
