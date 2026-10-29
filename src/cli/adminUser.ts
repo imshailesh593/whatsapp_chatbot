@@ -20,7 +20,7 @@ dotenv.config();
     await prisma.adminUser.update({ where: { email }, data: { passwordHash } });
     console.log(`Password reset for ${email}`);
   } else {
-    await prisma.adminUser.create({ data: { email, passwordHash } });
+    await prisma.adminUser.create({ data: { email, passwordHash, workspaceId: 'default-workspace', role: 'owner', isSuperAdmin: true } });
     console.log(`Admin created: ${email}`);
   }
   await prisma.$disconnect();

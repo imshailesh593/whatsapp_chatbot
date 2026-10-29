@@ -1,10 +1,11 @@
-export type ServiceId = 'COACHING' | 'LICENSING' | 'JOBS' | 'VISA_PR' | 'GENERAL';
 export type Status = 'IN_PROGRESS' | 'COMPLETED' | 'CONSULTATION_BOOKED' | 'FOLLOW_UP';
+export type Role = 'owner' | 'admin' | 'agent';
 
 export interface Contact {
   phone: string;
   name: string | null;
-  service: ServiceId | null;
+  service: string | null;
+  serviceTitle: string | null;
   status: Status;
   stage: string;
   step: number;
@@ -20,16 +21,43 @@ export interface Contact {
   isTest: boolean;
 }
 
-export interface ServiceInfo {
-  id: ServiceId;
+export interface QuestionDef {
+  key: string;
+  prompt: string;
+}
+
+export interface ServiceDef {
   title: string;
-  questions: { key: string; prompt: string }[];
+  keywords: string[];
+  questions: QuestionDef[];
+}
+
+export interface Workspace {
+  id: string;
+  slug: string;
+  industry: string;
+  businessName: string;
+  tagline: string;
+  description: string;
+  welcomeIntro: string;
+  formUrl: string;
+  bookingUrl: string;
+  bookingLabel: string;
+  bookingNote: string;
+  tone: string;
+  knowledge: string;
+  languages: string;
+  timezone: string;
+  notifyEmail: string;
+  notifyPhone: string;
+  onboardingCompleted: boolean;
+  botEnabled: boolean;
 }
 
 export interface Overview {
   whatsapp: string;
-  topmateUrl: string;
-  services: ServiceInfo[];
+  workspace: Workspace;
+  services: (ServiceDef & { id: string })[];
 }
 
 export interface ChatMessage {
@@ -48,9 +76,15 @@ export interface PatchBody {
 export interface AdminUser {
   id: string;
   email: string;
+  role: Role;
+  isSuperAdmin: boolean;
+  workspace: { id: string; businessName: string; onboardingCompleted: boolean; botEnabled: boolean } | null;
 }
 
-export interface AdminRow extends AdminUser {
+export interface AdminRow {
+  id: string;
+  email: string;
+  role: Role;
   createdAt: string;
   lastLoginAt: string | null;
 }
@@ -58,4 +92,46 @@ export interface AdminRow extends AdminUser {
 export interface WaSnapshot {
   status: string;
   qr: string | null;
+}
+
+export interface TemplateInfo {
+  id: string;
+  label: string;
+  description: string;
+  services: number;
+}
+
+/** What the onboarding assistant proposes; applied only after the owner confirms. */
+export interface Draft {
+  industry: string;
+  businessName: string;
+  tagline: string;
+  description: string;
+  welcomeIntro: string;
+  tone: string;
+  languages: string;
+  bookingLabel: string;
+  bookingNote: string;
+  knowledge: string;
+  services: ServiceDef[];
+}
+
+export interface ChatTurn {
+  role: 'user' | 'assistant';
+  text: string;
+}
+
+export interface PlatformWorkspace {
+  id: string;
+  businessName: string;
+  slug: string;
+  industry: string;
+  owner: string | null;
+  whatsapp: string;
+  botEnabled: boolean;
+  onboardingCompleted: boolean;
+  leads: number;
+  contacts: number;
+  users: number;
+  createdAt: string;
 }

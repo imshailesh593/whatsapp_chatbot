@@ -98,7 +98,7 @@ export default function Simulator({ onActivity }: { onActivity: () => void }) {
 
           <div className="space-y-4 mt-4">
             <div>
-              <label className="text-xs font-medium text-slate-300 block mb-1">Simulated candidate name (applies after reset)</label>
+              <label className="text-xs font-medium text-slate-300 block mb-1">Simulated customer name (applies after reset)</label>
               <input value={name} onChange={(e) => setName(e.target.value)}
                 className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-emerald-500" />
             </div>

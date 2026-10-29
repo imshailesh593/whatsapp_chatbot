@@ -1,8 +1,8 @@
 import { useMemo, useState } from 'react';
 import { Download, Phone, Search, UserCheck, Zap } from 'lucide-react';
 import { api } from '../api';
-import type { Contact, ServiceId, Status } from '../types';
-import { SERVICE_STYLE, STATUS_STYLE, ago, displayPhone, waLink } from '../config';
+import type { Contact, Status } from '../types';
+import { serviceStyle, STATUS_STYLE, ago, displayPhone, waLink } from '../config';
 
 interface Props {
   contacts: Contact[];
@@ -14,8 +14,14 @@ interface Props {
 
 export default function Crm({ contacts, includeTest, onIncludeTest, onOpen, onChanged }: Props) {
   const [search, setSearch] = useState('');
-  const [service, setService] = useState<'ALL' | ServiceId>('ALL');
+  const [service, setService] = useState<string>('ALL');
   const [status, setStatus] = useState<'ALL' | Status>('ALL');
+
+  const serviceOptions = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const c of contacts) if (c.service) m.set(c.service, c.serviceTitle ?? c.service);
+    return [...m.entries()];
+  }, [contacts]);
 
   const rows = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -47,10 +53,10 @@ export default function Crm({ contacts, includeTest, onIncludeTest, onOpen, onCh
           />
         </div>
         <div className="flex flex-wrap items-center gap-2 w-full md:w-auto">
-          <select value={service} onChange={(e) => setService(e.target.value as 'ALL' | ServiceId)} className={select}>
+          <select value={service} onChange={(e) => setService(e.target.value)} className={select}>
             <option value="ALL">All Services</option>
-            {(Object.keys(SERVICE_STYLE) as ServiceId[]).map((id) => (
-              <option key={id} value={id}>{SERVICE_STYLE[id].shortTitle}</option>
+            {serviceOptions.map(([id, title]) => (
+              <option key={id} value={id}>{title}</option>
             ))}
           </select>
           <select value={status} onChange={(e) => setStatus(e.target.value as 'ALL' | Status)} className={select}>
@@ -78,7 +84,7 @@ export default function Crm({ contacts, includeTest, onIncludeTest, onOpen, onCh
           <table className="w-full text-left text-xs sm:text-sm">
             <thead className="bg-slate-900/90 border-b border-slate-800 text-slate-400 font-semibold uppercase text-[10px] tracking-wider">
               <tr>
-                <th className="py-3 px-4">Candidate & Phone</th>
+                <th className="py-3 px-4">Contact & Phone</th>
                 <th className="py-3 px-4">Service</th>
                 <th className="py-3 px-4">Target Country</th>
                 <th className="py-3 px-4">Funnel Progress</th>
@@ -89,7 +95,7 @@ export default function Crm({ contacts, includeTest, onIncludeTest, onOpen, onCh
             </thead>
             <tbody className="divide-y divide-slate-800/60">
               {rows.map((c) => {
-                const svc = c.service ? SERVICE_STYLE[c.service] : null;
+                const svc = c.service ? serviceStyle(c.service, c.serviceTitle) : null;
                 return (
                   <tr key={c.phone} className="hover:bg-slate-900/50 transition cursor-pointer" onClick={() => onOpen(c.phone)}>
                     <td className="py-3.5 px-4">

@@ -1,16 +1,17 @@
-import { BUSINESS_NAME } from '../src/brand';
 // Engine-level end-to-end test against the real database with a fake WhatsApp transport.
+// Creates two throwaway workspaces (a full funnel and a minimal one), checks isolation, then deletes them.
 // Usage: npx tsx scripts/e2e.ts   (needs DATABASE_URL; GEMINI_API_KEY optional)
 import dotenv from 'dotenv';
 dotenv.config();
 import { prisma } from '../src/lib/prisma';
 import { setTransport } from '../src/services/transport';
-import { handleIncomingMessage, resolveService } from '../src/services/engine';
-import { QUESTION_BRANCHES } from '../src/constants/questions';
+import { handleIncomingMessage } from '../src/services/engine';
+import { loadConfig, resolveService, saveServices, invalidateConfig, sanitizeServices } from '../src/services/botConfig';
+import { getTemplate } from '../src/templates';
 
-const sent: { to: string; text: string }[] = [];
-setTransport({ sendText: async (to, text) => void sent.push({ to, text }) });
-const replies = (to: string) => sent.filter((s) => s.to === to).map((s) => s.text);
+const sent: { ws: string; to: string; text: string }[] = [];
+const wire = (ws: string) => setTransport(ws, { sendText: async (to, text) => void sent.push({ ws, to, text }) });
+const replies = (ws: string, to: string) => sent.filter((s) => s.ws === ws && s.to === to).map((s) => s.text);
 
 function assert(c: any, msg: string) {
   if (!c) throw new Error('ASSERT FAILED: ' + msg);
@@ -18,77 +19,126 @@ function assert(c: any, msg: string) {
 }
 
 async function main() {
-  console.log('[service resolution]');
-  for (const [input, want] of [['3', 'JOBS'], ['3.', 'JOBS'], ['option 2', 'LICENSING'], ['1️⃣', 'COACHING'], ['I need a visa', 'VISA_PR'], ['PR', 'VISA_PR'], ['I want to prepare', undefined], ['7', undefined], ['hello', undefined]] as const) {
-    assert(resolveService(input) === want, `"${input}" -> ${want}`);
-  }
-
-  const created: string[] = [];
-  const services = ['COACHING', 'LICENSING', 'JOBS', 'VISA_PR', 'GENERAL'];
-  const run = Date.now().toString().slice(-6);
-
-  for (let i = 0; i < services.length; i++) {
-    const svc = services[i];
-    const phone = `9199${run}${i}`;
-    created.push(phone);
-    const qs = QUESTION_BRANCHES[svc];
-    console.log(`\n[${svc}] ${phone}`);
-
-    await handleIncomingMessage(phone, 'Test', 'Hi');
-    assert(replies(phone)[0].includes('Welcome to ' + BUSINESS_NAME), 'welcome sent');
-
-    await handleIncomingMessage(phone, 'Test', 'banana');
-    assert(/valid number/.test(replies(phone)[1]), 'invalid selection re-prompted');
-
-    await handleIncomingMessage(phone, 'Test', String(i + 1));
-    assert(replies(phone)[2] === qs[0].question, 'first question sent');
-
-    for (let q = 0; q < qs.length; q++) {
-      await handleIncomingMessage(phone, 'Test', `answer-${q}`);
-      if (q < qs.length - 1) assert(replies(phone).at(-1) === qs[q + 1].question, `Q${q + 2} follows answer ${q + 1}`);
+  const run = Date.now().toString(36);
+  const A = await prisma.workspace.create({
+    data: {
+      slug: `e2e-a-${run}`, name: 'Acme Careers', businessName: 'Acme Careers', tagline: 'Your partner',
+      welcomeIntro: 'We help with careers.', formUrl: 'https://forms.example/acme', bookingUrl: 'https://cal.example/acme',
+      bookingLabel: 'consultation', bookingNote: 'Fees adjusted later.', botEnabled: true, onboardingCompleted: true
     }
-    assert(replies(phone).at(-1)!.includes('https://topmate.io/mnsinstitute/'), 'completion message with Topmate link');
+  });
+  const B = await prisma.workspace.create({
+    data: { slug: `e2e-b-${run}`, name: 'Bolt Plumbing', businessName: 'Bolt Plumbing', botEnabled: true, onboardingCompleted: true }
+  });
+  try {
+    wire(A.id);
+    wire(B.id);
+    const tplA = getTemplate('overseas-careers');
+    await saveServices(A.id, tplA.services);
+    await saveServices(B.id, getTemplate('generic').services);
+    const cfgA = await loadConfig(A.id);
+    const cfgB = await loadConfig(B.id);
 
-    const lead = await prisma.lead.findFirst({ where: { phoneNumber: phone } });
-    assert(lead?.serviceCategory === svc, 'lead saved with correct category');
-    const data = lead!.collectedData as Record<string, string>;
-    assert(qs.every((q, k) => data[q.key] === `answer-${k}`), `all ${qs.length} answers stored`);
+    console.log('[service resolution]');
+    for (const [input, want] of [['3', 'JOBS'], ['3.', 'JOBS'], ['option 2', 'LICENSING'], ['1️⃣', 'COACHING'], ['I need a visa', 'VISA_PR'], ['PR', 'VISA_PR'], ['I want to prepare', undefined], ['7', undefined], ['hello', undefined]] as const) {
+      assert(resolveService(cfgA, input) === want, `A: "${input}" -> ${want}`);
+    }
+    assert(resolveService(cfgB, '2') === 'SUPPORT', 'B: "2" -> SUPPORT (menu is per workspace)');
+    assert(resolveService(cfgB, 'I need support') === 'SUPPORT', 'B: keyword -> SUPPORT');
+    assert(resolveService(cfgB, '4') === undefined, 'B: 4 is out of range');
 
-    await handleIncomingMessage(phone, 'Test', 'how much is the fee');
-    assert(replies(phone).at(-1)!.includes('topmate.io'), 'fee question -> consultation link');
+    console.log('\n[full funnel per service, workspace A]');
+    for (const [i, svc] of cfgA.services.entries()) {
+      const phone = `9199${run}${i}`;
+      const qs = svc.questions;
+      await handleIncomingMessage(A.id, phone, 'Test', 'Hi');
+      assert(replies(A.id, phone)[0].includes('Welcome to Acme Careers'), `${svc.key}: welcome uses workspace name`);
+      assert(replies(A.id, phone)[0].includes('https://forms.example/acme'), `${svc.key}: welcome carries the form link`);
+      await handleIncomingMessage(A.id, phone, 'Test', 'banana');
+      assert(/valid number/.test(replies(A.id, phone)[1]), `${svc.key}: invalid selection re-prompted`);
+      await handleIncomingMessage(A.id, phone, 'Test', String(i + 1));
+      assert(replies(A.id, phone)[2] === qs[0].prompt, `${svc.key}: first question sent`);
+      for (let q = 0; q < qs.length; q++) {
+        await handleIncomingMessage(A.id, phone, 'Test', `answer-${q}`);
+        if (q < qs.length - 1) assert(replies(A.id, phone).at(-1) === qs[q + 1].prompt, `${svc.key}: Q${q + 2} follows answer ${q + 1}`);
+      }
+      const done = replies(A.id, phone).at(-1)!;
+      assert(done.includes('https://cal.example/acme') && done.includes('Acme Careers | Your partner'), `${svc.key}: completion with booking link and sign-off`);
+      const lead = await prisma.lead.findFirst({ where: { workspaceId: A.id, phoneNumber: phone } });
+      assert(lead?.serviceCategory === svc.key, `${svc.key}: lead saved with the service key`);
+      const data = lead!.collectedData as Record<string, string>;
+      assert(qs.every((q, k) => data[q.key] === `answer-${k}`), `${svc.key}: all ${qs.length} answers stored`);
 
-    await handleIncomingMessage(phone, 'Test', 'I have already booked');
-    assert((await prisma.lead.findFirst({ where: { phoneNumber: phone } }))?.isBookedTopmate === true, 'booking flips isBookedTopmate');
+      await handleIncomingMessage(A.id, phone, 'Test', 'how much is the fee');
+      assert(replies(A.id, phone).at(-1)!.includes('cal.example'), `${svc.key}: fee question -> booking link`);
+      await handleIncomingMessage(A.id, phone, 'Test', 'I have already booked');
+      assert((await prisma.lead.findFirst({ where: { workspaceId: A.id, phoneNumber: phone } }))?.isBookedTopmate === true, `${svc.key}: booking flips the flag`);
+      await handleIncomingMessage(A.id, phone, 'Test', 'menu');
+      assert(replies(A.id, phone).at(-1)!.includes('Welcome to Acme Careers'), `${svc.key}: menu restarts the funnel`);
+    }
 
-    await handleIncomingMessage(phone, 'Test', 'menu');
-    assert(replies(phone).at(-1)!.includes('Welcome to ' + BUSINESS_NAME), 'menu restarts the funnel');
+    console.log('\n[workspace B: no form, no booking link]');
+    const pb = `9188${run}`;
+    await handleIncomingMessage(B.id, pb, 'Test', 'hello');
+    const welcomeB = replies(B.id, pb)[0];
+    assert(welcomeB.includes('Welcome to Bolt Plumbing') && !welcomeB.includes('http') && welcomeB.includes('1-3'), 'B welcome: own name, no links, 3 options');
+    await handleIncomingMessage(B.id, pb, 'Test', '3');
+    await handleIncomingMessage(B.id, pb, 'Test', 'Please call me');
+    const doneB = replies(B.id, pb).at(-1)!;
+    assert(!doneB.includes('http') && doneB.includes('Bolt Plumbing'), 'B completion has no booking block');
+
+    console.log('\n[tenant isolation]');
+    assert((await prisma.session.count({ where: { workspaceId: B.id } })) === 1, 'B sees only its own sessions');
+    assert((await prisma.lead.count({ where: { workspaceId: A.id, phoneNumber: pb } })) === 0, "B's contact never leaks into A");
+    // same phone number can chat with both businesses independently
+    const shared = `9166${run}`;
+    await handleIncomingMessage(A.id, shared, 'X', 'hi');
+    await handleIncomingMessage(B.id, shared, 'X', 'hi');
+    assert((await prisma.session.count({ where: { phoneNumber: shared } })) === 2, 'same customer has one session per business');
+
+    console.log('\n[bot paused until go-live]');
+    await prisma.workspace.update({ where: { id: B.id }, data: { botEnabled: false } });
+    invalidateConfig(B.id);
+    const nB = replies(B.id, pb).length;
+    await handleIncomingMessage(B.id, pb, 'Test', 'anyone?');
+    assert(replies(B.id, pb).length === nB, 'workspace with bot off sends nothing');
+
+    console.log('\n[editing the menu while a customer is mid-flow]');
+    const mid = `9155${run}`;
+    await handleIncomingMessage(A.id, mid, 'Mid', 'hi');
+    await handleIncomingMessage(A.id, mid, 'Mid', '3');
+    await saveServices(A.id, [{ title: 'Only option', keywords: [], questions: [{ key: 'q', prompt: 'One question?' }] }]);
+    await handleIncomingMessage(A.id, mid, 'Mid', 'answer');
+    assert(replies(A.id, mid).at(-1)!.includes('Only option'), 'removed service -> customer is sent back to the new menu');
+
+    console.log('\n[validation]');
+    for (const bad of [[], [{ title: '', questions: [] }], [{ title: 'x', questions: [] }], Array.from({ length: 10 }, (_, i) => ({ title: `s${i}`, questions: [{ prompt: 'q' }] }))]) {
+      let threw = false;
+      try { sanitizeServices(bad); } catch { threw = true; }
+      assert(threw, `rejects invalid menu (${JSON.stringify(bad).slice(0, 40)})`);
+    }
+    const dedup = sanitizeServices([{ title: 'Same', questions: [{ prompt: 'a' }, { prompt: 'b', key: 'q1' }] }, { title: 'Same', questions: [{ prompt: 'c' }] }]);
+    assert(dedup[0].key !== dedup[1].key && dedup[0].questions[0].key !== dedup[0].questions[1].key, 'duplicate titles/keys are made unique');
+
+    if (process.env.GEMINI_API_KEY) {
+      console.log('\n[side question mid-flow, Gemini]');
+      await saveServices(A.id, tplA.services);
+      const sp = `9177${run}`;
+      await handleIncomingMessage(A.id, sp, 'Test', 'hi');
+      await handleIncomingMessage(A.id, sp, 'Test', '1');
+      const before = replies(A.id, sp).length;
+      await handleIncomingMessage(A.id, sp, 'Test', 'What is OET?');
+      const after = replies(A.id, sp).slice(before);
+      const s1 = await prisma.session.findUnique({ where: { workspaceId_phoneNumber: { workspaceId: A.id, phoneNumber: sp } } });
+      assert(s1!.currentStep === 0, 'side question did not consume the answer');
+      assert(after.length === 2 && after[1] === tplA.services[0].questions[0].prompt, `Gemini answered then re-asked Q1: "${after[0].slice(0, 60)}…"`);
+    } else {
+      console.log('\n(no GEMINI_API_KEY: Gemini path skipped)');
+    }
+    console.log('\nALL E2E CHECKS PASSED');
+  } finally {
+    await prisma.workspace.deleteMany({ where: { id: { in: [A.id, B.id] } } }); // cascades to sessions, leads, logs
   }
-
-  console.log('\n[side question mid-flow]');
-  const sp = `9177${run}0`;
-  await handleIncomingMessage(sp, 'Test', 'hi');
-  await handleIncomingMessage(sp, 'Test', '1');
-  const before = replies(sp).length;
-  await handleIncomingMessage(sp, 'Test', 'What is OET?');
-  const after = replies(sp).slice(before);
-  const s1 = await prisma.session.findUnique({ where: { phoneNumber: sp } });
-  if (process.env.GEMINI_API_KEY) {
-    assert(s1!.currentStep === 0, 'side question did not consume the answer');
-    assert(after.length === 2 && after[1] === QUESTION_BRANCHES.COACHING[0].question, `Gemini answered then re-asked Q1: "${after[0].slice(0, 60)}…"`);
-  } else {
-    console.log('  (no GEMINI_API_KEY: treated as plain answer, Gemini path skipped)');
-  }
-
-  console.log('\n[agent takeover]');
-  await prisma.session.update({ where: { phoneNumber: sp }, data: { isAgentPaused: true } });
-  const n = replies(sp).length;
-  await handleIncomingMessage(sp, 'Test', 'anyone there?');
-  assert(replies(sp).length === n, 'paused session gets no bot reply');
-
-  const mine = [...created, sp];
-  await prisma.webhookLog.deleteMany({ where: { phoneNumber: { in: mine } } });
-  await prisma.session.deleteMany({ where: { phoneNumber: { in: mine } } });
-  console.log('\nALL E2E CHECKS PASSED');
 }
 
 main()
