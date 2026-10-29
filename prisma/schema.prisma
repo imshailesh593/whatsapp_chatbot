@@ -17,29 +17,29 @@ enum SessionStage {
 
 /// One client business (tenant). Everything customer-facing is configured here.
 model Workspace {
-  id                  String   @id @default(uuid())
-  slug                String   @unique
-  name                String
-  industry            String   @default("generic")
-  businessName        String   @default("Your Business") @map("business_name")
-  tagline             String   @default("")
-  description         String   @default("")
-  welcomeIntro        String   @default("") @map("welcome_intro")
-  formUrl             String   @default("") @map("form_url")
-  bookingUrl          String   @default("") @map("booking_url")
-  bookingLabel        String   @default("one-to-one consultation") @map("booking_label")
-  bookingNote         String   @default("") @map("booking_note")
-  tone                String   @default("friendly")
-  knowledge           String   @default("")
-  languages           String   @default("English")
-  timezone            String   @default("UTC")
-  notifyEmail         String   @default("") @map("notify_email")
-  notifyPhone         String   @default("") @map("notify_phone")
+  id                     String    @id @default(uuid())
+  slug                   String    @unique
+  name                   String
+  industry               String    @default("generic")
+  businessName           String    @default("Your Business") @map("business_name")
+  tagline                String    @default("")
+  description            String    @default("")
+  welcomeIntro           String    @default("") @map("welcome_intro")
+  formUrl                String    @default("") @map("form_url")
+  bookingUrl             String    @default("") @map("booking_url")
+  bookingLabel           String    @default("one-to-one consultation") @map("booking_label")
+  bookingNote            String    @default("") @map("booking_note")
+  tone                   String    @default("friendly")
+  knowledge              String    @default("")
+  languages              String    @default("English")
+  timezone               String    @default("UTC")
+  notifyEmail            String    @default("") @map("notify_email")
+  notifyPhone            String    @default("") @map("notify_phone")
   /// Free-form answers from the onboarding wizard (kept for reference / future AI drafting)
-  onboarding          Json     @default("{}")
-  onboardingCompleted Boolean  @default(false) @map("onboarding_completed")
+  onboarding             Json      @default("{}")
+  onboardingCompleted    Boolean   @default(false) @map("onboarding_completed")
   /// False until the owner presses "Go live"; a paused workspace never auto-replies
-  botEnabled          Boolean  @default(true) @map("bot_enabled")
+  botEnabled             Boolean   @default(true) @map("bot_enabled")
   /// trial | starter | growth | scale | internal (unlimited, for the operator's own business)
   plan                   String    @default("trial")
   /// trialing | active | past_due | canceled
@@ -50,20 +50,21 @@ model Workspace {
   billingProvider        String?   @map("billing_provider")
   providerCustomerId     String?   @map("provider_customer_id")
   providerSubscriptionId String?   @map("provider_subscription_id")
-  createdAt          DateTime @default(now()) @map("created_at")
-  updatedAt           DateTime @updatedAt @map("updated_at")
+  createdAt              DateTime  @default(now()) @map("created_at")
+  updatedAt              DateTime  @updatedAt @map("updated_at")
 
-  services   Service[]
-  sessions   Session[]
-  leads      Lead[]
-  logs       WebhookLog[]
-  adminUsers AdminUser[]
-  usage      Usage[]
-  stages     Stage[]
-  broadcasts Broadcast[]
-  webhooks   Webhook[]
-  apiKeys    ApiKey[]
-  payments   Payment[]
+  services          Service[]
+  sessions          Session[]
+  leads             Lead[]
+  logs              WebhookLog[]
+  adminUsers        AdminUser[]
+  usage             Usage[]
+  stages            Stage[]
+  broadcasts        Broadcast[]
+  webhooks          Webhook[]
+  apiKeys           ApiKey[]
+  payments          Payment[]
+  couponRedemptions CouponRedemption[]
 
   @@map("saas_workspaces")
 }
@@ -123,25 +124,25 @@ model Session {
 }
 
 model Lead {
-  id              String    @id @default(uuid())
-  workspaceId     String    @map("workspace_id")
-  workspace       Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  sessionId       String    @unique @map("session_id")
-  session         Session   @relation(fields: [sessionId], references: [id], onDelete: Cascade)
-  events          LeadEvent[]
-  phoneNumber     String    @map("phone_number")
-  serviceCategory String    @map("service_category")
-  collectedData   Json      @map("collected_data")
+  id               String      @id @default(uuid())
+  workspaceId      String      @map("workspace_id")
+  workspace        Workspace   @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  sessionId        String      @unique @map("session_id")
+  session          Session     @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  events           LeadEvent[]
+  phoneNumber      String      @map("phone_number")
+  serviceCategory  String      @map("service_category")
+  collectedData    Json        @map("collected_data")
   /// Pipeline stage (Stage.key within the workspace)
-  stageKey        String    @default("new") @map("stage_key")
+  stageKey         String      @default("new") @map("stage_key")
   /// Team member responsible for this lead (AdminUser.id)
-  ownerId         String?   @map("owner_id")
-  tags            String[]  @default([])
-  followUpAt       DateTime? @map("follow_up_at")
-  followUpNotified Boolean   @default(false) @map("follow_up_notified")
-  counsellorNotes String?   @map("counsellor_notes")
-  createdAt       DateTime  @default(now()) @map("created_at")
-  updatedAt       DateTime  @updatedAt @map("updated_at")
+  ownerId          String?     @map("owner_id")
+  tags             String[]    @default([])
+  followUpAt       DateTime?   @map("follow_up_at")
+  followUpNotified Boolean     @default(false) @map("follow_up_notified")
+  counsellorNotes  String?     @map("counsellor_notes")
+  createdAt        DateTime    @default(now()) @map("created_at")
+  updatedAt        DateTime    @updatedAt @map("updated_at")
 
   @@index([workspaceId, phoneNumber])
   @@index([workspaceId, stageKey])
@@ -165,17 +166,17 @@ model WebhookLog {
 }
 
 model AdminUser {
-  id           String     @id @default(uuid())
-  workspaceId  String     @map("workspace_id")
-  workspace    Workspace  @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  email        String     @unique
-  passwordHash String     @map("password_hash")
+  id           String    @id @default(uuid())
+  workspaceId  String    @map("workspace_id")
+  workspace    Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  email        String    @unique
+  passwordHash String    @map("password_hash")
   /// owner | admin | agent
-  role         String     @default("owner")
+  role         String    @default("owner")
   /// Platform operator: can list and open every workspace
-  isSuperAdmin Boolean    @default(false) @map("is_super_admin")
-  createdAt    DateTime   @default(now()) @map("created_at")
-  lastLoginAt  DateTime?  @map("last_login_at")
+  isSuperAdmin Boolean   @default(false) @map("is_super_admin")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  lastLoginAt  DateTime? @map("last_login_at")
 
   @@map("mns_admin_users")
 }
@@ -296,18 +297,18 @@ model Webhook {
 }
 
 model WebhookDelivery {
-  id            String    @id @default(uuid())
-  webhookId     String    @map("webhook_id")
-  webhook       Webhook   @relation(fields: [webhookId], references: [id], onDelete: Cascade)
+  id            String   @id @default(uuid())
+  webhookId     String   @map("webhook_id")
+  webhook       Webhook  @relation(fields: [webhookId], references: [id], onDelete: Cascade)
   event         String
   payload       Json
   /// pending | ok | failed
-  status        String    @default("pending")
-  attempts      Int       @default(0)
-  responseCode  Int?      @map("response_code")
-  error         String    @default("")
-  nextAttemptAt DateTime  @default(now()) @map("next_attempt_at")
-  createdAt     DateTime  @default(now()) @map("created_at")
+  status        String   @default("pending")
+  attempts      Int      @default(0)
+  responseCode  Int?     @map("response_code")
+  error         String   @default("")
+  nextAttemptAt DateTime @default(now()) @map("next_attempt_at")
+  createdAt     DateTime @default(now()) @map("created_at")
 
   @@index([status, nextAttemptAt])
   @@index([webhookId, createdAt])
@@ -364,4 +365,35 @@ model Setting {
   value Json
 
   @@map("saas_settings")
+}
+
+/// Redeem code: gives a business a plan (or a longer trial) for N days without a payment
+model Coupon {
+  id             String    @id @default(uuid())
+  code           String    @unique
+  plan           String
+  days           Int
+  maxRedemptions Int?      @map("max_redemptions")
+  redeemedCount  Int       @default(0) @map("redeemed_count")
+  expiresAt      DateTime? @map("expires_at")
+  active         Boolean   @default(true)
+  note           String    @default("")
+  createdBy      String    @default("") @map("created_by")
+  createdAt      DateTime  @default(now()) @map("created_at")
+
+  redemptions CouponRedemption[]
+
+  @@map("saas_coupons")
+}
+
+model CouponRedemption {
+  id          String    @id @default(uuid())
+  couponId    String    @map("coupon_id")
+  coupon      Coupon    @relation(fields: [couponId], references: [id], onDelete: Cascade)
+  workspaceId String    @map("workspace_id")
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  @@unique([couponId, workspaceId])
+  @@map("saas_coupon_redemptions")
 }

@@ -35,6 +35,7 @@ import { EVENTS, assertPublicUrl, createApiKey, createWebhook, deliverDue, dispa
 import { createBroadcast, previewAudience, setStatus as setBroadcastStatus } from './services/broadcast';
 import { transportReady } from './services/transport';
 import { PLANS, accessState, currentPeriod, planById } from './plans';
+import { createCoupon, grantPlan, redeemCoupon } from './services/coupons';
 import { getUsage } from './services/usage';
 import { cancelSubscription, handleRazorpayWebhook, handleStripeWebhook, openPortal, providersAvailable, startCheckout } from './services/billing';
 
@@ -374,6 +375,18 @@ export function registerAdmin(app: FastifyInstance, opts: { getQr: (workspaceId:
   const publicUrl = (req: FastifyRequest) =>
     process.env.PUBLIC_URL || `${req.headers['x-forwarded-proto'] ?? 'http'}://${req.headers['x-forwarded-host'] ?? req.headers.host}`;
   const num = (n: number) => (n === Infinity ? null : n);
+
+  // A business owner redeems a code from the operator (free days or a plan without a payment)
+  app.post('/admin/api/billing/redeem', { preHandler: manager }, async (req, reply) => {
+    if (throttled(attempts, `rc:${wsId(req)}`, 10)) return reply.status(429).send({ error: 'Too many wrong codes. Try again in 15 minutes.' });
+    const r = await redeemCoupon(wsId(req), (req.body as any)?.code);
+    if (!r.ok) {
+      bump(attempts, `rc:${wsId(req)}`);
+      return reply.status(400).send({ error: r.error });
+    }
+    void audit(req, 'coupon.redeem', wsId(req), `${r.plan} for ${r.days} days`);
+    return r;
+  });
 
   app.get('/admin/api/billing', { preHandler: guard }, async (req) => {
     const w = await prisma.workspace.findUniqueOrThrow({ where: { id: wsId(req) } });
@@ -912,17 +925,6 @@ export function registerAdmin(app: FastifyInstance, opts: { getQr: (workspaceId:
   const audit = (req: FastifyRequest, action: string, workspaceId: string | null, detail = '') =>
     prisma.auditLog.create({ data: { actor: me(req).email, action, workspaceId, detail: detail.slice(0, 300) } }).catch(() => undefined);
 
-  /** Puts a business on a plan without a payment (pilots, extensions, comps). Returns an error message or null. */
-  async function grantPlan(id: string, plan: string, daysRaw: unknown): Promise<string | null> {
-    const days = Math.min(Math.max(Math.floor(Number(daysRaw) || 30), 1), 3650);
-    const end = new Date(Date.now() + days * 86_400_000);
-    if (plan === 'trial') await prisma.workspace.update({ where: { id }, data: { plan: 'trial', planStatus: 'trialing', trialEndsAt: end } });
-    else if (plan === 'internal' || planById(plan)) await prisma.workspace.update({ where: { id }, data: { plan, planStatus: 'active', currentPeriodEnd: end, cancelAtPeriodEnd: false } });
-    else return 'Unknown plan';
-    invalidateConfig(id);
-    return null;
-  }
-
   app.get('/admin/api/super/dashboard', { preHandler: superOnly }, async (req) => {
     const d = parseInt(String((req.query as any).days ?? '30'), 10);
     return platformDashboard([7, 30, 90].includes(d) ? d : 30);
@@ -1123,6 +1125,37 @@ export function registerAdmin(app: FastifyInstance, opts: { getQr: (workspaceId:
     if (!owner) return reply.status(404).send({ error: 'This business has no users' });
     await audit(req, 'impersonate', id, `as ${owner.email}`);
     setSession(req, reply, owner.id);
+    return { ok: true };
+  });
+
+  const couponRow = (c: any) => ({
+    id: c.id, code: c.code, plan: c.plan, days: c.days, maxRedemptions: c.maxRedemptions, redeemed: c.redeemedCount,
+    expiresAt: c.expiresAt?.toISOString() ?? null, active: c.active, note: c.note, createdAt: c.createdAt.toISOString()
+  });
+  app.get('/admin/api/super/coupons', { preHandler: superOnly }, async () => ({
+    coupons: (await prisma.coupon.findMany({ orderBy: { createdAt: 'desc' }, take: 200 })).map(couponRow)
+  }));
+  app.post('/admin/api/super/coupons', { preHandler: superOnly }, async (req, reply) => {
+    const r = await createCoupon((req.body ?? {}) as any, me(req).email);
+    if ('error' in r) return reply.status(400).send({ error: r.error });
+    await audit(req, 'coupon.create', null, r.code);
+    return { ok: true, code: r.code };
+  });
+  app.post('/admin/api/super/coupons/:id/active', { preHandler: superOnly }, async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const active = !!(req.body as any)?.active;
+    const c = await prisma.coupon.findUnique({ where: { id } });
+    if (!c) return reply.status(404).send({ error: 'Code not found' });
+    await prisma.coupon.update({ where: { id }, data: { active } });
+    await audit(req, active ? 'coupon.enable' : 'coupon.disable', null, c.code);
+    return { ok: true };
+  });
+  app.delete('/admin/api/super/coupons/:id', { preHandler: superOnly }, async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const c = await prisma.coupon.findUnique({ where: { id } });
+    if (!c) return reply.status(404).send({ error: 'Code not found' });
+    await prisma.coupon.delete({ where: { id } });
+    await audit(req, 'coupon.delete', null, c.code);
     return { ok: true };
   });
 

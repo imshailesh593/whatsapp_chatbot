@@ -285,3 +285,16 @@ export interface PlatformSettingsInfo {
   systemTotalMb: number;
   systemFreeMb: number;
 }
+
+export interface CouponInfo {
+  id: string;
+  code: string;
+  plan: string;
+  days: number;
+  maxRedemptions: number | null;
+  redeemed: number;
+  expiresAt: string | null;
+  active: boolean;
+  note: string;
+  createdAt: string;
+}

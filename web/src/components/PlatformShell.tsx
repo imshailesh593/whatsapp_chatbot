@@ -1,13 +1,13 @@
 import { ReactNode, useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  Briefcase, ClipboardList, CreditCard, FileText, LayoutDashboard, LogOut, Package, Receipt, Repeat, Settings as Cog, Users, MessageSquare, Banknote, TrendingUp, Building2, UserPlus
+  Briefcase, ClipboardList, CreditCard, FileText, LayoutDashboard, LogOut, Package, Receipt, Repeat, Settings as Cog, Users, MessageSquare, Banknote, TrendingUp, Building2, UserPlus, Ticket
 } from 'lucide-react';
 import { api } from '../api';
 import { ago } from '../config';
-import type { AdminUser, PlatformSettingsInfo } from '../types';
+import type { AdminUser, CouponInfo, PlatformSettingsInfo } from '../types';
 import Platform from './Platform';
 
-type View = 'dashboard' | 'clients' | 'subscriptions' | 'payments' | 'plans' | 'audit' | 'settings';
+type View = 'dashboard' | 'clients' | 'subscriptions' | 'payments' | 'plans' | 'coupons' | 'audit' | 'settings';
 
 const NAV: { id: View; label: string; icon: ReactNode }[] = [
   { id: 'dashboard', label: 'Dashboard', icon: <LayoutDashboard className="w-[18px] h-[18px]" /> },
@@ -15,6 +15,7 @@ const NAV: { id: View; label: string; icon: ReactNode }[] = [
   { id: 'subscriptions', label: 'Subscriptions', icon: <CreditCard className="w-[18px] h-[18px]" /> },
   { id: 'payments', label: 'Payments', icon: <Receipt className="w-[18px] h-[18px]" /> },
   { id: 'plans', label: 'Plans', icon: <Package className="w-[18px] h-[18px]" /> },
+  { id: 'coupons', label: 'Redeem codes', icon: <Ticket className="w-[18px] h-[18px]" /> },
   { id: 'audit', label: 'Audit log', icon: <ClipboardList className="w-[18px] h-[18px]" /> },
   { id: 'settings', label: 'Settings', icon: <Cog className="w-[18px] h-[18px]" /> }
 ];
@@ -64,6 +65,7 @@ export default function PlatformShell({ user, onBusiness, onSignOut }: { user: A
           {view === 'subscriptions' && <Subscriptions />}
           {view === 'payments' && <Payments />}
           {view === 'plans' && <Plans />}
+          {view === 'coupons' && <Coupons />}
           {view === 'audit' && <AuditView />}
           {view === 'settings' && <PlatformSettings />}
         </main>
@@ -273,6 +275,71 @@ function Plans() {
         ))}
       </Table>
       <p className="text-xs text-slate-500">{d.trial} on free trial · {d.internal} internal. Prices and limits are set in <code>src/plans.ts</code> and the matching products in Stripe / Razorpay.</p>
+    </div>
+  );
+}
+
+function Coupons() {
+  const [rows, setRows] = useState<CouponInfo[]>([]);
+  const [plan, setPlan] = useState('growth');
+  const [days, setDays] = useState('30');
+  const [uses, setUses] = useState('1');
+  const [code, setCode] = useState('');
+  const [note, setNote] = useState('');
+  const [msg, setMsg] = useState('');
+  const [error, setError] = useState('');
+  const load = useCallback(() => api.platformCoupons().then(setRows).catch((e) => setError((e as Error).message)), []);
+  useEffect(() => { load(); }, [load]);
+
+  async function create() {
+    setError('');
+    setMsg('');
+    try {
+      const r = await api.platformCreateCoupon({ code: code.trim() || undefined, plan, days: Number(days), maxRedemptions: uses.trim() ? Number(uses) : null, note });
+      setMsg(`Created ${r.code}`);
+      setCode('');
+      setNote('');
+      await load();
+    } catch (err) {
+      setError((err as Error).message);
+    }
+  }
+  const run = async (fn: () => Promise<unknown>) => {
+    setError('');
+    try { await fn(); await load(); } catch (err) { setError((err as Error).message); }
+  };
+  const field = 'border border-slate-300 rounded-lg px-3 py-2 text-sm';
+  return (
+    <div className="space-y-5">
+      <div className={card + ' p-5'}>
+        <h3 className="font-bold text-slate-900">New redeem code</h3>
+        <p className="text-sm text-slate-500 mt-1">Gives a business a plan, or extra trial days, with no payment. A business enters it under Plan &amp; billing. Use it for pilots, partners and goodwill.</p>
+        <div className="mt-3 flex flex-wrap items-end gap-3">
+          <label className="text-xs text-slate-600">Plan<select value={plan} onChange={(e) => setPlan(e.target.value)} className={field + ' block mt-1'}>
+            <option value="trial">Extend free trial</option><option value="starter">Starter</option><option value="growth">Growth</option><option value="scale">Scale</option></select></label>
+          <label className="text-xs text-slate-600">Days<input type="number" min={1} max={3650} value={days} onChange={(e) => setDays(e.target.value)} className={field + ' block mt-1 w-24'} /></label>
+          <label className="text-xs text-slate-600">Uses (empty = unlimited)<input type="number" min={1} value={uses} onChange={(e) => setUses(e.target.value)} className={field + ' block mt-1 w-32'} /></label>
+          <label className="text-xs text-slate-600">Code (empty = random)<input value={code} onChange={(e) => setCode(e.target.value)} maxLength={32} className={field + ' block mt-1 w-40 uppercase'} /></label>
+          <label className="text-xs text-slate-600">Note<input value={note} onChange={(e) => setNote(e.target.value)} maxLength={200} placeholder="who it is for" className={field + ' block mt-1 w-48'} /></label>
+          <button onClick={create} className="px-4 py-2 bg-[#4b7f2c] hover:bg-green-800 text-white text-sm font-semibold rounded-lg">Create</button>
+        </div>
+        {msg && <p className="text-sm text-green-700 mt-2">{msg}</p>}
+        {error && <p className="text-sm text-rose-600 mt-2" role="alert">{error}</p>}
+      </div>
+      <Table head={['Code', 'Gives', 'Used', 'Note', '']} empty={rows.length === 0 ? 'No codes yet.' : undefined}>
+        {rows.map((c) => (
+          <tr key={c.id} className={c.active ? '' : 'opacity-50'}>
+            <td className="py-3 px-4 font-mono font-semibold text-slate-900">{c.code}</td>
+            <td className="py-3 px-4">{c.plan === 'trial' ? '+' + c.days + ' trial days' : c.plan + ' · ' + c.days + ' days'}</td>
+            <td className="py-3 px-4">{c.redeemed}{c.maxRedemptions ? ' / ' + c.maxRedemptions : ''}</td>
+            <td className="py-3 px-4 text-slate-600">{c.note}</td>
+            <td className="py-3 px-4 text-right whitespace-nowrap">
+              <button onClick={() => run(() => api.platformCouponActive(c.id, !c.active))} className="text-xs text-green-700 font-semibold mr-3">{c.active ? 'Disable' : 'Enable'}</button>
+              <button onClick={() => window.confirm('Delete ' + c.code + '?') && run(() => api.platformDeleteCoupon(c.id))} className="text-xs text-rose-600 font-semibold">Delete</button>
+            </td>
+          </tr>
+        ))}
+      </Table>
     </div>
   );
 }

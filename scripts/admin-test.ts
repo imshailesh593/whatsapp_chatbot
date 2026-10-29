@@ -329,6 +329,38 @@ async function cleanup() {
   ok(r.statusCode === 200 && r.json().workspaces.some((w: any) => w.id === wsA) && r.json().workspaces.some((w: any) => w.id === wsB), 'platform admin lists all workspaces');
   ok((await call(hRoot, 'POST', `/admin/api/super/workspaces/${wsA}/bot`, { enabled: false })).statusCode === 200 && (await prisma.workspace.findUnique({ where: { id: wsA } }))!.botEnabled === false, 'platform admin can suspend a bot');
 
+  // ---- redeem codes ----
+  r = await call(hRoot, 'POST', '/admin/api/super/coupons', { plan: 'growth', days: 30, maxRedemptions: 1, note: 'pilot' });
+  const code = r.json().code as string;
+  ok(r.statusCode === 200 && /^[A-Z0-9]{8}$/.test(code), 'operator creates a redeem code');
+  ok((await call(hRoot, 'POST', '/admin/api/super/coupons', { plan: 'internal', days: 30 })).statusCode === 400, 'a code can never grant the internal plan');
+  ok((await call(hRoot, 'POST', '/admin/api/super/coupons', { code, plan: 'growth', days: 5 })).statusCode === 400, 'duplicate codes are refused');
+  ok((await call(hA, 'GET', '/admin/api/super/coupons')).statusCode === 403, 'a business cannot list codes');
+  ok((await call(hA, 'POST', '/admin/api/billing/redeem', { code: 'NOPE1234' })).statusCode === 400, 'unknown code is refused');
+  const subscribed = (await prisma.workspace.findUnique({ where: { id: wsA } }))!.providerSubscriptionId;
+  if (subscribed) ok((await call(hA, 'POST', '/admin/api/billing/redeem', { code })).statusCode === 400, 'a business with a paid subscription cannot redeem a code');
+  await prisma.workspace.updateMany({ where: { id: { in: [wsA, wsB] } }, data: { plan: 'trial', planStatus: 'trialing', trialEndsAt: new Date(Date.now() + 14 * 86_400_000), providerSubscriptionId: null, billingProvider: null } });
+  r = await call(hA, 'POST', '/admin/api/billing/redeem', { code: code.toLowerCase() });
+  ok(r.statusCode === 200 && r.json().plan === 'growth', 'a business redeems a code (case-insensitive)');
+  r = await call(hA, 'GET', '/admin/api/billing');
+  ok(r.json().plan === 'growth' && r.json().status === 'active' && r.json().active, 'redeeming switches the plan on without a payment');
+  ok((await call(hA, 'POST', '/admin/api/billing/redeem', { code })).statusCode === 400, 'the same business cannot reuse a code');
+  ok((await call(hB, 'POST', '/admin/api/billing/redeem', { code })).statusCode === 400, 'a code with one use left is used up for everyone else');
+  r = await call(hRoot, 'GET', '/admin/api/super/coupons');
+  const row = r.json().coupons.find((c: any) => c.code === code);
+  ok(row.redeemed === 1, 'redemption count is tracked');
+  const trial = (await call(hRoot, 'POST', '/admin/api/super/coupons', { plan: 'trial', days: 10 })).json().code as string;
+  const trialBefore = new Date((await call(hB, 'GET', '/admin/api/billing')).json().trialEndsAt).getTime();
+  await call(hB, 'POST', '/admin/api/billing/redeem', { code: trial });
+  const trialAfter = new Date((await call(hB, 'GET', '/admin/api/billing')).json().trialEndsAt).getTime();
+  ok(Math.abs(trialAfter - trialBefore - 10 * 86_400_000) < 5 * 60_000, 'a trial code adds days to what is left of the trial');
+  const off = (await call(hRoot, 'POST', '/admin/api/super/coupons', { plan: 'starter', days: 5 })).json().code as string;
+  const offId = (await call(hRoot, 'GET', '/admin/api/super/coupons')).json().coupons.find((c: any) => c.code === off).id;
+  await call(hRoot, 'POST', `/admin/api/super/coupons/${offId}/active`, { active: false });
+  ok((await call(hB, 'POST', '/admin/api/billing/redeem', { code: off })).statusCode === 400, 'a disabled code is refused');
+  ok((await call(hRoot, 'DELETE', `/admin/api/super/coupons/${offId}`)).statusCode === 200, 'operator deletes a code');
+  await prisma.coupon.deleteMany({});
+
   // ---- WhatsApp slots ----
   ok((await call(hRoot, 'PUT', '/admin/api/super/settings', { maxConnections: 0 })).json().max >= 1 && (await call(hRoot, 'PUT', '/admin/api/super/settings', { maxConnections: 5000 })).json().max !== 5000, 'slot limit must be between 1 and 500');
   r = await call(hRoot, 'PUT', '/admin/api/super/settings', { maxConnections: 1 });

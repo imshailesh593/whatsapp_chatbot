@@ -1,4 +1,4 @@
-import type { PlatformSettingsInfo, AuditEntry, PlatformDetail, PlatformOverview, LeadEventInfo, AnalyticsData, ApiKeyInfo, IntegrationsInfo, WebhookInfo, BroadcastInfo, StageDef, BillingInfo, AdminRow, AdminUser, ChatMessage, ChatTurn, Contact, Draft, Overview, PatchBody, PlatformWorkspace, ServiceDef, TemplateInfo, WaSnapshot, Workspace } from './types';
+import type { CouponInfo, PlatformSettingsInfo, AuditEntry, PlatformDetail, PlatformOverview, LeadEventInfo, AnalyticsData, ApiKeyInfo, IntegrationsInfo, WebhookInfo, BroadcastInfo, StageDef, BillingInfo, AdminRow, AdminUser, ChatMessage, ChatTurn, Contact, Draft, Overview, PatchBody, PlatformWorkspace, ServiceDef, TemplateInfo, WaSnapshot, Workspace } from './types';
 
 export class UnauthorizedError extends Error {}
 
@@ -48,6 +48,11 @@ export const api = {
   leadEvents: (phone: string) => request<{ events: LeadEventInfo[] }>(`/admin/api/contacts/${encodeURIComponent(phone)}/events`).then((r) => r.events),
   alertInfo: () => request<{ emailAvailable: boolean; whatsappReady: boolean }>('/admin/api/alerts'),
   testAlert: () => post<{ whatsapp: string; email: string }>('/admin/api/alerts/test', {}),
+  redeemCode: (code: string) => post<{ ok: true; plan: string; days: number }>('/admin/api/billing/redeem', { code }),
+  platformCoupons: () => request<{ coupons: CouponInfo[] }>('/admin/api/super/coupons').then((r) => r.coupons),
+  platformCreateCoupon: (body: { code?: string; plan: string; days: number; maxRedemptions?: number | null; expiresAt?: string | null; note?: string }) => post<{ ok: true; code: string }>('/admin/api/super/coupons', body),
+  platformCouponActive: (id: string, active: boolean) => post<{ ok: true }>(`/admin/api/super/coupons/${id}/active`, { active }),
+  platformDeleteCoupon: (id: string) => request<{ ok: true }>(`/admin/api/super/coupons/${id}`, { method: 'DELETE' }),
   billing: () => request<BillingInfo>('/admin/api/billing'),
   checkout: (plan: string, provider: 'stripe' | 'razorpay') => post<{ url: string }>('/admin/api/billing/checkout', { plan, provider }),
   billingPortal: () => post<{ url: string }>('/admin/api/billing/portal', {}),

@@ -28,6 +28,8 @@ export default function Billing({ me }: { me: AdminUser }) {
   const [busy, setBusy] = useState('');
   const [error, setError] = useState('');
   const owner = me.role === 'owner';
+  const [code, setCode] = useState('');
+  const [redeemed, setRedeemed] = useState('');
 
   const load = useCallback(() => api.billing().then(setB).catch((e) => setError((e as Error).message)), []);
   useEffect(() => { load(); }, [load]);
@@ -39,6 +41,22 @@ export default function Billing({ me }: { me: AdminUser }) {
       window.location.href = (await fn()).url;
     } catch (err) {
       setError((err as Error).message);
+      setBusy('');
+    }
+  }
+
+  async function redeem() {
+    setBusy('redeem');
+    setError('');
+    setRedeemed('');
+    try {
+      const r = await api.redeemCode(code);
+      setRedeemed(`Code applied: ${r.plan === 'trial' ? 'trial extended by' : 'plan active for'} ${r.days} days.`);
+      setCode('');
+      await load();
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
       setBusy('');
     }
   }
@@ -135,6 +153,14 @@ export default function Billing({ me }: { me: AdminUser }) {
               );
             })}
           </div>
+          {owner && (
+            <div className="mt-5 flex flex-wrap items-center gap-2">
+              <input value={code} onChange={(e) => setCode(e.target.value)} placeholder="Have a code?" maxLength={32}
+                className="w-44 bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white uppercase placeholder:normal-case" />
+              <button onClick={redeem} disabled={!code.trim() || !!busy} className="px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs rounded-lg border border-slate-700 disabled:opacity-40">Apply code</button>
+              {redeemed && <span className="text-xs text-emerald-300">{redeemed}</span>}
+            </div>
+          )}
           {!anyProvider && <p className="text-[11px] text-slate-500 mt-3">Online payment is not switched on for this account yet. Contact support to activate a plan.</p>}
           {!owner && <p className="text-[11px] text-slate-500 mt-3">Only the account owner can change the plan.</p>}
           {owner && b.status === 'active' && !b.cancelAtPeriodEnd && b.provider && (

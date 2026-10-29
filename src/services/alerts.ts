@@ -1,23 +1,11 @@
-import nodemailer from 'nodemailer';
 import { prisma } from '../lib/prisma';
 import { loadConfig } from './botConfig';
 import { sendRaw, transportReady } from './transport';
 import { getSetting } from './settings';
+import { emailConfigured, sendEmail } from './mailer';
 import { DEFAULT_WORKSPACE_ID } from '../lib/workspaces';
 
-export const smtpConfigured = () => !!(process.env.SMTP_HOST && process.env.SMTP_FROM);
-
-let mailer: nodemailer.Transporter | null = null;
-const transporter = () => {
-  // SMTP_HOST=json is a no-network mode used by the automated tests
-  mailer ??= process.env.SMTP_HOST === 'json' ? nodemailer.createTransport({ jsonTransport: true }) : nodemailer.createTransport({
-    host: process.env.SMTP_HOST,
-    port: Number(process.env.SMTP_PORT) || 587,
-    secure: Number(process.env.SMTP_PORT) === 465,
-    auth: process.env.SMTP_USER ? { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS ?? '' } : undefined
-  });
-  return mailer;
-};
+export const smtpConfigured = emailConfigured;
 
 export type ChannelResult = 'sent' | `skipped: ${string}` | `failed: ${string}`;
 export interface AlertResult {
@@ -57,7 +45,7 @@ export async function deliverAlert(workspaceId: string, subject: string, body: s
     if (!smtpConfigured()) result.email = 'skipped: email sending is not set up on this server';
     else {
       try {
-        await transporter().sendMail({ from: process.env.SMTP_FROM, to: recipients.join(', '), subject: subject.replace(/[\r\n]+/g, ' '), text: body });
+        await sendEmail(recipients, subject, body);
         result.email = 'sent';
       } catch (err) {
         result.email = `failed: ${(err as Error).message}`;
