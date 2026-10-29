@@ -74,7 +74,7 @@ export default function BusinessProfile({ workspace, onSaved }: { workspace: Wor
         <div className="sm:col-span-2"><label className={label}>Greeting line shown under &ldquo;Welcome to …&rdquo;</label><input value={f.welcomeIntro} maxLength={300} onChange={set('welcomeIntro')} className={input} /></div>
         <div><label className={label}>Tone</label>
           <select value={f.tone} onChange={set('tone')} className={input}>
-            {['friendly', 'professional', 'formal', 'casual'].map((t) => <option key={t} value={t}>{t}</option>)}
+            {[...new Set(['friendly', 'professional', 'formal', 'casual', f.tone])].map((t) => <option key={t} value={t}>{t}</option>)}
           </select>
         </div>
         <div><label className={label}>Languages customers use</label><input value={f.languages} maxLength={80} onChange={set('languages')} className={input} /></div>
