@@ -10,7 +10,7 @@ process.env.RAZORPAY_KEY_SECRET = 'rzp_test_secret';
 process.env.RAZORPAY_WEBHOOK_SECRET = 'whsec_sub';
 process.env.PUBLIC_URL = 'https://bot.example';
 delete process.env.RAZORPAY_MODE;
-for (const p of ['STARTER', 'GROWTH', 'SCALE']) delete process.env[`RAZORPAY_PLAN_${p}`];
+for (const p of ['PRO']) delete process.env[`RAZORPAY_PLAN_${p}`];
 import crypto from 'crypto';
 import Fastify from 'fastify';
 import { registerAdmin } from '../src/admin';
@@ -75,7 +75,7 @@ async function cleanup() {
 
   console.log('\n[creating the Razorpay plans]');
   const made = await createPlans();
-  ok(made.length === 3 && made.every((m) => m.created && /^plan_fake\d$/.test(m.razorpayPlanId)), 'one Razorpay plan is created for each of our plans');
+  ok(made.length === 1 && made.every((m) => m.created && /^plan_fake\d$/.test(m.razorpayPlanId)), 'one Razorpay plan is created for each of our plans');
   const postedPlans = apiCalls.filter((c) => c.method === 'POST' && c.path === '/plans');
   ok(postedPlans.every((c) => c.body.period === 'monthly' && c.body.interval === 1 && c.body.item.currency === 'INR'), 'each is monthly and in rupees');
   ok(PLANS.every((p) => postedPlans.some((c) => c.body.item.amount === p.price.INR && c.body.notes.plan === p.id)), 'with exactly our prices (in paise)');
@@ -95,10 +95,10 @@ async function cleanup() {
   ok(checks.every((c) => c.ok) && checks.some((c) => /TEST mode/.test(c.detail)), 'the offline checklist is all green and says the keys are test keys');
   checks = await checkRazorpay(true);
   ok(checks.some((c) => c.label === 'Razorpay connection' && c.ok) && PLANS.every((p) => checks.some((c) => c.label === `${p.name} plan in Razorpay` && c.ok)), 'the live check proves the keys and each plan');
-  plansById.get(process.env.RAZORPAY_PLAN_GROWTH!)!.item.amount = 100;
+  plansById.get(process.env.RAZORPAY_PLAN_PRO!)!.item.amount = 100;
   checks = await checkRazorpay(true);
-  ok(checks.find((c) => c.label === 'Growth plan in Razorpay')!.ok === false && /must match/.test(checks.find((c) => c.label === 'Growth plan in Razorpay')!.detail), 'a plan whose price differs from ours is flagged');
-  plansById.get(process.env.RAZORPAY_PLAN_GROWTH!)!.item.amount = PLANS.find((p) => p.id === 'growth')!.price.INR;
+  ok(checks.find((c) => c.label === 'Pro plan in Razorpay')!.ok === false && /must match/.test(checks.find((c) => c.label === 'Pro plan in Razorpay')!.detail), 'a plan whose price differs from ours is flagged');
+  plansById.get(process.env.RAZORPAY_PLAN_PRO!)!.item.amount = PLANS.find((p) => p.id === 'pro')!.price.INR;
   authFails = true;
   checks = await checkRazorpay(true);
   ok(checks.some((c) => c.label === 'Razorpay connection' && !c.ok && /Authentication failed/.test(c.detail)), 'wrong keys are reported with Razorpay\'s own message');
@@ -123,11 +123,11 @@ async function cleanup() {
   ok(!JSON.stringify(r.json()).includes('rzp_test_secret') && !JSON.stringify(r.json()).includes('whsec_sub'), 'no secret is ever sent to the browser');
 
   console.log('\n[starting a subscription]');
-  ok((await call(hAdm, 'POST', '/admin/api/billing/checkout', { plan: 'growth', provider: 'razorpay' })).statusCode === 403, 'only the owner can start a payment');
-  r = await call(hO, 'POST', '/admin/api/billing/checkout', { plan: 'growth', provider: 'razorpay' });
+  ok((await call(hAdm, 'POST', '/admin/api/billing/checkout', { plan: 'pro', provider: 'razorpay' })).statusCode === 403, 'only the owner can start a payment');
+  r = await call(hO, 'POST', '/admin/api/billing/checkout', { plan: 'pro', provider: 'razorpay' });
   ok(r.statusCode === 200 && /^https:\/\/rzp\.io\/i\/sub\d$/.test(r.json().url), 'the owner is sent to Razorpay\'s hosted payment page');
   const sub = apiCalls.filter((c) => c.path === '/subscriptions').at(-1)!;
-  ok(sub.body.plan_id === process.env.RAZORPAY_PLAN_GROWTH && sub.body.total_count >= 12 && sub.body.notes.workspaceId === wsId && sub.body.notes.plan === 'growth', 'the subscription uses the Growth plan and carries the business id');
+  ok(sub.body.plan_id === process.env.RAZORPAY_PLAN_PRO && sub.body.total_count >= 12 && sub.body.notes.workspaceId === wsId && sub.body.notes.plan === 'pro', 'the subscription uses the Pro plan and carries the business id');
   const subId = (await row()).providerSubscriptionId!;
   ok(/^sub_fake\d$/.test(subId) && (await row()).billingProvider === 'razorpay', 'the pending subscription is remembered');
   ok((await row()).plan === 'trial', 'nothing is switched on until Razorpay confirms payment');
@@ -139,14 +139,14 @@ async function cleanup() {
   };
   const end1 = Math.floor((Date.now() + 30 * DAY) / 1000);
   const body = (end: number, withNotes = true) => ({
-    subscription: { entity: { id: subId, plan_id: process.env.RAZORPAY_PLAN_GROWTH, customer_id: 'cust_1', current_end: end, ...(withNotes ? { notes: { workspaceId: wsId, plan: 'growth' } } : {}) } },
-    payment: { entity: { id: 'pay_s1', amount: 299_900, currency: 'INR' } }
+    subscription: { entity: { id: subId, plan_id: process.env.RAZORPAY_PLAN_PRO, customer_id: 'cust_1', current_end: end, ...(withNotes ? { notes: { workspaceId: wsId, plan: 'pro' } } : {}) } },
+    payment: { entity: { id: 'pay_s1', amount: 49_900, currency: 'INR' } }
   });
   ok((await hook('rzs_bad', 'subscription.activated', body(end1), 'wrong')).statusCode === 400, 'a webhook with a bad signature is rejected');
   ok((await row()).plan === 'trial', '...and changes nothing');
   ok((await hook('rzs_1', 'subscription.activated', body(end1))).statusCode === 200, 'subscription.activated is accepted');
   let w = await row();
-  ok(w.plan === 'growth' && w.planStatus === 'active' && w.billingProvider === 'razorpay' && accessState(w).active, 'the plan is switched on');
+  ok(w.plan === 'pro' && w.planStatus === 'active' && w.billingProvider === 'razorpay' && accessState(w).active, 'the plan is switched on');
   ok(Math.abs(w.currentPeriodEnd!.getTime() - end1 * 1000) < 1000 && w.providerCustomerId === 'cust_1', 'the period end comes from Razorpay');
   await setSetting('affiliate', { enabled: true, percent: 20, months: 12, bonusDays: 0 });
   const referrer = await prisma.workspace.create({ data: { slug: `rzs-ref-${Date.now().toString(36)}`, name: 'Ref', businessName: 'Ref', botEnabled: false, onboardingCompleted: true } });
@@ -154,14 +154,14 @@ async function cleanup() {
   const end2 = end1 + 30 * 86400;
   await hook('rzs_2', 'subscription.charged', body(end2));
   ok(Math.abs((await row()).currentPeriodEnd!.getTime() - end2 * 1000) < 1000, 'a monthly charge moves the period end forward');
-  ok((await prisma.payment.count({ where: { workspaceId: wsId, providerRef: 'pay_s1', amount: 299_900, status: 'paid' } })) === 1, 'the charge is recorded as a payment');
+  ok((await prisma.payment.count({ where: { workspaceId: wsId, providerRef: 'pay_s1', amount: 49_900, status: 'paid' } })) === 1, 'the charge is recorded as a payment');
   ok((await prisma.affiliateCommission.count({ where: { affiliateId: referrer.id } })) === 1, 'and earns the referrer a commission');
   await hook('rzs_2', 'subscription.charged', body(end2));
   await hook('rzs_2b', 'subscription.charged', body(end2));
   ok((await prisma.payment.count({ where: { workspaceId: wsId } })) === 1 && (await prisma.affiliateCommission.count({ where: { affiliateId: referrer.id } })) === 1, 'Razorpay repeating an event or a payment is counted once');
   await hook('rzs_3', 'subscription.pending', body(end2));
   ok((await row()).planStatus === 'past_due', 'a failed renewal puts the plan in grace (past due)');
-  await hook('rzs_4', 'subscription.charged', { ...body(end2 + 30 * 86400), payment: { entity: { id: 'pay_s2', amount: 299_900, currency: 'INR' } } });
+  await hook('rzs_4', 'subscription.charged', { ...body(end2 + 30 * 86400), payment: { entity: { id: 'pay_s2', amount: 49_900, currency: 'INR' } } });
   w = await row();
   ok(w.planStatus === 'active' && (await prisma.payment.count({ where: { workspaceId: wsId } })) === 2, 'a later successful charge restores it');
   await hook('rzs_5', 'subscription.halted', body(end2));
@@ -169,7 +169,7 @@ async function cleanup() {
   await hook('rzs_6', 'subscription.resumed', body(end2 + 30 * 86400));
   ok((await row()).planStatus === 'active', 'resumed is active again');
   await hook('rzs_7', 'subscription.activated', body(end2, false));
-  ok((await row()).planStatus === 'active' && (await row()).plan === 'growth', 'a webhook without our notes is still matched by the subscription id and the plan id');
+  ok((await row()).planStatus === 'active' && (await row()).plan === 'pro', 'a webhook without our notes is still matched by the subscription id and the plan id');
   ok((await hook('rzs_8', 'subscription.activated', { subscription: { entity: { id: 'sub_unknown', plan_id: 'plan_x', current_end: end1 } } })).body === 'no workspace', 'an unknown subscription is ignored safely');
 
   console.log('\n[cancelling]');

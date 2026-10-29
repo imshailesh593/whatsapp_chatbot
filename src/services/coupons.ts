@@ -38,7 +38,7 @@ export interface CouponInput {
 
 export async function createCoupon(input: CouponInput, createdBy: string): Promise<{ error: string } | { id: string; code: string }> {
   const plan = String(input.plan ?? '');
-  if (!grantablePlan(plan)) return { error: 'Choose a plan: trial, starter, growth or scale' };
+  if (!grantablePlan(plan)) return { error: 'Choose a plan: trial or pro' };
   const days = Math.floor(Number(input.days));
   if (!Number.isFinite(days) || days < 1 || days > 3650) return { error: 'Days must be between 1 and 3650' };
   const max = input.maxRedemptions == null || (input.maxRedemptions as unknown) === '' ? null : Math.floor(Number(input.maxRedemptions));

@@ -5,8 +5,9 @@ import type { Workspace } from '@prisma/client';
 import { prisma } from '../lib/prisma';
 import { invalidateConfig } from './botConfig';
 import { PLANS, planById, TRIAL_DAYS } from '../plans';
+import { cancelPaypalSubscription, createSubscription, getSubscription, paypalKeys, paypalPlanEnv, planFromPaypal, verifyPaypalWebhook } from './paypal';
 
-export type Provider = 'stripe' | 'razorpay';
+export type Provider = 'stripe' | 'razorpay' | 'paypal';
 
 const env = (k: string) => process.env[k] ?? '';
 
@@ -24,7 +25,9 @@ export function providersAvailable(): Record<Provider, boolean> {
   return {
     stripe: !!env('STRIPE_SECRET_KEY') && PLANS.every((p) => !!env(`STRIPE_PRICE_${p.id.toUpperCase()}`)),
     // Without the webhook secret a payment could never switch a plan on, so it counts as not set up
-    razorpay: keys && !!env('RAZORPAY_WEBHOOK_SECRET') && (razorpayLinkMode() || PLANS.every((p) => !!env(`RAZORPAY_PLAN_${p.id.toUpperCase()}`)))
+    razorpay: keys && !!env('RAZORPAY_WEBHOOK_SECRET') && (razorpayLinkMode() || PLANS.every((p) => !!env(`RAZORPAY_PLAN_${p.id.toUpperCase()}`))),
+    // PayPal subscriptions need the webhook id (to verify events) and one PayPal plan per plan of ours
+    paypal: paypalKeys() && !!env('PAYPAL_WEBHOOK_ID') && PLANS.every((p) => !!env(paypalPlanEnv(p.id)))
   };
 }
 
@@ -76,6 +79,19 @@ export async function startCheckout(ws: Workspace, planId: string, provider: Pro
     const s = await stripe<{ url: string }>('/checkout/sessions', body);
     return { url: s.url };
   }
+  if (provider === 'paypal') {
+    const sub = await createSubscription({
+      ourPlanId: plan.id,
+      workspaceId: ws.id,
+      email,
+      brand: env('PRODUCT_NAME') || 'Lead Console',
+      returnUrl: `${back}?billing=success`,
+      cancelUrl: `${back}?billing=cancelled`
+    });
+    await prisma.workspace.update({ where: { id: ws.id }, data: { billingProvider: 'paypal', providerSubscriptionId: sub.id } });
+    invalidateConfig(ws.id);
+    return { url: sub.approveUrl };
+  }
   if (razorpayLinkMode()) {
     // A paid-up card or UPI subscription is managed by the provider, not by one-off links
     if (ws.providerSubscriptionId && ws.planStatus === 'active') throw new Error('You already have an active subscription');
@@ -123,6 +139,7 @@ export async function cancelSubscription(ws: Workspace): Promise<void> {
   if (ws.billingProvider === 'razorpay_link') throw new Error('Your plan is paid by link and does not renew by itself, so there is nothing to cancel. It simply ends on the date shown.');
   if (!ws.providerSubscriptionId || !ws.billingProvider) throw new Error('No active subscription');
   if (ws.billingProvider === 'stripe') await stripe(`/subscriptions/${ws.providerSubscriptionId}`, { cancel_at_period_end: 'true' });
+  else if (ws.billingProvider === 'paypal') await cancelPaypalSubscription(ws.providerSubscriptionId); // stops future charges; access runs to the end of the paid period
   else await razorpay(`/subscriptions/${ws.providerSubscriptionId}/cancel`, { cancel_at_cycle_end: 1 });
   await prisma.workspace.update({ where: { id: ws.id }, data: { cancelAtPeriodEnd: true } });
   invalidateConfig(ws.id);
@@ -146,7 +163,7 @@ export async function applySubscription(workspaceId: string, s: SubState): Promi
   await prisma.workspace.update({
     where: { id: workspaceId },
     data: {
-      plan: s.plan && planById(s.plan) ? s.plan : ws.plan === 'trial' ? 'growth' : ws.plan,
+      plan: s.plan && planById(s.plan) ? s.plan : ws.plan === 'trial' ? 'pro' : ws.plan,
       planStatus: s.status,
       currentPeriodEnd: s.periodEnd === undefined ? ws.currentPeriodEnd : s.periodEnd,
       cancelAtPeriodEnd: s.cancelAtPeriodEnd ?? ws.cancelAtPeriodEnd,
@@ -297,6 +314,73 @@ export async function handleRazorpayWebhook(raw: string, signature: string | und
       await applySubscription(wsId, { ...base, status: 'canceled', periodEnd: secondsToDate(sub?.current_end) ?? new Date(), cancelAtPeriodEnd: false });
       break;
   }
+  return { status: 200, body: 'ok' };
+}
+
+// ---------- PayPal webhook ----------
+
+const centsOf = (v: unknown) => Math.round(parseFloat(String(v ?? '0')) * 100) || 0;
+
+export async function handlePaypalWebhook(raw: string, headers: Record<string, string | string[] | undefined>): Promise<{ status: number; body: string }> {
+  let event: any;
+  try {
+    event = JSON.parse(raw);
+  } catch {
+    return { status: 400, body: 'bad request' };
+  }
+  // PayPal itself confirms the event is genuine; nothing is trusted before that
+  if (!(await verifyPaypalWebhook(headers, event))) return { status: 400, body: 'bad signature' };
+  const eventId = event.id ? `paypal:${event.id}` : null;
+  if (eventId && (await prisma.billingEvent.findUnique({ where: { id: eventId } }))) return { status: 200, body: 'duplicate' };
+
+  const res = event.resource ?? {};
+  const isSale = event.event_type === 'PAYMENT.SALE.COMPLETED';
+  const subId: string | undefined = (isSale ? res.billing_agreement_id : res.id) || undefined;
+  if (!subId) return { status: 200, body: 'not a subscription' };
+  const customWs = String(res.custom_id ?? '').split(':')[0];
+  const ws = customWs
+    ? await prisma.workspace.findUnique({ where: { id: customWs } })
+    : await prisma.workspace.findFirst({ where: { providerSubscriptionId: subId } });
+  if (!ws) return { status: 200, body: 'no workspace' };
+  // Events about a subscription that is no longer this business's current one (an abandoned or replaced checkout) are ignored
+  if (ws.providerSubscriptionId !== subId) return { status: 200, body: 'stale subscription' };
+
+  const base = { provider: 'paypal' as const, subscriptionId: subId };
+  const nextBilling = (sub: any) => {
+    const t = Date.parse(sub?.billing_info?.next_billing_time ?? '');
+    return Number.isFinite(t) ? new Date(t) : null;
+  };
+
+  switch (event.event_type) {
+    case 'BILLING.SUBSCRIPTION.ACTIVATED':
+    case 'BILLING.SUBSCRIPTION.RE-ACTIVATED':
+      await applySubscription(ws.id, {
+        ...base,
+        status: 'active',
+        plan: planFromPaypal(res.custom_id, res.plan_id),
+        periodEnd: nextBilling(res) ?? new Date(Date.now() + LINK_DAYS * 86_400_000),
+        cancelAtPeriodEnd: false
+      });
+      break;
+    case 'PAYMENT.SALE.COMPLETED': {
+      // Ask PayPal for the date of the next charge: that is the end of the period just paid for
+      const sub = await getSubscription(subId);
+      const plan = planFromPaypal(sub.custom_id, sub.plan_id);
+      await recordPayment(ws.id, { provider: 'paypal', ref: String(res.id), plan: plan ?? ws.plan, amount: centsOf(res.amount?.total), currency: String(res.amount?.currency ?? 'USD'), status: 'paid' });
+      await applySubscription(ws.id, { ...base, status: 'active', plan, periodEnd: nextBilling(sub) ?? new Date(Date.now() + LINK_DAYS * 86_400_000) });
+      break;
+    }
+    case 'BILLING.SUBSCRIPTION.SUSPENDED':
+    case 'BILLING.SUBSCRIPTION.PAYMENT.FAILED':
+      await applySubscription(ws.id, { ...base, status: 'past_due' });
+      break;
+    case 'BILLING.SUBSCRIPTION.CANCELLED':
+    case 'BILLING.SUBSCRIPTION.EXPIRED':
+      // Keep the end date already paid for; access stops then
+      if (ws.planStatus === 'active' || ws.planStatus === 'past_due') await applySubscription(ws.id, { ...base, status: 'canceled' });
+      break;
+  }
+  if (eventId) await prisma.billingEvent.create({ data: { id: eventId } }).catch(() => null);
   return { status: 200, body: 'ok' };
 }
 

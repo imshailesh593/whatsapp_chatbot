@@ -31,7 +31,7 @@ Contents
 ### Create your account
 Open your sign-in page and choose **Create an account**. Enter your business name, your email and a password (at least 10 characters). You become the **owner** of the account. Your bot starts **paused**, so it will not message anyone until you switch it on.
 
-You get a free trial (14 days, plus any bonus days a referral link gave you) with the Growth plan's limits.
+You get a free trial (14 days, plus any bonus days a referral link gave you) with everything in the Pro plan.
 
 ### Set up with the guided steps
 After signing up, a short set-up walks you through five steps:
@@ -247,7 +247,7 @@ Only message people who have contacted you or agreed to hear from you. Unwanted 
 
 ## 12. Connecting other tools
 
-Under **Bot & Settings**. Included with Growth and Scale plans.
+Under **Bot & Settings**. Included with your plan.
 
 - **Click-to-chat links.** Ready-made `wa.me` links for your website, ads and posters. Add a tag (for example `summer24`) and every lead from that link is recorded with that source, visible in the CRM and Analytics.
 - **Webhooks.** Give us a web address and we send it a JSON message whenever a lead is created or changes stage. Each request is signed (`X-Signature`, an HMAC-SHA256 of the body using your webhook secret) and failures are retried. Works with Zapier, Make, n8n, your own server, or a Google Sheet (a ready-made Apps Script is provided). Up to 5 webhooks.
@@ -259,13 +259,13 @@ Under **Bot & Settings**. Included with Growth and Scale plans.
 
 **Plan & billing** shows your plan, your usage this month and the status of your account.
 
-| Plan | New conversations / month | AI answers / month | Team members | Broadcast messages / month | Integrations |
-|---|---|---|---|---|---|
-| Starter | 300 | 300 | 2 | 200 | No |
-| Growth | 1,500 | 2,000 | 5 | 1,000 | Yes |
-| Scale | 6,000 | 10,000 | 15 | 5,000 | Yes |
+There is one plan, **Pro**: ₹499 a month in India or $19 a month elsewhere. It includes:
 
-Each plan includes 1 WhatsApp number. The free trial (14 days) has Growth limits.
+| New conversations / month | AI answers / month | Team members | Broadcast messages / month | Integrations |
+|---|---|---|---|---|
+| 1,500 | 2,000 | 5 | 1,000 | Yes |
+
+Pro includes 1 WhatsApp number. The free trial (14 days) has the same limits.
 
 What happens at a limit:
 - **Conversations used up:** customers already chatting are still served, but new chats are not started until next month or an upgrade.
@@ -274,7 +274,7 @@ What happens at a limit:
 
 **Have a code?** If you were given a redeem code (a pilot, partnership or goodwill offer), type it under Plan & billing and press **Apply code**. It switches the plan on, or adds trial days, without a payment. Only the owner can do this, and each code works once per business.
 
-**Paying online** (when your service has it switched on): owners choose a plan and pay in rupees (UPI AutoPay or card, through Razorpay) or dollars (card, through Stripe).
+**Paying online** (when your service has it switched on): owners choose a plan and pay in rupees (UPI AutoPay or card, through Razorpay) or dollars (PayPal, or card through Stripe).
 - You pay on the payment provider's secure page, then come back to the dashboard. Your plan switches on as soon as the payment is confirmed, usually within a minute. Refresh the page if it still shows the trial.
 - **It renews by itself every month.** If a renewal fails you keep working for a 3-day grace period; update your payment method or the bot will stop replying.
 - **Cancel any time** from Plan & billing. You keep full access until the end of the period you paid for.

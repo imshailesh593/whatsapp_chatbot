@@ -77,7 +77,7 @@ export default function Billing({ me }: { me: AdminUser }) {
   if (!b) return <div className="bg-slate-950 border border-slate-800 rounded-2xl p-5 text-xs text-slate-500">{error || 'Loading billing…'}</div>;
 
   const internal = b.plan === 'internal';
-  const anyProvider = b.providers.stripe || b.providers.razorpay;
+  const anyProvider = b.providers.stripe || b.providers.razorpay || b.providers.paypal;
   // Paid by a one-off link: it does not renew by itself, so the owner can pay again at any time
   const linkPaid = b.provider === 'razorpay_link';
   const statusText =
@@ -121,9 +121,9 @@ export default function Billing({ me }: { me: AdminUser }) {
 
       {!internal && (
         <>
-          <div className="mt-6 grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="mt-6 grid grid-cols-1 max-w-sm gap-4">
             {b.plans.map((p) => {
-              const current = b.plan === p.id && b.status === 'active';
+              const current = b.plan !== 'trial' && b.plan !== 'internal' && b.status === 'active'; // there is one plan; older plan names count as it
               return (
                 <div key={p.id} className={`rounded-xl border p-4 ${current ? 'border-emerald-500/60 bg-emerald-500/5' : 'border-slate-800 bg-slate-900'}`}>
                   <div className="flex items-baseline justify-between">
@@ -131,8 +131,8 @@ export default function Billing({ me }: { me: AdminUser }) {
                     {current && <span className="text-[10px] text-emerald-300">Current plan</span>}
                   </div>
                   <div className="mt-1 text-xs text-slate-400">{p.blurb}</div>
-                  <div className="mt-3 text-lg font-extrabold text-white">{money(p.price.INR, 'INR')}<span className="text-xs font-medium text-slate-400"> /month</span></div>
-                  <div className="text-[11px] text-slate-500">or {money(p.price.USD, 'USD')} /month</div>
+                  <div className="mt-3 text-lg font-extrabold text-white">{money(p.price.INR, 'INR')}<span className="text-xs font-medium text-slate-400"> /month in India</span></div>
+                  <div className="text-[11px] text-slate-500">{money(p.price.USD, 'USD')} /month everywhere else</div>
                   <ul className="mt-3 space-y-1 text-xs text-slate-300">
                     <li>{p.limits.conversations.toLocaleString()} new conversations / month</li>
                     <li>{p.limits.aiReplies.toLocaleString()} AI answers / month</li>
@@ -146,7 +146,11 @@ export default function Billing({ me }: { me: AdminUser }) {
                         className="py-2 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs rounded-lg disabled:opacity-40 flex items-center justify-center space-x-1.5">
                         {busy === `rz-${p.id}` && <Loader2 className="w-3.5 h-3.5 animate-spin" />}<span>{current ? 'Renew for 30 days (₹)' : 'Pay in ₹ (UPI, cards)'}</span>
                       </button>
-                      {!current && <button disabled={!b.providers.stripe || !!busy} onClick={() => go(`st-${p.id}`, () => api.checkout(p.id, 'stripe'))}
+                      {!current && b.providers.paypal && <button disabled={!!busy} onClick={() => go(`pp-${p.id}`, () => api.checkout(p.id, 'paypal'))}
+                        className="py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs rounded-lg border border-slate-700 disabled:opacity-40 flex items-center justify-center space-x-1.5">
+                        {busy === `pp-${p.id}` && <Loader2 className="w-3.5 h-3.5 animate-spin" />}<span>Pay in $ (PayPal)</span>
+                      </button>}
+                      {!current && (b.providers.stripe || !b.providers.paypal) && <button disabled={!b.providers.stripe || !!busy} onClick={() => go(`st-${p.id}`, () => api.checkout(p.id, 'stripe'))}
                         className="py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs rounded-lg border border-slate-700 disabled:opacity-40 flex items-center justify-center space-x-1.5">
                         {busy === `st-${p.id}` && <Loader2 className="w-3.5 h-3.5 animate-spin" />}<span>Pay in $ (card)</span>
                       </button>}

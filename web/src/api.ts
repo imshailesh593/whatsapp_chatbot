@@ -64,7 +64,7 @@ export const api = {
   platformCouponActive: (id: string, active: boolean) => post<{ ok: true }>(`/admin/api/super/coupons/${id}/active`, { active }),
   platformDeleteCoupon: (id: string) => request<{ ok: true }>(`/admin/api/super/coupons/${id}`, { method: 'DELETE' }),
   billing: () => request<BillingInfo>('/admin/api/billing'),
-  checkout: (plan: string, provider: 'stripe' | 'razorpay') => post<{ url: string }>('/admin/api/billing/checkout', { plan, provider }),
+  checkout: (plan: string, provider: 'stripe' | 'razorpay' | 'paypal') => post<{ url: string }>('/admin/api/billing/checkout', { plan, provider }),
   billingPortal: () => post<{ url: string }>('/admin/api/billing/portal', {}),
   cancelSubscription: () => post<{ ok: true }>('/admin/api/billing/cancel', {}),
   platformDashboard: (days: number) => request<any>(`/admin/api/super/dashboard?days=${days}`),

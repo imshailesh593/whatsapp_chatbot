@@ -257,7 +257,7 @@ function Payments() {
   useEffect(() => { api.platformPayments().then(setRows).catch(() => setRows([])); }, []);
   if (!rows) return <p className="text-sm text-slate-500">Loading…</p>;
   return (
-    <Table head={['Date', 'Business', 'Plan', 'Provider', 'Amount', 'Status']} empty={rows.length === 0 ? 'No payments yet. They appear here when Stripe or Razorpay report a charge.' : undefined}>
+    <Table head={['Date', 'Business', 'Plan', 'Provider', 'Amount', 'Status']} empty={rows.length === 0 ? 'No payments yet. They appear here when Stripe, Razorpay or PayPal report a charge.' : undefined}>
       {rows.map((p) => (
         <tr key={p.id}><td className="py-3 px-4 text-slate-600">{new Date(p.at).toLocaleString()}</td><td className="py-3 px-4 font-semibold text-slate-900">{p.business}</td><td className="py-3 px-4 capitalize">{p.plan || '—'}</td><td className="py-3 px-4 text-slate-600">{p.provider}</td><td className="py-3 px-4">{money(p.amount, p.currency)}</td><td className="py-3 px-4"><span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-green-100 text-green-800">{p.status}</span></td></tr>
       ))}
@@ -276,14 +276,14 @@ function Plans() {
           <tr key={p.id}><td className="py-3 px-4 font-semibold text-slate-900">{p.name}</td><td className="py-3 px-4">{inr(p.price.INR)} · {money(p.price.USD, 'USD')}</td><td className="py-3 px-4">{p.limits.conversations.toLocaleString()}</td><td className="py-3 px-4">{p.limits.aiReplies.toLocaleString()}</td><td className="py-3 px-4">{p.limits.seats}</td><td className="py-3 px-4">{p.limits.broadcasts.toLocaleString()}</td><td className="py-3 px-4">{p.integrations ? 'Yes' : 'No'}</td><td className="py-3 px-4 font-semibold">{p.clients}</td></tr>
         ))}
       </Table>
-      <p className="text-xs text-slate-500">{d.trial} on free trial · {d.internal} internal. Prices and limits are set in <code>src/plans.ts</code> and the matching products in Stripe / Razorpay.</p>
+      <p className="text-xs text-slate-500">{d.trial} on free trial · {d.internal} internal. Prices and limits are set in <code>src/plans.ts</code> and the matching products in Stripe / Razorpay / PayPal.</p>
     </div>
   );
 }
 
 function Coupons() {
   const [rows, setRows] = useState<CouponInfo[]>([]);
-  const [plan, setPlan] = useState('growth');
+  const [plan, setPlan] = useState('pro');
   const [days, setDays] = useState('30');
   const [uses, setUses] = useState('1');
   const [code, setCode] = useState('');
@@ -318,7 +318,7 @@ function Coupons() {
         <p className="text-sm text-slate-500 mt-1">Gives a business a plan, or extra trial days, with no payment. A business enters it under Plan &amp; billing. Use it for pilots, partners and goodwill.</p>
         <div className="mt-3 flex flex-wrap items-end gap-3">
           <label className="text-xs text-slate-600">Plan<select value={plan} onChange={(e) => setPlan(e.target.value)} className={field + ' block mt-1'}>
-            <option value="trial">Extend free trial</option><option value="starter">Starter</option><option value="growth">Growth</option><option value="scale">Scale</option></select></label>
+            <option value="trial">Extend free trial</option><option value="pro">Pro</option></select></label>
           <label className="text-xs text-slate-600">Days<input type="number" min={1} max={3650} value={days} onChange={(e) => setDays(e.target.value)} className={field + ' block mt-1 w-24'} /></label>
           <label className="text-xs text-slate-600">Uses (empty = unlimited)<input type="number" min={1} value={uses} onChange={(e) => setUses(e.target.value)} className={field + ' block mt-1 w-32'} /></label>
           <label className="text-xs text-slate-600">Code (empty = random)<input value={code} onChange={(e) => setCode(e.target.value)} maxLength={32} className={field + ' block mt-1 w-40 uppercase'} /></label>
@@ -446,11 +446,11 @@ function PaymentsSetupCard() {
           <h3 className="font-bold text-slate-900">Payments setup</h3>
           <p className="text-sm text-slate-500 mt-1">Owners can pay online once the keys, webhook and plans below are all ticked. Keys live in the server <code>.env</code>, never in the browser.</p>
         </div>
-        <button onClick={() => load(true)} disabled={busy} className="px-4 py-2 bg-[#4b7f2c] hover:bg-green-800 text-white text-sm font-semibold rounded-lg disabled:opacity-50">{busy ? 'Checking…' : 'Check connection with Razorpay'}</button>
+        <button onClick={() => load(true)} disabled={busy} className="px-4 py-2 bg-[#4b7f2c] hover:bg-green-800 text-white text-sm font-semibold rounded-lg disabled:opacity-50">{busy ? 'Checking…' : 'Check connections'}</button>
       </div>
       {error && <p className="text-sm text-rose-600 mt-2" role="alert">{error}</p>}
       {d && (
-        <div className="mt-4 grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div className="mt-4 grid grid-cols-1 lg:grid-cols-3 gap-6">
           <div>
             <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-2">Razorpay (₹) {d.razorpayReady ? <span className="text-green-700 normal-case">· ready</span> : <span className="text-amber-700 normal-case">· not ready</span>}</h4>
             <ul className="space-y-1.5">{rows(d.razorpay)}</ul>
@@ -460,6 +460,11 @@ function PaymentsSetupCard() {
             <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-2">Stripe ($) {d.stripeReady ? <span className="text-green-700 normal-case">· ready</span> : <span className="text-amber-700 normal-case">· not set up</span>}</h4>
             <ul className="space-y-1.5">{rows(d.stripe)}</ul>
             <p className="text-xs text-slate-500 mt-3">Webhook address to add in Stripe: <code className="break-all">{d.stripeWebhook}</code></p>
+          </div>
+          <div>
+            <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-2">PayPal ($) {d.paypalReady ? <span className="text-green-700 normal-case">· ready</span> : <span className="text-amber-700 normal-case">· not ready</span>}</h4>
+            <ul className="space-y-1.5">{rows(d.paypal)}</ul>
+            <p className="text-xs text-slate-500 mt-3">Webhook address (registered for you by <code>paypalSetup</code>): <code className="break-all">{d.paypalWebhook}</code></p>
           </div>
         </div>
       )}

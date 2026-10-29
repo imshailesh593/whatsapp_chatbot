@@ -29,7 +29,7 @@ export default function Integrations() {
       {!info.enabled && (
         <div className={card + ' border-amber-900/60'}>
           <h3 className="font-bold text-white text-base flex items-center space-x-2"><Plug className="w-4 h-4 text-amber-300" /><span>Webhooks &amp; API</span></h3>
-          <p className="text-xs text-amber-200 mt-2">Webhooks, Google Sheets sync and the REST API are available on the Growth and Scale plans. Upgrade in the Plan &amp; billing section below.</p>
+          <p className="text-xs text-amber-200 mt-2">Webhooks, Google Sheets sync and the REST API need an active plan. Choose one in the Plan &amp; billing section below.</p>
         </div>
       )}
       {info.enabled && <Webhooks info={info} reload={load} />}

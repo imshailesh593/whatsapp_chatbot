@@ -10,7 +10,7 @@ process.env.STRIPE_SECRET_KEY = '';
 process.env.RAZORPAY_KEY_ID = ''; // onboarding assistant must degrade gracefully
 import crypto from 'crypto';
 import Fastify from 'fastify';
-import { accessState } from '../src/plans';
+import { PLANS, accessState } from '../src/plans';
 import { invalidateConfig } from '../src/services/botConfig';
 import { registerAdmin } from '../src/admin';
 import { setTransport } from '../src/services/transport';
@@ -197,7 +197,7 @@ async function cleanup() {
   // ---- billing ----
   r = await call(hA, 'GET', '/admin/api/billing');
   ok(r.json().plan === 'trial' && r.json().status === 'trialing' && r.json().active && r.json().limits.conversations === 1500 && r.json().providers.stripe === false, 'billing: new workspace is on a 14-day trial with Growth limits, no providers configured');
-  ok(r.json().plans.length === 3 && !!r.json().trialEndsAt, 'billing: plans and trial end listed');
+  ok(r.json().plans.length === 1 && !!r.json().trialEndsAt, 'billing: plans and trial end listed');
   ok((await call(hA, 'POST', '/admin/api/billing/checkout', { plan: 'growth', provider: 'stripe' })).statusCode === 400, 'checkout refused while the provider is not configured');
   await call(hA, 'POST', '/admin/api/admins', { email: `agent2${DOMAIN}`, password: 'agent password 2', role: 'agent' });
   const hAg2 = cookieOf(await login(`agent2${DOMAIN}`, 'agent password 2'));
@@ -222,7 +222,7 @@ async function cleanup() {
   await stripeEvent('evt_3', 'invoice.paid', { id: 'in_1', subscription: 'sub_1', customer: 'cus_1', amount_paid: 99900, currency: 'inr', lines: { data: [{ metadata: { plan: 'starter' }, period: { end: future } }] } });
   ok((await prisma.payment.count({ where: { workspaceId: wsA } })) === 1, 'stripe: payment recorded once');
   r = await call(hA, 'GET', '/admin/api/billing');
-  ok(r.json().payments[0].amount === 99900 && r.json().planName === 'Starter' && r.json().limits.seats === 2, 'billing: starter limits and payment history shown');
+  ok(r.json().payments[0].amount === 99900 && r.json().planName === 'Pro' && r.json().limits.seats === 5, 'billing: plan limits and payment history shown (an older plan name counts as the one plan)');
   await stripeEvent('evt_4', 'invoice.payment_failed', { subscription: 'sub_1', customer: 'cus_1' });
   w = await wsRow();
   ok(w.planStatus === 'past_due' && accessState(w).active, 'stripe: payment failure -> past_due, still active during the grace period');
@@ -245,10 +245,13 @@ async function cleanup() {
   await rzp('rz_3', 'subscription.cancelled', rzpBody);
   ok((await wsRow()).planStatus === 'canceled', 'razorpay: cancelled');
 
-  // seats follow the plan (starter = 2): owner + agent + agent2 already exist, so the next one is refused
+  // seats follow the plan (set to 2 here): owner + agent + agent2 already exist, so the next one is refused
+  const planSeats = PLANS[0].limits.seats;
+  PLANS[0].limits.seats = 2;
   await prisma.workspace.update({ where: { id: wsA }, data: { plan: 'starter', planStatus: 'active', currentPeriodEnd: new Date(Date.now() + 86400000) } });
   invalidateConfig(wsA);
   ok((await call(hA, 'POST', '/admin/api/admins', { email: `s2${DOMAIN}`, password: 'seat password 1', role: 'agent' })).statusCode === 402, 'seat limit of the plan is enforced');
+  PLANS[0].limits.seats = planSeats;
 
   // ---- broadcasts API ----
   const lead = await prisma.session.create({ data: { workspaceId: wsA, phoneNumber: '910000000077', contactName: 'Zed Lead', selectedService: 'CHECK_UP' } });
@@ -271,8 +274,10 @@ async function cleanup() {
   ok((await call(hA, 'PUT', '/admin/api/workspace', { timezone: 'Mars/Phobos' })).statusCode === 400 && (await call(hA, 'PUT', '/admin/api/workspace', { timezone: 'Asia/Kolkata' })).statusCode === 200, 'time zone is validated');
 
   // ---- integrations API ----
-  ok((await call(hA, 'POST', '/admin/api/webhooks', { url: 'https://8.8.8.8/hook' })).statusCode === 402, 'Starter plan: webhooks are not included');
-  ok((await call(hA, 'POST', '/admin/api/api-keys', { name: 'x' })).statusCode === 402, 'Starter plan: API keys are not included');
+  PLANS[0].integrations = false; // the gate still works for any plan that leaves integrations out
+  ok((await call(hA, 'POST', '/admin/api/webhooks', { url: 'https://8.8.8.8/hook' })).statusCode === 402, 'a plan without integrations: webhooks are not included');
+  ok((await call(hA, 'POST', '/admin/api/api-keys', { name: 'x' })).statusCode === 402, 'a plan without integrations: API keys are not included');
+  PLANS[0].integrations = true;
   await prisma.workspace.update({ where: { id: wsA }, data: { plan: 'growth' } });
   invalidateConfig(wsA);
   ok((await call(hA, 'POST', '/admin/api/webhooks', { url: 'https://127.0.0.1/hook' })).statusCode === 400, 'webhook to a private address refused');
@@ -467,7 +472,7 @@ async function cleanup() {
   r = await call(hRoot, 'GET', '/admin/api/super/dashboard?days=7');
   ok(r.statusCode === 200 && r.json().revenueDaily.length === 7 && r.json().monthlyRevenue.length === 12 && r.json().kpi.totalClients >= 2 && typeof r.json().kpi.mrr === 'number', 'platform dashboard: KPIs and chart series');
   ok((await call(hRoot, 'GET', '/admin/api/super/dashboard?days=5')).json().period === 30, 'dashboard: unknown period falls back to 30');
-  ok((await call(hRoot, 'GET', '/admin/api/super/payments')).json().payments.length >= 2 && (await call(hRoot, 'GET', '/admin/api/super/subscriptions')).statusCode === 200 && (await call(hRoot, 'GET', '/admin/api/super/plans')).json().plans.length === 3, 'payments, subscriptions and plans lists');
+  ok((await call(hRoot, 'GET', '/admin/api/super/payments')).json().payments.length >= 2 && (await call(hRoot, 'GET', '/admin/api/super/subscriptions')).statusCode === 200 && (await call(hRoot, 'GET', '/admin/api/super/plans')).json().plans.length === 1, 'payments, subscriptions and plans lists');
   ok((await call(hA, 'GET', '/admin/api/super/dashboard')).statusCode === 403 && (await call(hA, 'PUT', '/admin/api/super/settings', { platformSender: true })).statusCode === 403, 'tenants cannot open platform dashboards or settings');
   ok((await call(hRoot, 'GET', '/admin/api/super/settings')).json().platformSender === false, 'platform sender is off by default');
   ok((await call(hRoot, 'PUT', '/admin/api/super/settings', { platformSender: true })).json().platformSender === true && (await call(hRoot, 'PUT', '/admin/api/super/settings', { platformSender: false })).json().platformSender === false, 'platform sender can be switched on and off');
@@ -481,7 +486,7 @@ async function cleanup() {
   const madeLogin = await login(`made${DOMAIN}`, 'temporary password 1');
   ok(madeLogin.statusCode === 200 && madeLogin.json().user.role === 'owner' && madeLogin.json().user.workspace.botEnabled === false, 'the new owner can sign in; the bot starts paused');
   r = await call(hRoot, 'GET', '/admin/api/super/workspaces/' + madeId);
-  ok(r.json().plan === 'starter' && r.json().planStatus === 'active' && r.json().users.length === 1 && r.json().limits.conversations === 300, 'detail shows plan, limits and people');
+  ok(r.json().plan === 'starter' && r.json().planStatus === 'active' && r.json().users.length === 1 && r.json().limits.conversations === 1500, 'detail shows plan, limits and people');
   const madeUserId = r.json().users[0].id;
   ok((await call(hRoot, 'POST', '/admin/api/super/users/' + madeUserId + '/password', { password: 'short' })).statusCode === 400, 'password reset needs 10+ characters');
   ok((await call(hRoot, 'POST', '/admin/api/super/users/' + madeUserId + '/password', { password: 'brand new owner pw' })).statusCode === 200 && (await login(`made${DOMAIN}`, 'brand new owner pw')).statusCode === 200 && (await login(`made${DOMAIN}`, 'temporary password 1')).statusCode === 401, 'owner password reset by the platform admin');

@@ -4,7 +4,7 @@ import { api } from '../api';
 import { ago } from '../config';
 import type { AuditEntry, PlatformDetail, PlatformOverview, PlatformWorkspace } from '../types';
 
-const PLANS = ['trial', 'starter', 'growth', 'scale', 'internal'];
+const PLANS = ['trial', 'pro', 'internal'];
 const WA: Record<string, string> = { ready: 'text-green-700', qr: 'text-amber-600', off: 'text-slate-500' };
 const inr = (paise: number) => new Intl.NumberFormat('en-IN', { style: 'currency', currency: 'INR', maximumFractionDigits: 0 }).format(paise / 100);
 const input = 'bg-white border border-slate-300 rounded-lg px-3 py-2 text-xs text-slate-800 focus:outline-none focus:border-green-600';
@@ -40,7 +40,7 @@ export default function Platform() {
       (w) =>
         (!s || w.businessName.toLowerCase().includes(s) || (w.owner ?? '').toLowerCase().includes(s)) &&
         (filter === 'all' ||
-          (filter === 'paying' && ['starter', 'growth', 'scale'].includes(w.plan) && w.planStatus === 'active' && w.planAccess === 'ok') ||
+          (filter === 'paying' && ['pro', 'starter', 'growth', 'scale'].includes(w.plan) && w.planStatus === 'active' && w.planAccess === 'ok') ||
           (filter === 'trial' && w.planStatus === 'trialing' && w.planAccess === 'ok') ||
           (filter === 'lapsed' && w.plan !== 'internal' && w.planAccess !== 'ok') ||
           (filter === 'setup' && !w.onboardingCompleted))
@@ -185,7 +185,7 @@ function CreateBusiness({ onClose, onCreated }: { onClose: () => void; onCreated
 
 function Detail({ id, onClose }: { id: string; onClose: () => void }) {
   const [d, setD] = useState<PlatformDetail | null>(null);
-  const [plan, setPlan] = useState('growth');
+  const [plan, setPlan] = useState('pro');
   const [days, setDays] = useState(30);
   const [error, setError] = useState('');
   const [note, setNote] = useState('');

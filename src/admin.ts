@@ -40,7 +40,8 @@ import { affiliateAdminOverview, getAffiliateSettings, referralOverview, referre
 import { authUrl, cancelAppointment, cleanRules, completeConnection, disconnect as disconnectCalendar, formatSlot, googleConfigured, readState } from './services/calendar';
 import { getUsage } from './services/usage';
 import { checkRazorpay } from './services/razorpaySetup';
-import { cancelSubscription, handleRazorpayWebhook, handleStripeWebhook, openPortal, providersAvailable, startCheckout } from './services/billing';
+import { checkPaypal } from './services/paypal';
+import { cancelSubscription, handlePaypalWebhook, handleRazorpayWebhook, handleStripeWebhook, openPortal, providersAvailable, startCheckout } from './services/billing';
 
 const SIM_PREFIX = 'SIM-';
 const WEB_DIST = path.join(__dirname, '..', 'web', 'dist');
@@ -505,7 +506,7 @@ export function registerAdmin(app: FastifyInstance, opts: { getQr: (workspaceId:
     const b = (req.body ?? {}) as { plan?: string; provider?: string };
     const w = await prisma.workspace.findUniqueOrThrow({ where: { id: wsId(req) } });
     if (w.plan === 'internal') return reply.status(400).send({ error: 'This workspace is not billed' });
-    if (b.provider !== 'stripe' && b.provider !== 'razorpay') return reply.status(400).send({ error: 'Choose a payment method' });
+    if (b.provider !== 'stripe' && b.provider !== 'razorpay' && b.provider !== 'paypal') return reply.status(400).send({ error: 'Choose a payment method' });
     try {
       return await startCheckout(w, String(b.plan), b.provider, me(req).email, publicUrl(req));
     } catch (err) {
@@ -545,6 +546,14 @@ export function registerAdmin(app: FastifyInstance, opts: { getQr: (workspaceId:
       req.headers['x-razorpay-event-id'] as string | undefined
     ).catch((e) => {
       console.error('[razorpay webhook]', e);
+      return { status: 500, body: 'error' };
+    });
+    return reply.status(r.status).send(r.body);
+  });
+
+  app.post('/webhooks/paypal', async (req, reply) => {
+    const r = await handlePaypalWebhook((req as any).rawBody ?? '', req.headers).catch((e) => {
+      console.error('[paypal webhook]', e);
       return { status: 500, body: 'error' };
     });
     return reply.status(r.status).send(r.body);
@@ -708,7 +717,7 @@ export function registerAdmin(app: FastifyInstance, opts: { getQr: (workspaceId:
   const needIntegrations = async (req: FastifyRequest, reply: FastifyReply) => {
     const w = await prisma.workspace.findUniqueOrThrow({ where: { id: wsId(req) } });
     if (!accessState(w).integrations) {
-      reply.status(402).send({ error: 'Webhooks and the API are available on Growth and Scale plans. Upgrade in Settings.' });
+      reply.status(402).send({ error: 'Webhooks and the API need an active plan. Choose a plan in Plan & billing.' });
       return true;
     }
     return false;
@@ -1034,7 +1043,13 @@ export function registerAdmin(app: FastifyInstance, opts: { getQr: (workspaceId:
     } catch (err) {
       razorpay = [{ label: 'Check', ok: false, detail: (err as Error).message }];
     }
-    return { razorpay, stripe, razorpayWebhook: `${base}/webhooks/razorpay`, stripeWebhook: `${base}/webhooks/stripe`, razorpayReady: providersAvailable().razorpay, stripeReady: providersAvailable().stripe };
+    let paypal;
+    try {
+      paypal = await checkPaypal((req.query as any).live === '1');
+    } catch (err) {
+      paypal = [{ label: 'Check', ok: false, detail: (err as Error).message }];
+    }
+    return { razorpay, stripe, paypal, razorpayWebhook: `${base}/webhooks/razorpay`, stripeWebhook: `${base}/webhooks/stripe`, paypalWebhook: `${base}/webhooks/paypal`, razorpayReady: providersAvailable().razorpay, stripeReady: providersAvailable().stripe, paypalReady: providersAvailable().paypal };
   });
 
   app.get('/admin/api/super/payments', { preHandler: superOnly }, async () => {
@@ -1043,7 +1058,7 @@ export function registerAdmin(app: FastifyInstance, opts: { getQr: (workspaceId:
   });
 
   app.get('/admin/api/super/subscriptions', { preHandler: superOnly }, async () => {
-    const rows = await prisma.workspace.findMany({ where: { plan: { in: ['starter', 'growth', 'scale'] } }, orderBy: { currentPeriodEnd: 'asc' }, include: { adminUsers: { where: { role: 'owner' }, take: 1 } } });
+    const rows = await prisma.workspace.findMany({ where: { plan: { in: ['pro', 'starter', 'growth', 'scale'] } }, orderBy: { currentPeriodEnd: 'asc' }, include: { adminUsers: { where: { role: 'owner' }, take: 1 } } });
     return {
       subscriptions: rows.map((w) => ({
         id: w.id, business: w.businessName, owner: w.adminUsers[0]?.email ?? null, plan: w.plan, status: w.planStatus, access: accessState(w).reason,

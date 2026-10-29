@@ -1,6 +1,7 @@
 // Webhooks, public API and click-to-chat attribution, against the real database.
 // Usage: npx tsx scripts/integration-test.ts
 import dotenv from 'dotenv';
+import { PLANS } from '../src/plans';
 dotenv.config();
 process.env.ADMIN_TOKEN = 'testtoken';
 import http from 'http';
@@ -122,8 +123,10 @@ async function main() {
     await new Promise((r) => setTimeout(r, 200));
     assert((await prisma.webhookDelivery.count({ where: { webhookId: hook.id, event: 'lead.stage_changed' } })) > 0, 'API stage changes also fire lead.stage_changed');
     assert((await app.inject({ url: '/api/v1/stages', headers: H })).json().stages.length === 6, 'stages endpoint');
+    PLANS[0].integrations = false; // a plan that leaves out integrations is refused
     const { key: k2 } = await createApiKey(S.id, 'starter');
-    assert((await app.inject({ url: '/api/v1/leads', headers: { authorization: `Bearer ${k2}` } })).statusCode === 402, 'Starter plan has no API access');
+    assert((await app.inject({ url: '/api/v1/leads', headers: { authorization: `Bearer ${k2}` } })).statusCode === 402, 'a plan without integrations has no API access');
+    PLANS[0].integrations = true;
     let last = 200;
     for (let i = 0; i < 62; i++) last = (await app.inject({ url: '/api/v1/stages', headers: H })).statusCode;
     assert(last === 429, 'rate limited to 60 requests a minute');

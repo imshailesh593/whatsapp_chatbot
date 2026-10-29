@@ -90,12 +90,14 @@ Open a business to see its plan, limits, people and WhatsApp status, then:
 
 ## 5. Plans, trials and redeem codes
 
-| Plan | Price (INR / USD per month) | New conversations | AI answers | Team members | Broadcast messages | Integrations |
+There is **one plan, Pro**: **₹499 a month for customers in India** (paid in rupees through Razorpay) and **$19 a month for everyone else** (paid in dollars through PayPal or Stripe).
+
+| Plan | Price per month | New conversations | AI answers | Team members | Broadcast messages | Integrations |
 |---|---|---|---|---|---|---|
 | Free trial (14 days) | free | 1,500 | 2,000 | 5 | 1,000 | Yes |
-| Starter | ₹999 / $12 | 300 | 300 | 2 | 200 | No |
-| Growth | ₹2,999 / $35 | 1,500 | 2,000 | 5 | 1,000 | Yes |
-| Scale | ₹7,999 / $95 | 6,000 | 10,000 | 15 | 5,000 | Yes |
+| Pro | ₹499 in India, $19 elsewhere | 1,500 | 2,000 | 5 | 1,000 | Yes |
+
+Businesses that were on the older Starter, Growth or Scale plans are treated as Pro.
 
 - Counters reset each calendar month. At a limit, existing chats continue but new chats (or AI answers, or broadcasts) stop, as described in the User Guide.
 - A lapsed trial or subscription stops the bot from replying. A paid subscription gets a **3-day grace period**.
@@ -214,10 +216,16 @@ Each business connects its own Google account. Their refresh token is stored enc
 ### Online payments (when you are ready)
 Payments are built but off. Add keys to switch them on. They apply to a business that pays itself; plans you grant, and redeem codes, never need them.
 
-- **Stripe** (dollars): create three recurring monthly Prices, then set `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_PRICE_STARTER`, `STRIPE_PRICE_GROWTH`, `STRIPE_PRICE_SCALE`. Add a webhook to `https://<your-domain>/webhooks/stripe` with these events: `checkout.session.completed`, `customer.subscription.created`, `customer.subscription.updated`, `customer.subscription.deleted`, `invoice.paid`, `invoice.payment_failed`.
+- **PayPal** (dollars: PayPal balance or card). Recurring monthly subscriptions that renew by themselves.
+  1. **Credentials.** developer.paypal.com → Apps & Credentials → choose **Live** (or Sandbox to test) → your app → copy the Client ID and Secret. Put `PAYPAL_CLIENT_ID`, `PAYPAL_CLIENT_SECRET` and `PAYPAL_MODE=live` (or `sandbox`) in the server `.env`. Your PayPal business account must have **Subscriptions** available.
+  2. **Plan and webhook, in one step.** On the server run `docker exec <bot-container> node dist/cli/paypalSetup.js`. It creates the $19 monthly plan in PayPal, registers the webhook `https://<your-domain>/webhooks/paypal` with the events we use, and prints two lines: `PAYPAL_PLAN_PRO=P-...` and `PAYPAL_WEBHOOK_ID=...`. Paste them into `.env` and restart. It is safe to repeat: PayPal returns the same plan and the same webhook rather than making duplicates.
+  3. Open **Platform admin → Settings → Payments setup** and press **Check connections**. Every PayPal line must show a tick.
+  4. How it behaves: the owner approves the subscription on PayPal; the webhook (`BILLING.SUBSCRIPTION.ACTIVATED`, then `PAYMENT.SALE.COMPLETED` for each monthly charge) switches the plan on and sets its end to PayPal's next billing date. A failed payment puts the plan in a 3-day grace period; cancelling stops future charges and access continues to the end of the paid period. Every webhook is checked with PayPal before it is trusted, and repeats are counted once.
+  5. Rotate the client secret in the PayPal dashboard if it was ever shared, and then update `.env`.
+- **Stripe** (dollars): create one recurring monthly Price, then set `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET` and `STRIPE_PRICE_PRO`. Add a webhook to `https://<your-domain>/webhooks/stripe` with these events: `checkout.session.completed`, `customer.subscription.created`, `customer.subscription.updated`, `customer.subscription.deleted`, `invoice.paid`, `invoice.payment_failed`.
 - **Razorpay** (rupees: UPI AutoPay, cards, netbanking). Recurring monthly subscriptions that renew by themselves. Needs your Razorpay account to be activated, which is when Razorpay issues live API keys.
   1. **Keys.** Razorpay Dashboard → Account & Settings → API keys → generate. Put `RAZORPAY_KEY_ID` and `RAZORPAY_KEY_SECRET` in the server `.env`. Start with **Test mode** keys (they begin `rzp_test_`); no real money moves. Check that **Subscriptions** is enabled on your account.
-  2. **Plans.** On the server run once: `docker exec <bot-container> node dist/cli/razorpaySetup.js`. It creates three monthly plans in Razorpay with exactly your prices and prints three lines, `RAZORPAY_PLAN_STARTER=plan_...` and so on. Paste them into `.env`. **Run it only once**: Razorpay cannot delete plans, so a second run with the lines missing would create duplicates (plans already in `.env` are never recreated).
+  2. **Plans.** On the server run once: `docker exec <bot-container> node dist/cli/razorpaySetup.js`. It creates the monthly plan in Razorpay with exactly your price (₹499) and prints one line, `RAZORPAY_PLAN_PRO=plan_...`. Paste them into `.env`. **Run it only once**: Razorpay cannot delete plans, so a second run with the lines missing would create duplicates (plans already in `.env` are never recreated).
   3. **Webhook.** Dashboard → Account & Settings → Webhooks → Add: URL `https://<your-domain>/webhooks/razorpay`, choose a secret, tick these events: `subscription.activated`, `subscription.charged`, `subscription.pending`, `subscription.halted`, `subscription.cancelled`, `subscription.completed`, `subscription.resumed`. Put the secret in `RAZORPAY_WEBHOOK_SECRET`.
   4. Restart the bot, then open **Platform admin → Settings → Payments setup** and press **Check connection with Razorpay**. Every line must show a tick. It proves the keys work and that each plan exists with the right price and monthly period. The page also shows the exact webhook address to enter.
   5. Test in Test mode: as an owner choose a plan, pay with Razorpay's test card or UPI, and watch the plan switch on. **Payments** and **Subscriptions** show the result. Then replace the test keys, plan ids and webhook secret with live ones (the plan ids differ between test and live, so run the plan step again in live mode, once).

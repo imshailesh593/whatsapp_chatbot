@@ -82,7 +82,7 @@ async function cleanup() {
   ok(/WhatsApp slots/.test(dash) && /Revenue/i.test(dash), 'dashboard shows KPIs and the WhatsApp slots strip');
 
   for (const [label, expect] of [
-    ['Client Management', 'Add business'], ['Subscriptions', 'Subscriptions'], ['Payments', 'Payments'], ['Plans', 'Starter'],
+    ['Client Management', 'Add business'], ['Subscriptions', 'Subscriptions'], ['Payments', 'Payments'], ['Plans', 'Pro'],
     ['Redeem codes', 'New redeem code'], ['Affiliates', 'Referral programme'], ['Audit log', 'Audit'], ['Settings', 'WhatsApp numbers']
   ] as const) {
     await click(op, 'aside nav button', label);
@@ -188,7 +188,7 @@ async function cleanup() {
   await click(ow, 'button', 'Apply code');
   await waitText(ow, 'Code applied');
   const after = await prisma.workspace.findFirst({ where: { businessName: 'Glow Dental Clinic' } });
-  ok(after?.plan === 'growth' && after.planStatus === 'active', 'applying a code switches the plan on');
+  ok(after?.plan === 'pro' && after.planStatus === 'active', 'applying a code switches the plan on');
 
   // turn hand-off off and back on, save
   const cb = await ow.$('input[type="checkbox"]');

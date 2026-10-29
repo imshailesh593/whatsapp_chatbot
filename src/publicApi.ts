@@ -20,7 +20,7 @@ export function registerPublicApi(app: FastifyInstance): void {
     else if (++h.n > LIMIT_PER_MINUTE) return reply.header('Retry-After', '60').status(429).send({ error: 'Rate limit: 60 requests per minute' });
     const { ws } = await loadConfig(k.workspaceId);
     const access = accessState(ws);
-    if (!access.integrations) return reply.status(402).send({ error: 'The API is available on Growth and Scale plans' });
+    if (!access.integrations) return reply.status(402).send({ error: 'The API needs an active plan' });
     if (!access.active) return reply.status(402).send({ error: 'This account is not active' });
     (req as any).wsId = k.workspaceId;
   };

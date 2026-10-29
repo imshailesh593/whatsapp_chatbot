@@ -86,6 +86,51 @@ footer a{color:var(--mute);margin-right:16px}
 .doc .meta{color:var(--mute);font-size:14px;margin-bottom:24px}
 table.t{width:100%;border-collapse:collapse;font-size:14.5px;margin:12px 0}
 table.t th,table.t td{border:1px solid var(--line);padding:9px 12px;text-align:left;vertical-align:top}table.t th{background:var(--soft)}
+.hero{background:radial-gradient(900px 420px at 88% -8%,color-mix(in srgb,var(--accent) 24%,transparent),transparent),radial-gradient(700px 380px at -8% 0,color-mix(in srgb,var(--brand) 16%,transparent),transparent)}
+.chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:18px}
+.chips span{background:var(--card);border:1px solid var(--line);border-radius:99px;padding:5px 12px;font-size:13px;font-weight:600;color:var(--mute)}
+.stage{position:relative}
+.float{position:absolute;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:10px 13px;font-size:12.5px;line-height:1.4;box-shadow:0 14px 34px rgba(0,0,0,.2);z-index:2}
+.float b{display:block;font-size:13px}.float.a{left:-56px;bottom:-26px}.float.c{right:-30px;top:-24px}
+.stats{padding:0}.stats .wrap{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;padding-top:6px;padding-bottom:6px}
+.stat{text-align:center;padding:20px 10px}.stat b{display:block;font-size:30px;letter-spacing:-.02em;color:var(--brand)}.stat span{font-size:14px;color:var(--mute)}
+.split{display:grid;grid-template-columns:1fr 1fr;gap:48px;align-items:center}
+.split h2{margin-bottom:12px}.split p{color:var(--mute)}
+.tick{list-style:none;padding:0;margin:16px 0 0}.tick li{padding-left:28px;position:relative;margin:9px 0}
+.tick li:before{content:"✓";position:absolute;left:0;top:0;width:20px;height:20px;border-radius:50%;background:var(--soft);color:var(--brand);font-weight:800;font-size:12px;display:flex;align-items:center;justify-content:center}
+.mock{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:16px;box-shadow:0 20px 50px rgba(0,0,0,.14)}
+section.alt .mock{background:var(--bg)}
+.mock .mh{display:flex;align-items:center;gap:6px;margin-bottom:12px;font-size:12px;color:var(--mute);font-weight:700}
+.mock .mh i{width:9px;height:9px;border-radius:50%;background:var(--line);display:inline-block}
+.mock .chat{border-radius:12px}
+.kan{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.kan h4{margin:0 0 8px;font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:var(--mute)}
+.lc{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:8px 10px;margin-bottom:8px;font-size:12.5px;line-height:1.35}
+section.alt .lc{background:var(--bg)}
+.lc b{display:block}.lc span{color:var(--mute)}
+.tag{display:inline-block;font-size:11px;padding:1px 8px;border-radius:99px;background:var(--soft);color:var(--brand);font-weight:700;margin-top:4px}
+.tag.hot{background:#fde8e4;color:#b3261e}
+@media (prefers-color-scheme:dark){.tag.hot{background:#3a1c18;color:#ff9b91}}
+.brief{border:1px solid var(--warnline);background:var(--warn);border-radius:12px;padding:12px 14px;font-size:13.5px;margin-bottom:10px}
+.brief b{display:block;margin-bottom:4px}
+.slot{display:flex;justify-content:space-between;align-items:center;border:1px solid var(--line);background:var(--card);border-radius:10px;padding:10px 12px;margin:8px 0;font-size:14px;font-weight:600}
+section.alt .slot{background:var(--bg)}
+.slot em{font-style:normal;font-size:12px;color:var(--brand);background:var(--soft);padding:2px 9px;border-radius:99px}
+.ok{background:var(--soft);border-radius:12px;padding:12px 14px;font-size:14px;margin-top:10px}
+.ico{font-size:28px;line-height:1;margin-bottom:10px}
+.vs{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+.vs .card h3{margin-bottom:10px}.vs ul{list-style:none;padding:0;margin:0}.vs li{padding-left:26px;position:relative;margin:9px 0;color:var(--mute);font-size:15px}
+.vs .bad li:before{content:"✕";position:absolute;left:0;color:#b3261e;font-weight:800}
+.vs .good li:before{content:"✓";position:absolute;left:0;color:var(--brand);font-weight:800}
+.vs .good{border:2px solid var(--brand)}
+.scroll{overflow-x:auto}
+table.cmp{width:100%;border-collapse:collapse;font-size:14.5px;min-width:620px}
+table.cmp th,table.cmp td{padding:12px 14px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
+table.cmp thead th{font-size:13px;text-transform:uppercase;letter-spacing:.04em;color:var(--mute)}
+table.cmp td:first-child{font-weight:700}
+table.cmp .us{background:var(--soft);font-weight:700}
+.eg{font-size:12px;color:var(--mute);text-align:center;margin-top:10px}
+@media (max-width:860px){.float{display:none}.split{grid-template-columns:1fr;gap:28px}.split .vis{order:2}.stats .wrap{grid-template-columns:1fr 1fr}.vs{grid-template-columns:1fr}}
 @media (max-width:860px){.hero .wrap{grid-template-columns:1fr}.g3,.g4{grid-template-columns:1fr 1fr}nav.main a.h{display:none}}
 @media (max-width:560px){.g3,.g2,.g4{grid-template-columns:1fr}.cta-band{padding:28px 20px}}
 `;
@@ -187,11 +232,11 @@ const FEATURES: { title: string; items: string[] }[] = [
 
 function landing(): string {
   const name = esc(PRODUCT_NAME);
-  const planCards = PLANS.map((p, i) => {
+  const planCards = PLANS.map((p) => {
     const l = p.limits;
-    return `<div class="card plan${p.id === 'growth' ? ' pop' : ''}">
+    return `<div class="card plan pop">
 <h3>${esc(p.name)}</h3><p class="fine" style="margin:0 0 8px">${esc(p.blurb)}</p>
-<div class="price">${inr(p.price.INR)}<small> / month</small></div><div class="fine">or ${usd(p.price.USD)} / month</div>
+<div class="price">${inr(p.price.INR)}<small> / month in India</small></div><div class="price" style="font-size:26px;margin-top:2px">${usd(p.price.USD)}<small> / month everywhere else</small></div>
 <ul>
 <li>${n(l.conversations)} new conversations a month</li>
 <li>${n(l.aiReplies)} AI answers a month</li>
@@ -201,9 +246,9 @@ function landing(): string {
 <li>CRM, inbox, simulator, analytics</li>
 <li>Google Calendar booking and human hand-off</li>
 <li class="${p.integrations ? '' : 'no'}">Webhooks and REST API${p.integrations ? '' : ' (not included)'}</li>
+<li>Free updates and email support</li>
 </ul>
-<a class="btn ${p.id === 'growth' ? 'p' : 's'}" href="/admin/">${signupOpen() ? `Start ${TRIAL_DAYS}-day free trial` : 'Get started'}</a>
-${i === 1 ? '<div class="fine" style="margin-top:8px">Most popular</div>' : ''}
+<a class="btn p" href="/admin/">${signupOpen() ? `Start ${TRIAL_DAYS}-day free trial` : 'Get started'}</a>
 </div>`;
   }).join('');
 
@@ -213,7 +258,7 @@ ${i === 1 ? '<div class="fine" style="margin-top:8px">Most popular</div>' : ''}
     ['What does the AI do, and what does it not do?', 'It answers questions from the facts you give it (prices, hours, policies), in the language the customer writes in. If the answer is not in your notes it does not guess. It also writes the short briefing when a customer asks for a person, and helps you set up. The questions customers must answer are always the ones you wrote.'],
     ['Can customers talk to a real person?', 'Yes. If a customer asks for a human, the bot stops replying in that chat and alerts you with a summary. You reply from your phone or the dashboard, then hand the chat back to the bot when you are done.'],
     ['How does appointment booking work?', 'Connect your Google Calendar once and set your working days, hours and appointment length. The bot offers real free times from your calendar, books the one the customer chooses and reminds them before it starts.'],
-    ['How much does it cost, and can I cancel?', `Plans start at ${inr(PLANS[0].price.INR)} a month. You can try it free for ${TRIAL_DAYS} days. Cancel any time from your dashboard and keep access until the end of the period you paid for. See the <a href="/refunds">refund and cancellation policy</a>.`],
+    ['How much does it cost, and can I cancel?', `One plan with everything included: ${inr(PLANS[0].price.INR)} a month in India, ${usd(PLANS[0].price.USD)} a month everywhere else. You can try it free for ${TRIAL_DAYS} days. Cancel any time from your dashboard and keep access until the end of the period you paid for. See the <a href="/refunds">refund and cancellation policy</a>.`],
     ['What happens when my plan or trial ends?', `The bot stops replying to new messages, but your leads and settings stay safe. A paid plan whose renewal fails keeps working for a ${GRACE_DAYS}-day grace period so you can fix the payment.`],
     ['Who can see my customers\' chats?', `Only you and the team members you add. We process the messages to run the service and never sell them. Read the <a href="/privacy">privacy policy</a> for details, including which providers are involved.`],
     ['What do I need to start?', 'A phone with WhatsApp (a business number is best), an email address, and about ten minutes. Sign up, describe your business or choose a template, scan the QR code and go live.']
@@ -227,7 +272,10 @@ ${i === 1 ? '<div class="fine" style="margin-top:8px">Most popular</div>' : ''}
 <p class="lead">${name} greets new customers on your WhatsApp number, asks the right questions, answers common questions with AI, books appointments into your calendar and hands the hot ones to you. No Meta approval, no code.</p>
 <div class="cta"><a class="btn p" href="/admin/">${signupOpen() ? `Start your ${TRIAL_DAYS}-day free trial` : 'Open the dashboard'}</a><a class="btn s" href="#features">See everything it does</a></div>
 <div class="fine">${signupOpen() ? 'No card needed to start. ' : ''}Set up in about ten minutes.</div>
+<div class="chips"><span>✓ Your own number</span><span>✓ Replies in the customer's language</span><span>✓ Google Calendar booking</span><span>✓ Built-in CRM</span></div>
 </div>
+<div class="stage">
+<div class="float a"><b>🔥 New lead</b>Priya S. · Whitening<br><span class="fine">All 4 answers saved</span></div>
 <div class="phone" aria-hidden="true"><div class="bar">Glow Dental Clinic</div><div class="chat">
 <div class="b out">Hi, do you do teeth whitening?</div>
 <div class="b in">Welcome to Glow Dental! Reply with a number:<br>1️⃣ Check-up<br>2️⃣ Whitening<br>3️⃣ Braces</div>
@@ -236,6 +284,96 @@ ${i === 1 ? '<div class="fine" style="margin-top:8px">Most popular</div>' : ''}
 <div class="b out">No, first time</div>
 <div class="b in">Thanks! Reply <b>BOOK</b> to pick a time that suits you.</div>
 </div></div>
+<div class="float c"><b>📅 Booked</b>Tue 11:00 · added to your calendar</div>
+</div>
+</div></section>
+
+<section class="stats"><div class="wrap">
+<div class="stat"><b>10 min</b><span>typical set-up</span></div>
+<div class="stat"><b>24 / 7</b><span>replies, even at night</span></div>
+<div class="stat"><b>9 × 12</b><span>services × questions each</span></div>
+<div class="stat"><b>${TRIAL_DAYS} days</b><span>to try it on your own number</span></div>
+</div></section>
+
+<section><div class="wrap">
+<h2 style="text-align:center">Your WhatsApp inbox, without the chaos</h2>
+<p class="sub" style="margin-left:auto;margin-right:auto;text-align:center">Enquiries arrive at all hours. Replying late, or asking the same five questions by hand, is where leads go cold.</p>
+<div class="vs">
+<div class="card bad"><h3>Without ${name}</h3><ul>
+<li>Enquiries sit unanswered overnight and on weekends</li>
+<li>You type the same questions and prices again and again</li>
+<li>Details are scattered across chats, notes and memory</li>
+<li>Booking a time takes ten messages back and forth</li>
+<li>You never know which ad or post a lead came from</li>
+</ul></div>
+<div class="card good"><h3>With ${name}</h3><ul>
+<li>Every new customer gets an instant, friendly reply</li>
+<li>The bot asks your questions and answers the common ones</li>
+<li>Each lead is saved with their answers, stage and history</li>
+<li>Customers pick a free time and it lands in your calendar</li>
+<li>Tracked links show which campaign each lead came from</li>
+</ul></div>
+</div></div></section>
+
+<section class="alt"><div class="wrap split">
+<div>
+<span class="eyebrow">Capture and qualify</span>
+<h2 style="margin-top:12px">Ask the right questions, every time</h2>
+<p>Describe your business and the AI assistant drafts your service menu and questions. Customers answer one question at a time, on the chat app they already use. You get a finished lead, not a half-typed thread.</p>
+<ul class="tick"><li>Up to 9 services with up to 12 questions each</li><li>Templates for real estate, clinics, B2B services, overseas careers and more</li><li>Test everything in the simulator before going live</li></ul>
+</div>
+<div class="vis"><div class="mock"><div class="mh"><i></i><i></i><i></i>&nbsp;Example conversation</div><div class="chat">
+<div class="b in">Which area are you looking in?</div>
+<div class="b out">Whitefield, Bangalore</div>
+<div class="b in">What is your budget range?</div>
+<div class="b out">80 lakh to 1 crore</div>
+<div class="b in">When do you plan to buy?</div>
+<div class="b out">Within 3 months</div>
+<div class="b in">Thank you! Our team will contact you shortly. ✅</div>
+</div></div></div>
+</div></section>
+
+<section><div class="wrap split">
+<div class="vis"><div class="mock"><div class="mh"><i></i><i></i><i></i>&nbsp;Example inbox</div>
+<div class="brief"><b>🙋 Needs a person · AI briefing</b>Rohan is buying a 3-bedroom in Whitefield, budget 80 lakh to 1 crore, within 3 months. He asked to speak to someone about a site visit this weekend.</div>
+<div class="chat"><div class="b out">Can I talk to someone about visiting this weekend?</div><div class="b in">Of course. I have asked our team to message you here shortly.</div></div>
+</div><div class="eg">Illustration with example data</div></div>
+<div>
+<span class="eyebrow">Answer and hand over</span>
+<h2 style="margin-top:12px">AI that answers, and steps back when a person is needed</h2>
+<p>The AI replies to side questions in the customer's own language, using only the facts you wrote down. If someone asks for a real person, the bot stops, tells them, and sends you a short briefing so you can pick up without re-reading the chat.</p>
+<ul class="tick"><li>No invented prices or promises</li><li>Pause the bot for one chat and reply yourself, from the dashboard or your phone</li><li>Hand the chat back to the bot when you are done</li></ul>
+</div>
+</div></section>
+
+<section class="alt"><div class="wrap split">
+<div>
+<span class="eyebrow">Book and follow up</span>
+<h2 style="margin-top:12px">Appointments that book themselves</h2>
+<p>Connect Google Calendar once. The bot offers real free times, books the one the customer picks, adds it to your calendar and reminds them before it starts. Nobody can take the same slot twice.</p>
+<ul class="tick"><li>Your working days, hours, buffers and appointment length</li><li>Customers can cancel or reschedule by message</li><li>Instant alerts to your WhatsApp or email</li></ul>
+</div>
+<div class="vis"><div class="mock"><div class="mh"><i></i><i></i><i></i>&nbsp;Example booking</div>
+<div class="slot">Tue, 11:00 – 11:30 <em>Free</em></div>
+<div class="slot">Tue, 15:30 – 16:00 <em>Free</em></div>
+<div class="slot">Wed, 10:00 – 10:30 <em>Free</em></div>
+<div class="ok">✅ Booked: <b>Tue, 11:00</b>. A reminder will be sent before it starts.</div>
+</div><div class="eg">Illustration with example data</div></div>
+</div></section>
+
+<section><div class="wrap split">
+<div class="vis"><div class="mock"><div class="mh"><i></i><i></i><i></i>&nbsp;Example pipeline</div>
+<div class="kan">
+<div><h4>New</h4><div class="lc"><b>Priya S.</b><span>Whitening</span><br><span class="tag hot">Hot</span></div><div class="lc"><b>Amit K.</b><span>Check-up</span></div></div>
+<div><h4>Follow-up</h4><div class="lc"><b>Rohan M.</b><span>Braces</span><br><span class="tag">Call Fri</span></div></div>
+<div><h4>Booked</h4><div class="lc"><b>Neha D.</b><span>Check-up</span><br><span class="tag">Tue 11:00</span></div><div class="lc"><b>Karan P.</b><span>Whitening</span></div></div>
+</div></div><div class="eg">Illustration with example data</div></div>
+<div>
+<span class="eyebrow">Manage your leads</span>
+<h2 style="margin-top:12px">A simple CRM built in</h2>
+<p>Every lead lands in a board you can drag through your own stages, with owner, tags, notes and a full timeline. Add teammates with roles, and export to CSV any time.</p>
+<ul class="tick"><li>List and board views, search and filters</li><li>Follow-up reminders on any lead</li><li>Analytics: conversations, funnel, sources and drop-off points</li></ul>
+</div>
 </div></section>
 
 <section class="alt" id="features"><div class="wrap">
@@ -244,7 +382,19 @@ ${i === 1 ? '<div class="fine" style="margin-top:8px">Most popular</div>' : ''}
 <div class="grid g3">${FEATURES.map((f) => `<div class="card"><h3>${esc(f.title)}</h3><ul>${f.items.map((i) => `<li>${esc(i)}</li>`).join('')}</ul></div>`).join('')}</div>
 </div></section>
 
-<section id="how"><div class="wrap">
+<section><div class="wrap">
+<h2>Built for businesses that live on WhatsApp</h2>
+<p class="sub">If customers message you to ask, enquire or book, it fits.</p>
+<div class="grid g3">
+<div class="card"><div class="ico">🏠</div><h3>Real estate</h3><p class="fine">Capture area, budget and timeline, then hand serious buyers to an agent.</p></div>
+<div class="card"><div class="ico">🦷</div><h3>Clinics and dentists</h3><p class="fine">Collect the reason for the visit and book appointments around your day.</p></div>
+<div class="card"><div class="ico">🎓</div><h3>Education and overseas careers</h3><p class="fine">Qualify students by course, country and intake before a counsellor calls.</p></div>
+<div class="card"><div class="ico">💼</div><h3>B2B and agencies</h3><p class="fine">Ask about size, need and timeline, and push qualified leads to your CRM by webhook.</p></div>
+<div class="card"><div class="ico">💇</div><h3>Salons and wellness</h3><p class="fine">Answer price and timing questions instantly and fill your calendar.</p></div>
+<div class="card"><div class="ico">📚</div><h3>Coaches and courses</h3><p class="fine">Turn ad clicks into conversations and follow up with those who are still thinking.</p></div>
+</div></div></section>
+
+<section class="alt" id="how"><div class="wrap">
 <h2>Live in four steps</h2>
 <p class="sub">No developers needed.</p>
 <div class="grid g4">
@@ -254,10 +404,23 @@ ${i === 1 ? '<div class="fine" style="margin-top:8px">Most popular</div>' : ''}
 <div class="card"><div class="num">4</div><h3>Go live</h3><p class="fine">Press go live. Leads arrive in your dashboard and your phone as they happen.</p></div>
 </div></div></section>
 
+<section><div class="wrap">
+<h2>How it compares</h2>
+<p class="sub">An honest look at the usual options for answering WhatsApp enquiries.</p>
+<div class="card scroll" style="padding:8px"><table class="cmp"><thead><tr><th></th><th>Replying by hand</th><th>Official Business API tools</th><th class="us">${name}</th></tr></thead><tbody>
+<tr><td>Works on your existing number</td><td>Yes</td><td>Usually needs a number moved to the API</td><td class="us">Yes, linked in one QR scan</td></tr>
+<tr><td>Meta approval needed</td><td>No</td><td>Yes</td><td class="us">No</td></tr>
+<tr><td>Replies at night and weekends</td><td>Only if you are awake</td><td>Yes</td><td class="us">Yes</td></tr>
+<tr><td>Asks your qualifying questions</td><td>Typed by hand</td><td>Depends on the tool</td><td class="us">Yes, built in</td></tr>
+<tr><td>Books into Google Calendar</td><td>Manual</td><td>Depends on the tool</td><td class="us">Yes</td></tr>
+<tr><td>Risk of WhatsApp restricting the number</td><td>Low</td><td>Low</td><td class="us">Higher for bulk messaging, so we limit broadcasts</td></tr>
+</tbody></table></div>
+</div></section>
+
 <section class="alt" id="pricing"><div class="wrap">
-<h2>Simple monthly pricing</h2>
-<p class="sub">Pay in rupees (UPI or card) or in dollars (card). Every plan includes a ${TRIAL_DAYS}-day free trial with the Growth plan's limits. Plans renew monthly and you can cancel at any time. Taxes, if applicable, are extra.</p>
-<div class="grid g3">${planCards}</div>
+<h2 style="text-align:center">Simple monthly pricing</h2>
+<p class="sub" style="margin-left:auto;margin-right:auto;text-align:center">One plan with everything included. Customers in India pay in rupees (UPI or card); everyone else pays in dollars (card or PayPal). Try it free for ${TRIAL_DAYS} days first. It renews monthly and you can cancel at any time. Taxes, if applicable, are extra.</p>
+<div class="grid" style="max-width:460px;margin:0 auto">${planCards}</div>
 <p class="fine" style="margin-top:16px">What counts: a "new conversation" is a customer who messages you for the first time in a calendar month; limits reset every month. See the <a href="/refunds">refund and cancellation policy</a> and the <a href="/terms">terms</a>.</p>
 </div></section>
 
@@ -280,7 +443,7 @@ ${faq.map(([q, a]) => `<details><summary>${esc(q)}</summary><p>${a}</p></details
 <p>${signupOpen() ? `Try ${name} free for ${TRIAL_DAYS} days.` : `Open the dashboard to get started.`}</p>
 <a class="btn p" href="/admin/">${signupOpen() ? 'Start free' : 'Open the dashboard'}</a>
 </div></div></section>`;
-  return page({ title: `${PRODUCT_NAME}: WhatsApp lead capture, CRM and appointment booking`, description: `${PRODUCT_NAME} turns WhatsApp enquiries into qualified leads: guided questions, AI answers, human hand-off, Google Calendar booking, CRM, broadcasts and analytics on your own number. Plans from ${inr(PLANS[0].price.INR)} a month.`, path: '/', body, landing: true });
+  return page({ title: `${PRODUCT_NAME}: WhatsApp lead capture, CRM and appointment booking`, description: `${PRODUCT_NAME} turns WhatsApp enquiries into qualified leads: guided questions, AI answers, human hand-off, Google Calendar booking, CRM, broadcasts and analytics on your own number. ${inr(PLANS[0].price.INR)} a month in India, ${usd(PLANS[0].price.USD)} elsewhere.`, path: '/', body, landing: true });
 }
 
 // ---------- legal pages ----------
@@ -314,7 +477,7 @@ function privacy(): string {
 <ul>
 <li>Account data: name of business, email address, password (stored only as a one-way hash), role and team members you add.</li>
 <li>Business settings: description, services, questions, notes, links, time zone, alert contact details and pipeline stages.</li>
-<li>Usage and billing data: plan, usage counters, payment status and references. We do not store card numbers; payments are handled by Razorpay or Stripe.</li>
+<li>Usage and billing data: plan, usage counters, payment status and references. We do not store card numbers; payments are handled by Razorpay, Stripe or PayPal.</li>
 <li>The WhatsApp link: a session credential created when you scan the QR code, stored on our server so the bot stays connected.</li>
 <li>If you connect Google Calendar: your Google account email and an access (refresh) token, stored encrypted, plus the calendar events we create for bookings and the free/busy times we read to offer slots.</li>
 <li>Technical data: sign-in times, IP address in security logs, an audit log of administrative actions.</li>
@@ -344,7 +507,7 @@ function privacy(): string {
 <tr><td>Meta / WhatsApp</td><td>The messaging network through which messages travel.</td></tr>
 <tr><td>Google (Gemini AI)</td><td>Generates answers, onboarding suggestions and hand-off briefings. The text of the relevant conversation and your business notes are sent to the model to produce a reply.</td></tr>
 <tr><td>Google (Sign-in and Calendar)</td><td>Only if you connect a calendar. We use the access only to read free/busy times and create or delete booking events.</td></tr>
-<tr><td>Razorpay and Stripe</td><td>Payment processing for subscriptions.</td></tr>
+<tr><td>Razorpay, Stripe and PayPal</td><td>Payment processing for subscriptions.</td></tr>
 <tr><td>Resend or another email provider</td><td>Sends alert emails, if you enable email alerts.</td></tr>
 <tr><td>Cloud hosting provider</td><td>Servers and storage on which the Service and its database run.</td></tr>
 </table>
@@ -414,8 +577,8 @@ function terms(): string {
 <h2>7. Plans, free trial and payment</h2>
 <ul>
 <li>Plans, prices and limits are shown on our <a href="/#pricing">pricing section</a> and in your dashboard. Prices are in Indian rupees or US dollars; applicable taxes, if any, are extra.</li>
-<li>A new business may get a free trial of ${TRIAL_DAYS} days with Growth-plan limits. We may change or end trials and promotions.</li>
-<li>Paid plans are billed monthly in advance and renew automatically through Razorpay (rupees) or Stripe (dollars) until you cancel. You authorise us and our payment provider to charge your chosen payment method.</li>
+<li>A new business may get a free trial of ${TRIAL_DAYS} days with the full plan. We may change or end trials and promotions.</li>
+<li>Paid plans are billed monthly in advance and renew automatically through Razorpay (rupees), or Stripe or PayPal (dollars) until you cancel. You authorise us and our payment provider to charge your chosen payment method.</li>
 <li>Monthly limits (new conversations, AI answers, team members, broadcast messages) reset each calendar month. When a limit is reached the related feature stops until the next month or an upgrade, as explained in your dashboard.</li>
 <li>If a payment fails, the plan continues for a ${GRACE_DAYS}-day grace period. If the problem is not fixed the bot stops replying.</li>
 <li>We may change prices with at least 30 days' notice before your next renewal.</li>
@@ -429,7 +592,7 @@ function terms(): string {
 <p>The Service, its software, design and branding belong to the Operator or its licensors. We give you a limited, non-exclusive, non-transferable right to use it while your account is active. These terms do not transfer any ownership to you.</p>
 
 <h2>10. Third-party services</h2>
-<p>The Service depends on providers such as WhatsApp, Google, Razorpay, Stripe, email and hosting providers. Their availability and terms are outside our control, and an outage or change by a provider may affect the Service.</p>
+<p>The Service depends on providers such as WhatsApp, Google, Razorpay, Stripe, PayPal, email and hosting providers. Their availability and terms are outside our control, and an outage or change by a provider may affect the Service.</p>
 
 <h2>11. Availability and support</h2>
 <p>We aim to keep the Service available but do not promise uninterrupted or error-free operation. We may carry out maintenance, and the Service can be affected by events beyond our control. Support is provided by email as described on the <a href="/contact">contact page</a>.</p>
@@ -462,11 +625,11 @@ function refunds(): string {
 <p>This policy applies to paid plans of ${p}, operated by <strong>${esc(operator())}</strong>. The Service is a digital subscription, delivered online as soon as your plan is active. Nothing is shipped.</p>
 
 <h2>1. Free trial</h2>
-<p>New businesses can try the Service free for ${TRIAL_DAYS} days with Growth-plan limits. No payment method is needed to start a trial, and no charge is made unless you choose a paid plan.</p>
+<p>New businesses can try the Service free for ${TRIAL_DAYS} days with the full plan. No payment method is needed to start a trial, and no charge is made unless you choose a paid plan.</p>
 
 <h2>2. How billing works</h2>
 <ul>
-<li>Paid plans are billed monthly in advance, in Indian rupees (Razorpay) or US dollars (Stripe).</li>
+<li>Paid plans are billed monthly in advance, in Indian rupees (Razorpay) or US dollars (Stripe or PayPal).</li>
 <li>Plans renew automatically each month until you cancel.</li>
 <li>If a renewal payment fails you keep access for a ${GRACE_DAYS}-day grace period.</li>
 </ul>

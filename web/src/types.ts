@@ -215,10 +215,13 @@ export interface BillingPlan {
 export interface PaymentsSetup {
   razorpay: { label: string; ok: boolean; detail: string }[];
   stripe: { label: string; ok: boolean; detail: string }[];
+  paypal: { label: string; ok: boolean; detail: string }[];
   razorpayWebhook: string;
   stripeWebhook: string;
+  paypalWebhook: string;
   razorpayReady: boolean;
   stripeReady: boolean;
+  paypalReady: boolean;
 }
 
 export interface BillingInfo {
@@ -233,7 +236,7 @@ export interface BillingInfo {
   provider: string | null;
   limits: { conversations: number | null; aiReplies: number | null; seats: number | null; broadcasts: number | null };
   usage: { conversations: number; aiReplies: number; seats: number; broadcasts: number };
-  providers: { stripe: boolean; razorpay: boolean };
+  providers: { stripe: boolean; razorpay: boolean; paypal: boolean };
   plans: BillingPlan[];
   payments: { id: string; amount: number; currency: string; status: string; plan: string; at: string }[];
 }
