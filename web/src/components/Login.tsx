@@ -103,6 +103,14 @@ export default function Login({ onDone }: { onDone: (user: AdminUser) => void })
           </p>
         )}
         {!signup && <p className="text-[11px] text-slate-500 mt-3 text-center">Forgot your password? Ask your account owner to reset it.</p>}
+        {signup && (
+          <p className="text-[11px] text-slate-500 mt-3 text-center">
+            By creating an account you agree to the <a className="underline hover:text-slate-300" href="/terms" target="_blank" rel="noopener noreferrer">Terms</a>, the <a className="underline hover:text-slate-300" href="/privacy" target="_blank" rel="noopener noreferrer">Privacy Policy</a> and the <a className="underline hover:text-slate-300" href="/refunds" target="_blank" rel="noopener noreferrer">Refund Policy</a>.
+          </p>
+        )}
+        <p className="text-[11px] text-slate-600 mt-4 text-center">
+          <a className="hover:text-slate-300" href="/">Home</a> · <a className="hover:text-slate-300" href="/privacy">Privacy</a> · <a className="hover:text-slate-300" href="/terms">Terms</a> · <a className="hover:text-slate-300" href="/refunds">Refunds</a> · <a className="hover:text-slate-300" href="/contact">Contact</a>
+        </p>
       </form>
     </div>
   );

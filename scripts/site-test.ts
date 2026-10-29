@@ -1,0 +1,101 @@
+// The public website: landing page, privacy, terms, refunds, contact. No database needed.
+// Usage: npx tsx scripts/site-test.ts
+process.env.PRODUCT_NAME = 'Test Console';
+delete process.env.OPERATOR_NAME;
+delete process.env.SUPPORT_EMAIL;
+delete process.env.SUPPORT_PHONE;
+delete process.env.BUSINESS_ADDRESS;
+delete process.env.SIGNUP_ENABLED;
+process.env.PUBLIC_URL = 'https://site.example/';
+import Fastify from 'fastify';
+import { registerSite } from '../src/site';
+import { PLANS, TRIAL_DAYS } from '../src/plans';
+
+const ok = (c: any, m: string) => { if (!c) throw new Error('FAIL: ' + m); console.log('  ok -', m); };
+
+(async () => {
+  const app = Fastify();
+  registerSite(app);
+  const get = (url: string, accept = 'text/html') => app.inject({ method: 'GET', url, headers: { accept } });
+
+  console.log('[pages exist]');
+  const paths = ['/', '/privacy', '/terms', '/refunds', '/contact'];
+  const html: Record<string, string> = {};
+  for (const p of paths) {
+    const r = await get(p);
+    html[p] = r.body;
+    ok(r.statusCode === 200 && /text\/html/.test(String(r.headers['content-type'])) && r.body.startsWith('<!doctype html>'), `${p} is a normal HTML page`);
+  }
+
+  console.log('\n[every page]');
+  for (const p of paths) {
+    const b = html[p];
+    ok(b.includes('© ' + new Date().getFullYear() + ' Rajni'), `${p}: the footer names the operator, Rajni`);
+    ok(['/privacy', '/terms', '/refunds', '/contact'].every((l) => b.includes(`href="${l}"`)), `${p}: the footer links all four policy pages`);
+    ok(!/<script/i.test(b), `${p}: no scripts`);
+    ok(/<title>[^<]{10,}<\/title>/.test(b) && /<meta name="description" content="[^"]{30,}">/.test(b) && b.includes('width=device-width'), `${p}: has a title, description and is mobile-ready`);
+    ok(b.includes(`<link rel="canonical" href="https://site.example${p}">`), `${p}: canonical address uses PUBLIC_URL`);
+  }
+  ok((await get('/')).headers['content-security-policy']!.toString().includes("default-src 'none'"), 'pages are served with a strict content security policy');
+
+  console.log('\n[landing page]');
+  const l = html['/'];
+  ok(/<h1>[^<]*WhatsApp[^<]*<\/h1>/.test(l), 'a clear headline about WhatsApp leads');
+  for (const p of PLANS) ok(l.includes(p.name) && l.includes('₹' + (p.price.INR / 100).toLocaleString('en-IN')) && l.includes('$' + p.price.USD / 100), `pricing shows ${p.name} in rupees and dollars`);
+  ok(l.includes(`${TRIAL_DAYS}-day free trial`), 'the free trial is stated');
+  for (const f of ['Capture and qualify', 'Answer and hand over', 'Book and follow up', 'Manage your leads (CRM)', 'Grow and measure', 'Connect your tools']) ok(l.includes(f), `feature group "${f}" is listed`);
+  for (const w of ['Google Calendar', 'Broadcasts', 'Webhooks', 'REST API', 'simulator', 'Analytics', 'real person']) ok(l.toLowerCase().includes(w.toLowerCase()), `the page mentions ${w}`);
+  ok((l.match(/<details>/g) ?? []).length >= 8, 'an FAQ with at least eight questions');
+  ok(l.includes('not the official WhatsApp Business API') && l.includes('can limit or ban numbers'), 'it is honest that this is not the official API and numbers can be restricted');
+  ok(l.includes('not affiliated with, endorsed by or sponsored by WhatsApp'), 'the non-affiliation notice is in the footer');
+  ok(l.includes('Start your 14-day free trial'), 'sign-up open: the main button offers the free trial');
+  ok(!/\bMNS\b|Topmate|Samir/.test(l), 'no leftover content from the original single business');
+
+  console.log('\n[policies]');
+  const pv = html['/privacy'];
+  ok(['Digital Personal Data Protection', 'grievance officer', 'Razorpay', 'Stripe', 'Gemini', 'Google API Services User Data Policy', 'processor', 'Your rights'].every((k) => pv.includes(k)), 'privacy policy covers the legal basics, providers, Google data and rights');
+  ok(pv.includes('data fiduciary') && pv.includes('Cookies'), '...roles and cookies');
+  const tm = html['/terms'];
+  ok(['Acceptable use', 'Linked devices', 'AI-generated content', 'Limit of liability', 'Governing law', 'Indemnity', 'Plans, free trial and payment'].every((k) => tm.includes(k)), 'terms cover use, WhatsApp risk, AI, liability, law and billing');
+  ok(tm.includes('laws of India') && tm.includes('the operator&#39;s place of residence in India'), 'governing law is India (jurisdiction placeholder is generic until set)');
+  const rf = html['/refunds'];
+  ok(['7 days', '5 to 7 working days', 'Cancel subscription', 'Duplicate or wrong charges', 'not refundable', 'Free trial'].every((k) => rf.includes(k)), 'refund policy states the window, timeline, cancellation steps and exclusions');
+  ok(pv.includes('Operator:') && html['/contact'].includes('Operator:') && rf.includes('Operator:'), 'contact details block (operator name) appears on the policies');
+  ok(!html['/contact'].includes('mailto:'), 'with no email configured, no empty mailto link is shown');
+
+  console.log('\n[contact details come from settings, and are escaped]');
+  process.env.SUPPORT_EMAIL = 'help@site.example';
+  process.env.SUPPORT_PHONE = '+91 90000 00000';
+  process.env.BUSINESS_ADDRESS = '12 Test Street <script>alert(1)</script>, Pune';
+  process.env.OPERATOR_NAME = 'Rajni "R" <b>';
+  const c = (await get('/contact')).body;
+  ok(c.includes('mailto:help@site.example') && c.includes('+91 90000 00000') && c.includes('12 Test Street'), 'email, phone and address are shown when set');
+  ok(!c.includes('<script>') && c.includes('&lt;script&gt;') && !c.includes('<b>') && c.includes('Rajni &quot;R&quot; &lt;b&gt;'), 'values are HTML-escaped, so settings cannot inject markup');
+  delete process.env.OPERATOR_NAME;
+
+  console.log('\n[sign-up closed]');
+  process.env.SIGNUP_ENABLED = '0';
+  const closed = (await get('/')).body;
+  ok(!closed.includes('Start free') && !closed.includes('Start your 14-day') && closed.includes('Open the dashboard'), 'with sign-up off the buttons say Open the dashboard, not Start free');
+  delete process.env.SIGNUP_ENABLED;
+
+  console.log('\n[links, robots and errors]');
+  const hrefs = [...new Set([...l.matchAll(/href="(\/[^"#]*)"/g)].map((m) => m[1]))].filter((h) => h !== '/admin/');
+  for (const h of hrefs) ok((await get(h)).statusCode === 200, `internal link ${h} works`);
+  ok(/href="#features"/.test(l) && /id="features"/.test(l) && /id="pricing"/.test(l) && /id="faq"/.test(l) && /id="how"/.test(l), 'in-page anchors have targets');
+  const robots = (await get('/robots.txt', 'text/plain')).body;
+  ok(robots.includes('Disallow: /admin/') && robots.includes('Sitemap: https://site.example/sitemap.xml'), 'robots.txt hides the dashboard and points to the sitemap');
+  const sm = (await get('/sitemap.xml', 'application/xml')).body;
+  ok(paths.every((p) => sm.includes(`<loc>https://site.example${p}</loc>`)), 'the sitemap lists every page');
+  const nf = await get('/nope');
+  ok(nf.statusCode === 404 && nf.body.includes('Page not found') && nf.body.includes('Rajni'), 'an unknown page shows a friendly 404 with the same footer');
+  const api = await get('/api/whatever', 'application/json');
+  ok(api.statusCode === 404 && api.json().error === 'Not found', 'unknown API paths still return JSON, not HTML');
+  ok((await get('/admin/nothing', 'text/html')).headers['content-type']?.toString().includes('json'), 'dashboard paths keep their own error format');
+
+  console.log('\nSITE TESTS OK');
+  process.exit(0);
+})().catch((e) => {
+  console.error(e);
+  process.exit(1);
+});

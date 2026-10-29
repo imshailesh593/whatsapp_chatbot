@@ -13,6 +13,7 @@ import { startFollowUpWorker } from './services/crm';
 import { startAppointmentWorker } from './services/calendar';
 import { startRenewalWorker } from './services/billing';
 import { registerPublicApi } from './publicApi';
+import { registerSite } from './site';
 
 dotenv.config();
 
@@ -25,6 +26,7 @@ const qrDataUrl = async (workspaceId: string) => {
 
 registerAdmin(app, { getQr: qrDataUrl });
 registerPublicApi(app);
+registerSite(app);
 
 app.get('/health', async () => ({ ok: true, whatsapp: waFor(DEFAULT_WORKSPACE_ID).status, connections: waSummary() }));
 

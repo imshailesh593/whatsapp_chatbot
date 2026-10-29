@@ -12,6 +12,7 @@ Contents
 6. [Opening sign-ups](#6-opening-sign-ups)
 7. [Capacity: how many WhatsApp numbers fit](#7-capacity-how-many-whatsapp-numbers-fit)
 8. [Referral programme](#8-referral-programme)
+   - [The public website and policies](#8b-the-public-website)
 9. [Settings you control with environment variables](#9-settings-you-control-with-environment-variables)
 10. [Setting up the optional services](#10-setting-up-the-optional-services)
 11. [Deploying and updating](#11-deploying-and-updating)
@@ -151,6 +152,17 @@ Each linked number holds a live session. The Dashboard strip **WhatsApp slots** 
 
 ---
 
+## 8b. The public website
+
+The server also serves a public website on the same domain: a **landing page** at `/` (features, how it works, pricing, FAQ), and the pages **Privacy Policy** (`/privacy`), **Terms & Conditions** (`/terms`), **Refund & Cancellation Policy** (`/refunds`) and **Contact** (`/contact`). The footer on every page reads "© <year> Rajni" and says the service is operated by Rajni (change with `OPERATOR_NAME`). The dashboard stays at `/admin/`. The sign-in screen links the same policies.
+
+- Set these in `.env` and restart: `SUPPORT_EMAIL`, `SUPPORT_PHONE`, `BUSINESS_ADDRESS`, optionally `SUPPORT_HOURS` and `LEGAL_JURISDICTION` (for example "Pune, Maharashtra"). They appear on the Contact page and at the end of each policy. Fields you leave empty are simply not shown, so **fill in at least the email and an address before applying for payment-provider approval**, which checks that these are visible.
+- Prices on the landing page come from `src/plans.ts`, so they always match the dashboard. The sign-up buttons say "Start your 14-day free trial" while sign-up is open and "Open the dashboard" when `SIGNUP_ENABLED=0`.
+- The policies are **drafts written for this service, not legal advice**. Read them, change any rule you do not want to keep (especially the 7-day first-payment refund window, the 90-day backup retention and the jurisdiction), and have a lawyer check them before relying on them. The text lives in `src/site.ts`; edit and redeploy.
+- Search engines are told to skip the dashboard. A sitemap is at `/sitemap.xml`.
+
+---
+
 ## 9. Settings you control with environment variables
 
 Kept in the `.env` file on the server (never committed to git). Restart the bot after changes. The commented file `.env.example` is the master list.
@@ -161,6 +173,7 @@ Kept in the `.env` file on the server (never committed to git). Restart the bot 
 | `GEMINI_API_KEY`, `GEMINI_MODEL` | AI answers, onboarding assistant, hand-off briefings (model default `gemini-3.8-flash`) |
 | `ADMIN_TOKEN` | Opens the legacy WhatsApp QR page `/qr?token=...` for the default workspace |
 | `SESSION_SECRET` | Signs login cookies and protects stored Google tokens. Long and random. Changing it logs everyone out and disconnects every linked Google Calendar |
+| `OPERATOR_NAME`, `SUPPORT_EMAIL`, `SUPPORT_PHONE`, `BUSINESS_ADDRESS`, `SUPPORT_HOURS`, `LEGAL_JURISDICTION` | Names and contact details shown on the public website and policies ([section 8b](#8b-the-public-website)). `OPERATOR_NAME` defaults to Rajni |
 | `BOT_DOMAIN`, `BOT_DOMAIN_ALT` | Domain names for the proxy and certificates |
 | `PUBLIC_URL` | The address used in links and callbacks (set it to your real `https://` address) |
 | `PRODUCT_NAME` | Name on the sign-in screen |
