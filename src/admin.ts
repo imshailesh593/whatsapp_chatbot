@@ -24,6 +24,8 @@ import { onboardingAvailable, onboardingTurn, parseDraft, type ChatTurn, type Dr
 import { TEMPLATES, getTemplate } from './templates';
 import { waFor } from './services/whatsapp';
 import { PRODUCT_NAME } from './brand';
+import { sendTestAlert, smtpConfigured } from './services/alerts';
+import { transportReady } from './services/transport';
 import { PLANS, accessState, planById } from './plans';
 import { getUsage } from './services/usage';
 import { cancelSubscription, handleRazorpayWebhook, handleStripeWebhook, openPortal, providersAvailable, startCheckout } from './services/billing';
@@ -483,6 +485,13 @@ export function registerAdmin(app: FastifyInstance, opts: { getQr: (workspaceId:
     const w = await prisma.workspace.update({ where: { id: wsId(req) }, data: { botEnabled } });
     invalidateConfig(w.id);
     return { workspace: publicWorkspace(w) };
+  });
+
+  // ---- lead alerts ----
+  app.get('/admin/api/alerts', { preHandler: guard }, async (req) => ({ emailAvailable: smtpConfigured(), whatsappReady: transportReady(wsId(req)) }));
+  app.post('/admin/api/alerts/test', { preHandler: manager }, async (req) => {
+    const w = await prisma.workspace.findUniqueOrThrow({ where: { id: wsId(req) } });
+    return sendTestAlert(w.id, w.businessName);
   });
 
   // ---- AI onboarding assistant ----

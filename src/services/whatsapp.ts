@@ -91,7 +91,8 @@ export class WaConnection {
   constructor(readonly workspaceId: string) {
     this.authDir = path.join(authBase(), workspaceId);
     setTransport(workspaceId, {
-      sendText: (to, text) => this.sendText(to, text)
+      sendText: (to, text) => this.sendText(to, text),
+      ready: () => this.status === 'ready'
     });
   }
 

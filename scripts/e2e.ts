@@ -8,10 +8,11 @@ import { setTransport, captureReplies } from '../src/services/transport';
 import { handleIncomingMessage } from '../src/services/engine';
 import { loadConfig, resolveService, saveServices, invalidateConfig, sanitizeServices } from '../src/services/botConfig';
 import { getTemplate } from '../src/templates';
+import { deliverAlert, sendTestAlert } from '../src/services/alerts';
 
 const extra: string[] = [];
 const sent: { ws: string; to: string; text: string }[] = [];
-const wire = (ws: string) => setTransport(ws, { sendText: async (to, text) => void sent.push({ ws, to, text }) });
+const wire = (ws: string) => setTransport(ws, { sendText: async (to, text) => void sent.push({ ws, to, text }), ready: () => true });
 const replies = (ws: string, to: string) => sent.filter((s) => s.ws === ws && s.to === to).map((s) => s.text);
 
 function assert(c: any, msg: string) {
@@ -111,6 +112,40 @@ async function main() {
     await saveServices(A.id, [{ title: 'Only option', keywords: [], questions: [{ key: 'q', prompt: 'One question?' }] }]);
     await handleIncomingMessage(A.id, mid, 'Mid', 'answer');
     assert(replies(A.id, mid).at(-1)!.includes('Only option'), 'removed service -> customer is sent back to the new menu');
+
+    console.log('\n[lead alerts]');
+    await saveServices(A.id, tplA.services);
+    process.env.SMTP_HOST = 'json';
+    process.env.SMTP_FROM = 'bot@example.com';
+    await prisma.workspace.update({ where: { id: A.id }, data: { notifyPhone: '+91 90000 00001', notifyEmail: 'owner@example.com' } });
+    invalidateConfig(A.id);
+    const ap = `9133${run}`;
+    const q0 = cfgA.services[4].questions; // "Other Enquiry": 3 questions
+    await handleIncomingMessage(A.id, ap, 'Priya', 'hi');
+    await handleIncomingMessage(A.id, ap, 'Priya', '5');
+    for (let i = 0; i < q0.length; i++) await handleIncomingMessage(A.id, ap, 'Priya', `alert-answer-${i}`);
+    await new Promise((r) => setTimeout(r, 400));
+    const alertMsg = replies(A.id, '919000000001').find((t) => t.includes('New lead'));
+    assert(!!alertMsg && alertMsg.includes('Priya') && alertMsg.includes('Other Enquiry') && alertMsg.includes('alert-answer-0'), 'new-lead alert reaches the owner WhatsApp number with name, service and answers');
+    assert((await prisma.webhookLog.count({ where: { workspaceId: A.id, phoneNumber: '919000000001' } })) === 0, 'owner alerts are not written into customer chat logs');
+    const tr = await sendTestAlert(A.id, 'Acme Careers');
+    assert(tr.whatsapp === 'sent' && tr.email === 'sent', 'test alert: both channels sent');
+    await handleIncomingMessage(A.id, ap, 'Priya', 'I have already booked');
+    await new Promise((r) => setTimeout(r, 400));
+    assert(replies(A.id, '919000000001').some((t) => t.includes('Booking confirmed')), 'booking alert sent once the customer confirms');
+    const n1 = replies(A.id, '919000000001').length;
+    await handleIncomingMessage(A.id, ap, 'Priya', 'I have already booked');
+    await new Promise((r) => setTimeout(r, 300));
+    assert(replies(A.id, '919000000001').length === n1, 'booking alert is not repeated');
+    const none = await deliverAlert(B.id, 'x', 'y');
+    assert(none.whatsapp.startsWith('skipped') && none.email.startsWith('skipped'), 'no channels configured: nothing sent, no error');
+    await prisma.workspace.update({ where: { id: A.id }, data: { notifyPhone: 'abc' } });
+    invalidateConfig(A.id);
+    assert((await deliverAlert(A.id, 'x', 'y')).whatsapp.startsWith('skipped: the alert number'), 'invalid alert number is rejected');
+    delete process.env.SMTP_HOST;
+    await prisma.workspace.update({ where: { id: A.id }, data: { notifyPhone: '' } });
+    invalidateConfig(A.id);
+    assert((await deliverAlert(A.id, 'x', 'y')).email.startsWith('skipped: email sending'), 'email without SMTP is reported, not thrown');
 
     console.log('\n[plan access and limits]');
     const C = await prisma.workspace.create({

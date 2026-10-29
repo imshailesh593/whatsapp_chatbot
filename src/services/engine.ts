@@ -4,6 +4,7 @@ import { sendTextMessage, logMessage, isCapturing } from './transport';
 import { answerFreeform } from './gemini';
 import { accessState } from '../plans';
 import { admitAiReply, admitConversation } from './usage';
+import { notifyBooked, notifyNewLead } from './alerts';
 import {
   loadConfig,
   resolveService,
@@ -157,6 +158,7 @@ export async function handleIncomingMessage(
           })
         ]);
         await send(phoneNumber, completionMessage(cfg));
+        if (!isCapturing()) void notifyNewLead(workspaceId, session.id);
       }
       break;
     }
@@ -164,8 +166,10 @@ export async function handleIncomingMessage(
     case SessionStage.COMPLETED: {
       const hasBooking = !!cfg.ws.bookingUrl.trim();
       if (hasBooking && BOOKED_RE.test(text)) {
+        const wasBooked = (await prisma.lead.findFirst({ where: { workspaceId, phoneNumber }, select: { isBookedTopmate: true } }))?.isBookedTopmate;
         await prisma.lead.updateMany({ where: { workspaceId, phoneNumber }, data: { isBookedTopmate: true } });
         await send(phoneNumber, bookedConfirmationMessage());
+        if (!isCapturing() && wasBooked === false) void notifyBooked(workspaceId, phoneNumber);
       } else if (hasBooking && /consultation|appointment|book|fee/.test(lower)) {
         await send(phoneNumber, bookingReminderMessage(cfg));
       } else if (looksLikeQuestion(text) && (await tryAnswer(text))) {
