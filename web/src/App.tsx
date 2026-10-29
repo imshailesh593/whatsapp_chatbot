@@ -111,15 +111,15 @@ function Console({ user, onSignedOut }: { user: AdminUser; onSignedOut: () => vo
             </div>
 
             <div className="flex items-center space-x-3 text-xs text-slate-300">
-              <div className="hidden md:flex items-center space-x-2 bg-slate-900/80 px-3 py-1.5 rounded-lg border border-slate-800">
+              <button onClick={() => setTab('config')} title="Manage WhatsApp connection" className="hidden md:flex items-center space-x-2 bg-slate-900/80 px-3 py-1.5 rounded-lg border border-slate-800 hover:border-slate-700">
                 <span className="relative flex h-2 w-2">
                   {waReady && <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />}
                   <span className={`relative inline-flex rounded-full h-2 w-2 ${waReady ? 'bg-emerald-500' : 'bg-rose-500'}`} />
                 </span>
                 <span>
-                  WhatsApp: <strong>{waReady ? 'Connected' : overview?.whatsapp ?? '…'}</strong>
+                  WhatsApp: <strong>{waReady ? 'Connected' : overview?.whatsapp === 'off' ? 'Disconnected' : overview?.whatsapp ?? '…'}</strong>
                 </span>
-              </div>
+              </button>
               {overview && (
                 <a
                   href={overview.topmateUrl}
@@ -167,7 +167,7 @@ function Console({ user, onSignedOut }: { user: AdminUser; onSignedOut: () => vo
         )}
         {tab === 'inbox' && <Inbox contacts={contacts} waReady={waReady} onChanged={replaceContact} />}
         {tab === 'simulator' && <Simulator onActivity={refresh} />}
-        {tab === 'config' && overview && <Settings overview={overview} me={user} />}
+        {tab === 'config' && overview && <Settings overview={overview} me={user} onWaChanged={refresh} />}
       </main>
 
       {selectedContact && (

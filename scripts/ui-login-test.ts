@@ -14,7 +14,7 @@ const OUT = process.argv[2];
   await prisma.adminUser.deleteMany({ where: { email: { endsWith: '@ui-test.local' } } });
   await prisma.adminUser.create({ data: { email: 'owner@ui-test.local', passwordHash: await hashPassword('owner-password-1') } });
   const app = Fastify();
-  registerAdmin(app, { getWaStatus: () => 'ready' });
+  registerAdmin(app, { getWaStatus: () => 'ready', getWaQr: async () => null, connectWa: async () => {}, disconnectWa: async () => {} });
   await app.listen({ port: 3056 });
   const b = await puppeteer.launch({ executablePath: process.env.BROWSER_PATH || 'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe', headless: true, args: ['--no-sandbox'] });
   const pg = await b.newPage();

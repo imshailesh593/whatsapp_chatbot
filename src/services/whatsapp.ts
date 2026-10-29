@@ -1,4 +1,5 @@
 import fs from 'fs';
+import path from 'path';
 import pino from 'pino';
 import qrcodeTerminal from 'qrcode-terminal';
 import { handleIncomingMessage } from './engine';
@@ -6,7 +7,7 @@ import { setTransport, sendTextMessage } from './transport';
 import { prisma } from '../lib/prisma';
 import { UNSUPPORTED_MEDIA_MESSAGE } from '../constants/questions';
 
-export type WaStatus = 'starting' | 'qr' | 'authenticated' | 'ready' | 'disconnected';
+export type WaStatus = 'starting' | 'qr' | 'authenticated' | 'ready' | 'disconnected' | 'off';
 
 export const waState: { status: WaStatus; qr: string | null } = { status: 'starting', qr: null };
 
@@ -67,11 +68,23 @@ function phoneKey(key: any): string {
   return userPart(pn ?? key.remoteJid);
 }
 
-export function startWhatsApp(): { stop(): Promise<void> } {
+export interface WaController {
+  stop(): Promise<void>;
+  /** Start linking: shows a QR (or resumes a saved session). */
+  connect(): Promise<void>;
+  /** Unlink this bot from the phone, wipe the saved session and stay off until connect() is called. */
+  disconnect(): Promise<void>;
+}
+
+export function startWhatsApp(): WaController {
   const authDir = process.env.WA_SESSION_PATH || '.wa_auth';
   let sock: any = null;
   let stopped = false;
   let attempt = 0;
+  let connecting = false;
+  // Survives restarts: when an admin disconnects the bot it must not silently ask for a new QR after a redeploy
+  const offFlag = path.join(path.dirname(path.resolve(authDir)), 'wa_disabled');
+  let manualOff = fs.existsSync(offFlag);
 
   setTransport({
     async sendText(to, text) {
@@ -148,6 +161,7 @@ export function startWhatsApp(): { stop(): Promise<void> } {
   }
 
   async function connect(): Promise<void> {
+    if (stopped || manualOff) return;
     waState.status = 'starting';
     const baileys = await dynamicImport('@whiskeysockets/baileys');
     const makeWASocket = typeof baileys.default === 'function' ? baileys.default : baileys.makeWASocket;
@@ -163,9 +177,11 @@ export function startWhatsApp(): { stop(): Promise<void> } {
       syncFullHistory: false
     });
 
+    const mine = sock;
     sock.ev.on('creds.update', saveCreds);
 
     sock.ev.on('connection.update', (u: any) => {
+      if (mine !== sock) return; // stale socket (replaced or disconnected)
       const { connection, lastDisconnect, qr } = u;
       if (qr) {
         waState.status = 'qr';
@@ -180,8 +196,9 @@ export function startWhatsApp(): { stop(): Promise<void> } {
         console.log('WhatsApp connected (Baileys).');
       }
       if (connection === 'close') {
+        if (stopped || manualOff) return;
         waState.status = 'disconnected';
-        if (stopped) return;
+        waState.qr = null;
         const code = lastDisconnect?.error?.output?.statusCode;
         const loggedOut = code === baileys.DisconnectReason.loggedOut;
         console.error(`WhatsApp connection closed (code ${code ?? 'n/a'})${loggedOut ? ': logged out from the phone, new QR needed' : ', reconnecting'}`);
@@ -196,12 +213,50 @@ export function startWhatsApp(): { stop(): Promise<void> } {
     });
   }
 
-  connect().catch((err) => {
-    console.error('WhatsApp initialize failed:', err);
-    process.exit(1);
-  });
+  if (manualOff) {
+    waState.status = 'off';
+    console.log('WhatsApp is switched off (disconnected from the admin console).');
+  } else {
+    connect().catch((err) => {
+      console.error('WhatsApp initialize failed:', err);
+      process.exit(1);
+    });
+  }
 
   return {
+    async connect() {
+      if (connecting || waState.status !== 'off') return;
+      connecting = true;
+      try {
+        manualOff = false;
+        fs.rmSync(offFlag, { force: true });
+        attempt = 0;
+        await connect();
+      } finally {
+        connecting = false;
+      }
+    },
+    async disconnect() {
+      manualOff = true;
+      fs.mkdirSync(path.dirname(offFlag), { recursive: true });
+      fs.writeFileSync(offFlag, new Date().toISOString());
+      const s = sock;
+      sock = null;
+      try {
+        // Removes the bot from WhatsApp > Linked devices on the phone
+        if (s && waState.status === 'ready') await s.logout();
+      } catch {
+        // phone unreachable: the local session is wiped below regardless
+      }
+      try {
+        s?.end(undefined);
+      } catch {
+        // already closed
+      }
+      fs.rmSync(authDir, { recursive: true, force: true });
+      waState.status = 'off';
+      waState.qr = null;
+    },
     async stop() {
       stopped = true;
       try {

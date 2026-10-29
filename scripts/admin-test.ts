@@ -18,7 +18,7 @@ setTransport({ sendText: async (_to, text) => void sent.push(text) });
 (async () => {
   const app = Fastify();
   let wa = 'ready';
-  registerAdmin(app, { getWaStatus: () => wa });
+  registerAdmin(app, { getWaStatus: () => wa, getWaQr: async () => null, connectWa: async () => {}, disconnectWa: async () => {} });
   const J = { 'content-type': 'application/json' };
 
   let r = await app.inject('/admin/api/contacts');

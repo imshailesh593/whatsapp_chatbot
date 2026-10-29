@@ -54,3 +54,8 @@ export interface AdminRow extends AdminUser {
   createdAt: string;
   lastLoginAt: string | null;
 }
+
+export interface WaSnapshot {
+  status: string;
+  qr: string | null;
+}

@@ -2,14 +2,16 @@ import { useState } from 'react';
 import { ExternalLink } from 'lucide-react';
 import type { AdminUser, Overview, ServiceId } from '../types';
 import Admins from './Admins';
+import WhatsAppLink from './WhatsAppLink';
 import { SERVICE_STYLE } from '../config';
 
-export default function Settings({ overview, me }: { overview: Overview; me: AdminUser }) {
+export default function Settings({ overview, me, onWaChanged }: { overview: Overview; me: AdminUser; onWaChanged?: () => void }) {
   const [active, setActive] = useState<ServiceId>(overview.services[0].id);
   const branch = overview.services.find((s) => s.id === active)!;
 
   return (
     <div className="space-y-6">
+      <WhatsAppLink onChanged={onWaChanged} />
       <Admins me={me} />
       <div className="bg-slate-950 border border-slate-800 rounded-2xl p-5 shadow-lg">
         <h3 className="font-bold text-white text-base flex items-center space-x-2">

@@ -1,4 +1,4 @@
-import type { AdminRow, AdminUser, ChatMessage, Contact, Overview, PatchBody } from './types';
+import type { AdminRow, AdminUser, ChatMessage, Contact, Overview, PatchBody, WaSnapshot } from './types';
 
 export class UnauthorizedError extends Error {}
 
@@ -24,6 +24,9 @@ export const api = {
   addAdmin: (email: string, password: string) => post<{ admin: AdminUser }>('/admin/api/admins', { email, password }),
   removeAdmin: (id: string) => request<{ ok: true }>('/admin/api/admins/' + encodeURIComponent(id), { method: 'DELETE' }),
   logout: () => post<{ ok: true }>('/admin/api/logout', {}),
+  whatsapp: () => request<WaSnapshot>('/admin/api/whatsapp'),
+  whatsappConnect: () => post<WaSnapshot>('/admin/api/whatsapp/connect', {}),
+  whatsappDisconnect: () => post<WaSnapshot>('/admin/api/whatsapp/disconnect', {}),
   overview: () => request<Overview>('/admin/api/overview'),
   contacts: (includeTest: boolean) =>
     request<{ contacts: Contact[] }>(`/admin/api/contacts${includeTest ? '?test=1' : ''}`).then((r) => r.contacts),

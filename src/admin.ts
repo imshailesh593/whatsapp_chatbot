@@ -76,7 +76,12 @@ function toContact(s: SessionWithLead) {
   };
 }
 
-export function registerAdmin(app: FastifyInstance, opts: { getWaStatus: () => string }): void {
+export function registerAdmin(app: FastifyInstance, opts: {
+    getWaStatus: () => string;
+    getWaQr: () => Promise<string | null>;
+    connectWa: () => Promise<void>;
+    disconnectWa: () => Promise<void>;
+  }): void {
   const enabled = authConfigured();
   const attempts = new Map<string, { n: number; reset: number }>();
 
@@ -198,6 +203,18 @@ export function registerAdmin(app: FastifyInstance, opts: { getWaStatus: () => s
       questions: QUESTION_BRANCHES[id].map((q) => ({ key: q.key, prompt: q.question }))
     }))
   }));
+
+  // ---- WhatsApp link ----
+  const waSnapshot = async () => ({ status: opts.getWaStatus(), qr: await opts.getWaQr() });
+  app.get('/admin/api/whatsapp', { preHandler: guard }, async (_req, reply) => reply.header('Cache-Control', 'no-store').send(await waSnapshot()));
+  app.post('/admin/api/whatsapp/connect', { preHandler: guard }, async () => {
+    await opts.connectWa();
+    return waSnapshot();
+  });
+  app.post('/admin/api/whatsapp/disconnect', { preHandler: guard }, async () => {
+    await opts.disconnectWa();
+    return waSnapshot();
+  });
 
   app.get('/admin/api/contacts', { preHandler: guard }, async (req) => {
     const includeTest = (req.query as any).test === '1';

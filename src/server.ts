@@ -11,7 +11,12 @@ dotenv.config();
 
 const app = Fastify({ logger: true });
 
-registerAdmin(app, { getWaStatus: () => waState.status });
+registerAdmin(app, {
+  getWaStatus: () => waState.status,
+  getWaQr: async () => (waState.status === 'qr' && waState.qr ? QRCode.toDataURL(waState.qr, { width: 360, margin: 1 }) : null),
+  connectWa: () => client.connect(),
+  disconnectWa: () => client.disconnect()
+});
 
 app.get('/health', async () => ({ ok: true, whatsapp: waState.status }));
 
