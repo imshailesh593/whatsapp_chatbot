@@ -1,15 +1,24 @@
-import type { ServiceId, Status } from './types';
+import type { Status } from './types';
 
-export const SERVICE_STYLE: Record<ServiceId, { icon: string; shortTitle: string; badge: string }> = {
-  COACHING: { icon: '📚', shortTitle: 'Coaching', badge: 'bg-blue-100 text-blue-800 border-blue-200' },
-  LICENSING: { icon: '🩺', shortTitle: 'Licensing', badge: 'bg-emerald-100 text-emerald-800 border-emerald-200' },
-  JOBS: { icon: '💼', shortTitle: 'Overseas Jobs', badge: 'bg-purple-100 text-purple-800 border-purple-200' },
-  VISA_PR: { icon: '✈️', shortTitle: 'Visa & PR', badge: 'bg-amber-100 text-amber-800 border-amber-200' },
-  GENERAL: { icon: '🌐', shortTitle: 'General Enquiry', badge: 'bg-slate-100 text-slate-800 border-slate-200' }
-};
+const ICONS = ['📚', '🩺', '💼', '✈️', '🌐', '🏠', '🛠️', '📞', '⭐'];
+const BADGES = [
+  'bg-blue-100 text-blue-800 border-blue-200',
+  'bg-emerald-100 text-emerald-800 border-emerald-200',
+  'bg-purple-100 text-purple-800 border-purple-200',
+  'bg-amber-100 text-amber-800 border-amber-200',
+  'bg-slate-100 text-slate-800 border-slate-200',
+  'bg-rose-100 text-rose-800 border-rose-200'
+];
+
+/** Services are defined per business, so icon and colour are derived from the service key. */
+export function serviceStyle(key: string | null, title: string | null) {
+  let h = 0;
+  for (const ch of key ?? '') h = (h * 31 + ch.charCodeAt(0)) >>> 0;
+  return { icon: ICONS[h % ICONS.length], shortTitle: title ?? key ?? '', badge: BADGES[h % BADGES.length] };
+}
 
 export const STATUS_STYLE: Record<Status, { label: string; cls: string }> = {
-  CONSULTATION_BOOKED: { label: '🗓 Topmate Booked', cls: 'bg-purple-500/20 text-purple-300 border-purple-500/40' },
+  CONSULTATION_BOOKED: { label: '🗓 Booked', cls: 'bg-purple-500/20 text-purple-300 border-purple-500/40' },
   COMPLETED: { label: '✓ Qualified', cls: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40' },
   IN_PROGRESS: { label: '⏳ Answering', cls: 'bg-amber-500/20 text-amber-300 border-amber-500/40' },
   FOLLOW_UP: { label: '📞 Follow-up', cls: 'bg-blue-500/20 text-blue-300 border-blue-500/40' }

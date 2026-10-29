@@ -5,9 +5,15 @@ with a React admin console at `/admin/`.
 Slot-filling funnel: welcome → service (1-5) → one question at a time → lead saved → Topmate CTA.
 Spec: [mns_institute_whatsapp_automation_blueprint.md](mns_institute_whatsapp_automation_blueprint.md)
 
-## Branding
+## Multi-tenant (SaaS)
 
-Nothing about the business is hard-coded in the UI or in the bot's greeting, sign-off and AI prompt. Set `BUSINESS_NAME`, `BUSINESS_TAGLINE`, `BUSINESS_DESCRIPTION` (and optionally `WELCOME_INTRO`, `FORM_URL`, `TOPMATE_URL`) in `.env`. The service menu and question sets live in `src/constants/questions.ts`.
+Each business is a **workspace** with its own menu, questions, branding, team, leads and its own linked WhatsApp number (QR mode, one Baileys session per workspace under `WA_SESSION_PATH/<workspaceId>`).
+
+- **Sign-up** creates a workspace and its owner; the bot stays paused until the owner goes live.
+- **Onboarding**: a Gemini-driven assistant interviews the owner (industry first), proposes the services and question lists, and applies them after confirmation. Without a Gemini key the owner picks a template (`src/templates.ts`).
+- **Bot builder** in the dashboard edits services, keywords and questions; **Business & bot** edits branding, booking link, tone and the knowledge text the AI may quote.
+- Roles: owner, admin, agent. A platform admin (`isSuperAdmin`) sees all workspaces and can suspend a bot.
+- Existing single-business data is migrated into a default workspace (`default-workspace`) and seeded from `BUSINESS_*` / `TOPMATE_URL` / `FORM_URL`.
 
 ## Admin console (`/admin/`)
 Sign in with an admin email and password (add or remove admins under *Questionnaires & Settings*, change your own password from the account menu). Everything runs on the live database:

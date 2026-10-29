@@ -67,6 +67,8 @@ export async function bootstrapAdmin(): Promise<void> {
     console.error(`[admin] ADMIN_EMAIL/ADMIN_PASSWORD ignored: need a valid email and a password of at least ${MIN_PASSWORD_LENGTH} characters`);
     return;
   }
-  await prisma.adminUser.create({ data: { email, passwordHash: await hashPassword(password) } });
+  await prisma.adminUser.create({
+    data: { email, passwordHash: await hashPassword(password), workspaceId: 'default-workspace', role: 'owner', isSuperAdmin: true }
+  });
   console.log(`[admin] created initial admin ${email}`);
 }

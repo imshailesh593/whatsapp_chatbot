@@ -4,34 +4,15 @@ import pino from 'pino';
 import qrcodeTerminal from 'qrcode-terminal';
 import { handleIncomingMessage } from './engine';
 import { setTransport, sendTextMessage } from './transport';
+import { UNSUPPORTED_MEDIA_MESSAGE } from './botConfig';
 import { prisma } from '../lib/prisma';
-import { UNSUPPORTED_MEDIA_MESSAGE } from '../constants/questions';
 
 export type WaStatus = 'starting' | 'qr' | 'authenticated' | 'ready' | 'disconnected' | 'off';
-
-export const waState: { status: WaStatus; qr: string | null } = { status: 'starting', qr: null };
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 // Baileys 7 is ESM-only. A real dynamic import is needed because TypeScript rewrites import() to require() in CommonJS output.
 const dynamicImport = new Function('m', 'return import(m)') as (m: string) => Promise<any>;
-
-// phone number (our session key) -> WhatsApp JID we last heard from (@s.whatsapp.net or @lid)
-const jids = new Map<string, string>();
-// per-chat promise chain keeps replies in order and prevents interleaved state updates
-const chains = new Map<string, Promise<void>>();
-const seen = new Set<string>();
-
-function enqueue(key: string, task: () => Promise<void>): void {
-  const prev = chains.get(key) ?? Promise.resolve();
-  const next = prev
-    .then(task)
-    .catch((err) => console.error(`[Worker Error] ${key}:`, err))
-    .finally(() => {
-      if (chains.get(key) === next) chains.delete(key);
-    });
-  chains.set(key, next);
-}
 
 const MEDIA_KEYS = ['imageMessage', 'videoMessage', 'audioMessage', 'documentMessage', 'stickerMessage', 'contactMessage', 'locationMessage'];
 
@@ -68,46 +49,137 @@ function phoneKey(key: any): string {
   return userPart(pn ?? key.remoteJid);
 }
 
-export interface WaController {
-  stop(): Promise<void>;
-  /** Start linking: shows a QR (or resumes a saved session). */
-  connect(): Promise<void>;
-  /** Unlink this bot from the phone, wipe the saved session and stay off until connect() is called. */
-  disconnect(): Promise<void>;
+const authBase = () => path.resolve(process.env.WA_SESSION_PATH || '.wa_auth');
+
+/** Before multi-workspace support the session files lived directly in the base folder: move them under the default workspace. */
+export function migrateLegacyAuth(defaultWorkspaceId: string): void {
+  const base = authBase();
+  if (!fs.existsSync(path.join(base, 'creds.json'))) return;
+  const target = path.join(base, defaultWorkspaceId);
+  fs.mkdirSync(target, { recursive: true });
+  for (const name of fs.readdirSync(base)) {
+    const from = path.join(base, name);
+    if (name === defaultWorkspaceId || fs.statSync(from).isDirectory()) continue;
+    fs.renameSync(from, path.join(target, name));
+  }
+  console.log(`[wa] moved legacy session into ${target}`);
 }
 
-export function startWhatsApp(): WaController {
-  const authDir = process.env.WA_SESSION_PATH || '.wa_auth';
-  let sock: any = null;
-  let stopped = false;
-  let attempt = 0;
-  let connecting = false;
-  // Survives restarts: when an admin disconnects the bot it must not silently ask for a new QR after a redeploy
-  const offFlag = path.join(path.dirname(path.resolve(authDir)), 'wa_disabled');
-  let manualOff = fs.existsSync(offFlag);
+/** True when this workspace's phone has completed linking before (so it should reconnect on boot). */
+function wasLinked(dir: string): boolean {
+  try {
+    // `me` is set once pairing succeeded (the `registered` flag stays false for linked devices)
+    return !!JSON.parse(fs.readFileSync(path.join(dir, 'creds.json'), 'utf8'))?.me;
+  } catch {
+    return false;
+  }
+}
 
-  setTransport({
-    async sendText(to, text) {
-      if (!sock || waState.status !== 'ready') throw new Error('WhatsApp is not connected');
-      const jid = jids.get(to) ?? `${to}@s.whatsapp.net`;
-      // Short "typing…" pause: feels human and eases WhatsApp's anti-automation heuristics
-      try {
-        await sock.presenceSubscribe(jid);
-        await sock.sendPresenceUpdate('composing', jid);
-      } catch {
-        // cosmetic
-      }
-      await sleep(600 + Math.random() * 900);
-      await sock.sendMessage(jid, { text });
-      try {
-        await sock.sendPresenceUpdate('paused', jid);
-      } catch {
-        // cosmetic
-      }
+/** One linked WhatsApp number for one workspace. */
+export class WaConnection {
+  status: WaStatus = 'off';
+  qr: string | null = null;
+  private sock: any = null;
+  private stopped = false;
+  private attempt = 0;
+  private connecting = false;
+  private readonly authDir: string;
+  private readonly jids = new Map<string, string>();
+  private readonly chains = new Map<string, Promise<void>>();
+  private readonly seen = new Set<string>();
+
+  constructor(readonly workspaceId: string) {
+    this.authDir = path.join(authBase(), workspaceId);
+    setTransport(workspaceId, {
+      sendText: (to, text) => this.sendText(to, text)
+    });
+  }
+
+  get linked(): boolean {
+    return wasLinked(this.authDir);
+  }
+
+  /** Reconnect on boot only when this workspace had finished linking earlier. */
+  autoStart(): void {
+    if (this.linked) this.open().catch((e) => console.error(`[wa ${this.workspaceId.slice(0, 8)}] start failed:`, e));
+  }
+
+  /** User pressed Connect: show a QR (or resume a saved session). */
+  async connect(): Promise<void> {
+    if (this.connecting || this.status !== 'off') return;
+    this.connecting = true;
+    try {
+      this.stopped = false;
+      this.attempt = 0;
+      await this.open();
+    } finally {
+      this.connecting = false;
     }
-  });
+  }
 
-  async function onMessage(m: any, type: string): Promise<void> {
+  /** Unlink from the phone, wipe the saved session and stay off until connect() is called. */
+  async disconnect(): Promise<void> {
+    this.stopped = true;
+    const s = this.sock;
+    this.sock = null;
+    try {
+      // Removes the bot from WhatsApp > Linked devices on the phone
+      if (s && this.status === 'ready') await s.logout();
+    } catch {
+      // phone unreachable: the local session is wiped below regardless
+    }
+    try {
+      s?.end(undefined);
+    } catch {
+      // already closed
+    }
+    fs.rmSync(this.authDir, { recursive: true, force: true });
+    this.status = 'off';
+    this.qr = null;
+  }
+
+  async stop(): Promise<void> {
+    this.stopped = true;
+    try {
+      this.sock?.end(undefined);
+    } catch {
+      // already closed
+    }
+  }
+
+  private enqueue(key: string, task: () => Promise<void>): void {
+    const prev = this.chains.get(key) ?? Promise.resolve();
+    const next = prev
+      .then(task)
+      .catch((err) => console.error(`[Worker Error] ${this.workspaceId}/${key}:`, err))
+      .finally(() => {
+        if (this.chains.get(key) === next) this.chains.delete(key);
+      });
+    this.chains.set(key, next);
+  }
+
+  private async sendText(to: string, text: string): Promise<void> {
+    if (!this.sock || this.status !== 'ready') throw new Error('WhatsApp is not connected');
+    const sock = this.sock;
+    const jid = this.jids.get(to) ?? `${to}@s.whatsapp.net`;
+    // Short "typing…" pause: feels human and eases WhatsApp's anti-automation heuristics
+    try {
+      await sock.presenceSubscribe(jid);
+      await sock.sendPresenceUpdate('composing', jid);
+    } catch {
+      // cosmetic
+    }
+    await sleep(600 + Math.random() * 900);
+    await sock.sendMessage(jid, { text });
+    try {
+      await sock.sendPresenceUpdate('paused', jid);
+    } catch {
+      // cosmetic
+    }
+  }
+
+  private async onMessage(m: any, type: string): Promise<void> {
+    const wsId = this.workspaceId;
     const jid: string | undefined = m.key?.remoteJid;
     if (!jid || !m.message) return;
     if (jid.endsWith('@g.us') || jid.endsWith('@broadcast') || jid.endsWith('@newsletter')) return; // 1:1 chats only
@@ -117,58 +189,58 @@ export function startWhatsApp(): WaController {
     if (m.key.fromMe) {
       const cmd = text.toLowerCase();
       if (cmd !== '!pause' && cmd !== '!resume') return;
-      const key = [...jids.entries()].find(([, j]) => j === jid)?.[0] ?? phoneKey(m.key);
+      const key = [...this.jids.entries()].find(([, j]) => j === jid)?.[0] ?? phoneKey(m.key);
       const paused = cmd === '!pause';
-      const r = await prisma.session.updateMany({ where: { phoneNumber: key }, data: { isAgentPaused: paused } });
-      console.log(`[Takeover] ${key} ${paused ? 'paused' : 'resumed'} (${r.count} session)`);
+      const r = await prisma.session.updateMany({ where: { workspaceId: wsId, phoneNumber: key }, data: { isAgentPaused: paused } });
+      console.log(`[Takeover] ${wsId}/${key} ${paused ? 'paused' : 'resumed'} (${r.count} session)`);
       return;
     }
     if (type !== 'notify') return; // history/append sync is not a new customer message
 
     const id: string | undefined = m.key.id;
-    if (!id || seen.has(id)) return;
-    seen.add(id);
-    if (seen.size > 5000) seen.delete(seen.values().next().value as string);
+    if (!id || this.seen.has(id)) return;
+    this.seen.add(id);
+    if (this.seen.size > 5000) this.seen.delete(this.seen.values().next().value as string);
 
     const key = phoneKey(m.key);
-    jids.set(key, jid);
+    this.jids.set(key, jid);
     const name: string | undefined = m.pushName || undefined;
-    console.log(`[wa] incoming from ${jid} -> ${key}`);
+    console.log(`[wa ${wsId.slice(0, 8)}] incoming from ${jid} -> ${key}`);
     try {
-      await sock.readMessages([m.key]);
+      await this.sock?.readMessages([m.key]);
     } catch {
       // blue ticks are cosmetic
     }
 
     const isMedia = MEDIA_KEYS.some((k) => unwrap(m.message)?.[k]);
 
-    enqueue(key, async () => {
+    this.enqueue(key, async () => {
       // Persistent dedupe: WhatsApp redelivers unacked messages after a restart
       const dup = await prisma.webhookLog.findFirst({
-        where: { direction: 'INBOUND', payload: { path: ['wamid'], equals: id } },
+        where: { workspaceId: wsId, direction: 'INBOUND', payload: { path: ['wamid'], equals: id } },
         select: { id: true }
       });
       if (dup) return;
       if (!text) {
         if (isMedia) {
-          const s = await prisma.session.findUnique({ where: { phoneNumber: key } });
-          if (!s?.isAgentPaused) await sendTextMessage(key, UNSUPPORTED_MEDIA_MESSAGE);
+          const s = await prisma.session.findUnique({ where: { workspaceId_phoneNumber: { workspaceId: wsId, phoneNumber: key } } });
+          if (!s?.isAgentPaused) await sendTextMessage(wsId, key, UNSUPPORTED_MEDIA_MESSAGE);
         }
         return;
       }
-      await handleIncomingMessage(key, name, text, id);
+      await handleIncomingMessage(wsId, key, name, text, id);
     });
   }
 
-  async function connect(): Promise<void> {
-    if (stopped || manualOff) return;
-    waState.status = 'starting';
+  private async open(): Promise<void> {
+    if (this.stopped) return;
+    this.status = 'starting';
     const baileys = await dynamicImport('@whiskeysockets/baileys');
     const makeWASocket = typeof baileys.default === 'function' ? baileys.default : baileys.makeWASocket;
-    const { state, saveCreds } = await baileys.useMultiFileAuthState(authDir);
+    const { state, saveCreds } = await baileys.useMultiFileAuthState(this.authDir);
     const latest = await baileys.fetchLatestBaileysVersion().catch(() => ({ version: undefined }));
 
-    sock = makeWASocket({
+    const sock = makeWASocket({
       auth: state,
       version: latest.version,
       logger: pino({ level: 'silent' }),
@@ -176,94 +248,76 @@ export function startWhatsApp(): WaController {
       markOnlineOnConnect: false,
       syncFullHistory: false
     });
+    this.sock = sock;
 
-    const mine = sock;
     sock.ev.on('creds.update', saveCreds);
 
     sock.ev.on('connection.update', (u: any) => {
-      if (mine !== sock) return; // stale socket (replaced or disconnected)
+      if (sock !== this.sock) return; // stale socket (replaced or disconnected)
       const { connection, lastDisconnect, qr } = u;
       if (qr) {
-        waState.status = 'qr';
-        waState.qr = qr;
-        console.log('Scan this QR with WhatsApp > Linked devices:');
-        qrcodeTerminal.generate(qr, { small: true });
+        this.status = 'qr';
+        this.qr = qr;
+        console.log(`[wa ${this.workspaceId.slice(0, 8)}] QR ready`);
+        if (process.env.WA_QR_IN_LOG === '1') qrcodeTerminal.generate(qr, { small: true });
       }
       if (connection === 'open') {
-        waState.status = 'ready';
-        waState.qr = null;
-        attempt = 0;
-        console.log('WhatsApp connected (Baileys).');
+        this.status = 'ready';
+        this.qr = null;
+        this.attempt = 0;
+        console.log(`[wa ${this.workspaceId.slice(0, 8)}] connected`);
       }
       if (connection === 'close') {
-        if (stopped || manualOff) return;
-        waState.status = 'disconnected';
-        waState.qr = null;
+        if (this.stopped) return;
+        this.status = 'disconnected';
+        this.qr = null;
         const code = lastDisconnect?.error?.output?.statusCode;
         const loggedOut = code === baileys.DisconnectReason.loggedOut;
-        console.error(`WhatsApp connection closed (code ${code ?? 'n/a'})${loggedOut ? ': logged out from the phone, new QR needed' : ', reconnecting'}`);
-        if (loggedOut) fs.rmSync(authDir, { recursive: true, force: true });
-        const delay = loggedOut ? 1000 : Math.min(30_000, 2000 * ++attempt);
-        setTimeout(() => connect().catch((e) => console.error('reconnect failed:', e)), delay);
+        console.error(`[wa ${this.workspaceId.slice(0, 8)}] closed (code ${code ?? 'n/a'})${loggedOut ? ': logged out from the phone' : ', reconnecting'}`);
+        if (loggedOut) {
+          // The owner removed the device on the phone: wipe and go idle until they press Connect again
+          fs.rmSync(this.authDir, { recursive: true, force: true });
+          this.sock = null;
+          this.status = 'off';
+          return;
+        }
+        const delay = Math.min(30_000, 2000 * ++this.attempt);
+        setTimeout(() => this.open().catch((e) => console.error('reconnect failed:', e)), delay);
       }
     });
 
     sock.ev.on('messages.upsert', ({ messages, type }: { messages: any[]; type: string }) => {
-      for (const m of messages) onMessage(m, type).catch((e) => console.error('[wa] message handler error:', e));
+      for (const m of messages) this.onMessage(m, type).catch((e) => console.error('[wa] message handler error:', e));
     });
   }
+}
 
-  if (manualOff) {
-    waState.status = 'off';
-    console.log('WhatsApp is switched off (disconnected from the admin console).');
-  } else {
-    connect().catch((err) => {
-      console.error('WhatsApp initialize failed:', err);
-      process.exit(1);
-    });
+// ---------- registry: one connection per workspace ----------
+
+const connections = new Map<string, WaConnection>();
+
+export function waFor(workspaceId: string): WaConnection {
+  let c = connections.get(workspaceId);
+  if (!c) {
+    c = new WaConnection(workspaceId);
+    connections.set(workspaceId, c);
   }
+  return c;
+}
 
+/** Boot: reconnect every workspace that had finished linking before the restart. */
+export async function startWhatsApp(): Promise<{ stop(): Promise<void> }> {
+  migrateLegacyAuth('default-workspace');
+  const all = await prisma.workspace.findMany({ select: { id: true } });
+  for (const { id } of all) waFor(id).autoStart();
   return {
-    async connect() {
-      if (connecting || waState.status !== 'off') return;
-      connecting = true;
-      try {
-        manualOff = false;
-        fs.rmSync(offFlag, { force: true });
-        attempt = 0;
-        await connect();
-      } finally {
-        connecting = false;
-      }
-    },
-    async disconnect() {
-      manualOff = true;
-      fs.mkdirSync(path.dirname(offFlag), { recursive: true });
-      fs.writeFileSync(offFlag, new Date().toISOString());
-      const s = sock;
-      sock = null;
-      try {
-        // Removes the bot from WhatsApp > Linked devices on the phone
-        if (s && waState.status === 'ready') await s.logout();
-      } catch {
-        // phone unreachable: the local session is wiped below regardless
-      }
-      try {
-        s?.end(undefined);
-      } catch {
-        // already closed
-      }
-      fs.rmSync(authDir, { recursive: true, force: true });
-      waState.status = 'off';
-      waState.qr = null;
-    },
     async stop() {
-      stopped = true;
-      try {
-        sock?.end(undefined);
-      } catch {
-        // already closed
-      }
+      await Promise.all([...connections.values()].map((c) => c.stop()));
     }
   };
 }
+
+export const waSummary = () => ({
+  total: connections.size,
+  ready: [...connections.values()].filter((c) => c.status === 'ready').length
+});

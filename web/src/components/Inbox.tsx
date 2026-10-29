@@ -2,12 +2,12 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ExternalLink, Phone, Send, UserCheck, Zap } from 'lucide-react';
 import { api } from '../api';
 import type { ChatMessage, Contact } from '../types';
-import { SERVICE_STYLE, STATUS_STYLE, ago, displayPhone, humanize, waLink } from '../config';
+import { serviceStyle, STATUS_STYLE, ago, displayPhone, humanize, waLink } from '../config';
 
 const CANNED = [
-  'Hello! I am taking over this conversation from our senior admissions desk.',
-  'Could you please share your updated resume and marksheets on this chat?',
-  'We have noted your Topmate consultation. Our counsellor will connect at the chosen time.',
+  'Hello! I am a team member taking over this conversation from the assistant.',
+  'Could you please share a few more details here so we can help you better?',
+  'We have noted your booking. Our team will connect at the chosen time.',
   'Thanks for your patience, we will get back to you shortly.'
 ];
 
@@ -103,7 +103,7 @@ export default function Inbox({ contacts, waReady, onChanged }: Props) {
   }
 
   const canReply = !active.botActive && waReady;
-  const svc = active.service ? SERVICE_STYLE[active.service] : null;
+  const svc = active.service ? serviceStyle(active.service, active.serviceTitle) : null;
 
   return (
     <div className="bg-slate-950 border border-slate-800 rounded-2xl overflow-hidden shadow-2xl h-[700px] flex flex-col md:flex-row">
@@ -111,7 +111,7 @@ export default function Inbox({ contacts, waReady, onChanged }: Props) {
       <div className="w-full md:w-80 max-h-48 md:max-h-none border-r border-slate-800 bg-slate-900/60 flex flex-col">
         <div className="p-3.5 border-b border-slate-800">
           <h3 className="font-bold text-sm text-white">Conversations</h3>
-          <p className="text-[11px] text-slate-400">Select a candidate to monitor or take over</p>
+          <p className="text-[11px] text-slate-400">Select a contact to monitor or take over</p>
         </div>
         <div className="flex-1 overflow-y-auto divide-y divide-slate-800/60">
           {list.map((c) => (
@@ -121,7 +121,7 @@ export default function Inbox({ contacts, waReady, onChanged }: Props) {
                 <div className="font-semibold text-xs text-white truncate">{c.name || 'Unknown'}</div>
                 <div className="text-[11px] text-slate-400">{displayPhone(c.phone)}</div>
                 <div className="text-[10px] text-slate-500 mt-1 truncate">
-                  {c.service ? SERVICE_STYLE[c.service].shortTitle : 'Choosing service'}{c.targetCountry ? ` • ${c.targetCountry}` : ''}
+                  {c.service ? c.serviceTitle : 'Choosing service'}{c.targetCountry ? ` • ${c.targetCountry}` : ''}
                 </div>
               </div>
               <div className="text-right shrink-0 ml-2">
@@ -206,7 +206,7 @@ export default function Inbox({ contacts, waReady, onChanged }: Props) {
       {/* dossier column */}
       <div className="hidden lg:flex w-72 border-l border-slate-800 bg-slate-900/40 p-4 flex-col justify-between overflow-y-auto">
         <div className="space-y-4">
-          <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400">Candidate quick dossier</h4>
+          <h4 className="text-xs font-bold uppercase tracking-wider text-slate-400">Contact quick dossier</h4>
           <div className="bg-slate-950 p-3 rounded-xl border border-slate-800 text-xs space-y-2">
             <div><span className="text-slate-500 text-[10px] block">Target destination</span><span className="font-semibold text-slate-200">{active.targetCountry || '—'}</span></div>
             <div>

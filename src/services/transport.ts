@@ -1,16 +1,17 @@
 import { AsyncLocalStorage } from 'async_hooks';
 import { prisma } from '../lib/prisma';
 
-/** Thin seam between the conversation engine and whatever actually delivers messages (WhatsApp Web, or a fake in tests). */
+/** Thin seam between the conversation engine and whatever actually delivers messages (a WhatsApp link per workspace, or a fake in tests). */
 export interface Transport {
   sendText(to: string, text: string): Promise<void>;
 }
 
-let current: Transport | null = null;
+const transports = new Map<string, Transport>();
 const capture = new AsyncLocalStorage<string[]>();
 
-export function setTransport(t: Transport): void {
-  current = t;
+export function setTransport(workspaceId: string, t: Transport | null): void {
+  if (t) transports.set(workspaceId, t);
+  else transports.delete(workspaceId);
 }
 
 /** True while running inside captureReplies (dashboard simulator): nothing is sent or logged as a real message. */
@@ -23,21 +24,30 @@ export async function captureReplies(fn: () => Promise<void>): Promise<string[]>
   return buf;
 }
 
-export async function logMessage(phone: string, direction: 'INBOUND' | 'OUTBOUND', text: string, wamid?: string): Promise<void> {
+export async function logMessage(
+  workspaceId: string,
+  phone: string,
+  direction: 'INBOUND' | 'OUTBOUND',
+  text: string,
+  wamid?: string
+): Promise<void> {
   try {
-    await prisma.webhookLog.create({ data: { phoneNumber: phone, direction, payload: wamid ? { text, wamid } : { text } } });
+    await prisma.webhookLog.create({
+      data: { workspaceId, phoneNumber: phone, direction, payload: wamid ? { text, wamid } : { text } }
+    });
   } catch (err) {
     console.error('[log] failed to store message:', (err as Error).message);
   }
 }
 
-export async function sendTextMessage(to: string, text: string): Promise<void> {
+export async function sendTextMessage(workspaceId: string, to: string, text: string): Promise<void> {
   const buf = capture.getStore();
   if (buf) {
     buf.push(text);
     return;
   }
-  if (!current) throw new Error('No transport configured');
-  await current.sendText(to, text);
-  await logMessage(to, 'OUTBOUND', text);
+  const t = transports.get(workspaceId);
+  if (!t) throw new Error('WhatsApp is not connected for this workspace');
+  await t.sendText(to, text);
+  await logMessage(workspaceId, to, 'OUTBOUND', text);
 }

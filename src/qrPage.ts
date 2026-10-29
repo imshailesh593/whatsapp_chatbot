@@ -1,14 +1,12 @@
 /** Standalone, dependency-free page for linking WhatsApp. Polls /qr/status with the same token it was opened with. */
-import { BUSINESS_NAME } from "./brand";
-
 const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;" })[c]!);
 
-export const QR_PAGE_HTML = `<!doctype html>
+export const qrPageHtml = (businessName: string) => `<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Connect WhatsApp · ${esc(BUSINESS_NAME)}</title>
+<title>Connect WhatsApp · ${esc(businessName)}</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 32 32%27%3E%3Crect width=%2732%27 height=%2732%27 rx=%278%27 fill=%27%2310b981%27/%3E%3Ccircle cx=%2716%27 cy=%2716%27 r=%277%27 fill=%27none%27 stroke=%27%23020617%27 stroke-width=%272.5%27/%3E%3C/svg%3E">
 <style>
 :root{--bg:#0f172a;--panel:#020617;--line:#1e293b;--text:#e2e8f0;--muted:#94a3b8;--accent:#10b981;--accent2:#2dd4bf;--warn:#f59e0b;--bad:#f43f5e}
@@ -59,7 +57,7 @@ a.btn{display:inline-block;margin-top:14px;padding:9px 16px;border-radius:10px;b
 <div class="card">
   <header>
     <div class="logo"><svg viewBox="0 0 24 24" fill="none" stroke="#020617" stroke-width="2.2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c3 3 3 15 0 18M12 3c-3 3-3 15 0 18"/></svg></div>
-    <div class="brand"><b>${esc(BUSINESS_NAME)}</b><span>WhatsApp Lead Console</span></div>
+    <div class="brand"><b>${esc(businessName)}</b><span>WhatsApp Lead Console</span></div>
     <div class="pill" id="pill"><span class="dot"></span><span id="pilltext">Checking…</span></div>
   </header>
   <main>

@@ -1,4 +1,4 @@
-import type { AdminRow, AdminUser, ChatMessage, Contact, Overview, PatchBody, WaSnapshot } from './types';
+import type { AdminRow, AdminUser, ChatMessage, ChatTurn, Contact, Draft, Overview, PatchBody, PlatformWorkspace, ServiceDef, TemplateInfo, WaSnapshot, Workspace } from './types';
 
 export class UnauthorizedError extends Error {}
 
@@ -19,15 +19,28 @@ const post = <T,>(url: string, body: unknown) => request<T>(url, { method: 'POST
 export const api = {
   me: () => request<{ authed: boolean; user?: AdminUser }>('/admin/api/me'),
   login: (email: string, password: string) => post<{ ok: true; user: AdminUser }>('/admin/api/login', { email, password }),
+  signup: (businessName: string, email: string, password: string) =>
+    post<{ ok: true; user: AdminUser }>('/admin/api/signup', { businessName, email, password }),
   changePassword: (current: string, next: string) => post<{ ok: true }>('/admin/api/password', { current, next }),
   admins: () => request<{ admins: AdminRow[] }>('/admin/api/admins').then((r) => r.admins),
-  addAdmin: (email: string, password: string) => post<{ admin: AdminUser }>('/admin/api/admins', { email, password }),
+  addAdmin: (email: string, password: string, role: 'admin' | 'agent') => post<{ admin: { id: string; email: string } }>('/admin/api/admins', { email, password, role }),
   removeAdmin: (id: string) => request<{ ok: true }>('/admin/api/admins/' + encodeURIComponent(id), { method: 'DELETE' }),
   logout: () => post<{ ok: true }>('/admin/api/logout', {}),
   whatsapp: () => request<WaSnapshot>('/admin/api/whatsapp'),
   whatsappConnect: () => post<WaSnapshot>('/admin/api/whatsapp/connect', {}),
   whatsappDisconnect: () => post<WaSnapshot>('/admin/api/whatsapp/disconnect', {}),
   overview: () => request<Overview>('/admin/api/overview'),
+  saveWorkspace: (body: Partial<Workspace>) => request<{ workspace: Workspace }>('/admin/api/workspace', { method: 'PUT', body: JSON.stringify(body) }).then((r) => r.workspace),
+  saveServices: (services: ServiceDef[]) => request<{ services: unknown }>('/admin/api/services', { method: 'PUT', body: JSON.stringify({ services }) }),
+  templates: () => request<{ templates: TemplateInfo[] }>('/admin/api/templates').then((r) => r.templates),
+  applyTemplate: (id: string) => post<{ workspace: Workspace }>('/admin/api/templates/apply', { id }).then((r) => r.workspace),
+  setLive: (enabled: boolean) => post<{ workspace: Workspace }>('/admin/api/workspace/live', { enabled }).then((r) => r.workspace),
+  onboardingInfo: () => request<{ aiAvailable: boolean; completed: boolean; businessName: string }>('/admin/api/onboarding'),
+  onboardingChat: (history: ChatTurn[], draft: Draft | null) => post<{ reply: string; draft: Draft | null }>('/admin/api/onboarding/chat', { history, draft }),
+  onboardingApply: (draft: Draft, extras: Partial<Workspace>) => post<{ workspace: Workspace }>('/admin/api/onboarding/apply', { draft, extras }).then((r) => r.workspace),
+  onboardingComplete: () => post<{ workspace: Workspace }>('/admin/api/onboarding/complete', {}).then((r) => r.workspace),
+  platformWorkspaces: () => request<{ workspaces: PlatformWorkspace[] }>('/admin/api/super/workspaces').then((r) => r.workspaces),
+  platformBot: (id: string, enabled: boolean) => post<{ ok: true }>(`/admin/api/super/workspaces/${encodeURIComponent(id)}/bot`, { enabled }),
   contacts: (includeTest: boolean) =>
     request<{ contacts: Contact[] }>(`/admin/api/contacts${includeTest ? '?test=1' : ''}`).then((r) => r.contacts),
   messages: (phone: string) =>

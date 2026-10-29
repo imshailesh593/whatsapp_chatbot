@@ -1,9 +1,8 @@
 import fs from 'fs';
-import { BUSINESS_NAME, BUSINESS_TAGLINE } from './brand';
 import path from 'path';
 import { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import fastifyStatic from '@fastify/static';
-import { Prisma, SessionStage } from '@prisma/client';
+import { Prisma, SessionStage, Workspace } from '@prisma/client';
 import { prisma } from './lib/prisma';
 import {
   MIN_PASSWORD_LENGTH,
@@ -17,22 +16,28 @@ import {
   verifyAgainstDummy,
   verifyPassword
 } from './lib/auth';
-import { QUESTION_BRANCHES, TOPMATE_URL } from './constants/questions';
+import { createWorkspaceWithOwner } from './lib/workspaces';
 import { handleIncomingMessage } from './services/engine';
 import { captureReplies, sendTextMessage } from './services/transport';
+import { invalidateConfig, loadConfig, saveServices, seedDefaultWorkspace, type BotConfig } from './services/botConfig';
+import { onboardingAvailable, onboardingTurn, parseDraft, type ChatTurn, type Draft } from './services/onboarding';
+import { TEMPLATES, getTemplate } from './templates';
+import { waFor } from './services/whatsapp';
+import { PRODUCT_NAME } from './brand';
 
-const SERVICE_LABELS: Record<string, string> = {
-  COACHING: 'Coaching & Exam Preparation',
-  LICENSING: 'Medical Licensing',
-  JOBS: 'International Jobs',
-  VISA_PR: 'Visa & Permanent Residency (PR)',
-  GENERAL: 'Other Enquiry'
-};
-const COUNTRY_KEYS = ['target_country', 'destination_country', 'preferred_countries', 'relevant_country'];
 const SIM_PREFIX = 'SIM-';
 const WEB_DIST = path.join(__dirname, '..', 'web', 'dist');
 
 type Status = 'IN_PROGRESS' | 'COMPLETED' | 'CONSULTATION_BOOKED' | 'FOLLOW_UP';
+type Role = 'owner' | 'admin' | 'agent';
+
+interface AdminCtx {
+  id: string;
+  email: string;
+  workspaceId: string;
+  role: Role;
+  isSuperAdmin: boolean;
+}
 
 function cookie(req: FastifyRequest, name: string): string | undefined {
   for (const part of (req.headers.cookie ?? '').split(';')) {
@@ -43,11 +48,12 @@ function cookie(req: FastifyRequest, name: string): string | undefined {
 
 type SessionWithLead = Prisma.SessionGetPayload<{ include: { lead: true } }>;
 
-function toContact(s: SessionWithLead) {
+function toContact(s: SessionWithLead, cfg: BotConfig) {
   const lead = s.lead;
   const answers = ((lead ? lead.collectedData : s.answers) ?? {}) as Record<string, string>;
-  const service = lead?.serviceCategory ?? s.selectedService ?? null;
-  const total = service ? QUESTION_BRANCHES[service].length : 0;
+  const serviceKey = lead?.serviceCategory ?? s.selectedService ?? null;
+  const service = serviceKey ? cfg.services.find((x) => x.key === serviceKey) : undefined;
+  const total = service?.questions.length ?? 0;
   const status: Status = !lead
     ? 'IN_PROGRESS'
     : lead.isBookedTopmate
@@ -56,19 +62,20 @@ function toContact(s: SessionWithLead) {
         ? 'FOLLOW_UP'
         : 'COMPLETED';
   const progress = lead ? 100 : total ? Math.round((s.currentStep / total) * 100) : 0;
-  const countryKey = COUNTRY_KEYS.find((k) => answers[k]);
+  const locationKey = Object.keys(answers).find((k) => /country|location|city|destination/.test(k) && answers[k]);
   return {
     phone: s.phoneNumber,
     name: s.contactName,
-    service,
+    service: serviceKey,
+    serviceTitle: service?.title ?? serviceKey,
     status,
     stage: s.stage,
     step: s.currentStep,
     totalSteps: total,
     progress,
-    targetCountry: countryKey ? answers[countryKey] : null,
+    targetCountry: locationKey ? answers[locationKey] : null,
     botActive: !s.isAgentPaused,
-    answers,
+    answers: labelAnswers(answers, service?.questions),
     notes: lead?.counsellorNotes ?? null,
     hasLead: !!lead,
     receivedAt: (lead?.createdAt ?? s.createdAt).toISOString(),
@@ -77,14 +84,90 @@ function toContact(s: SessionWithLead) {
   };
 }
 
-export function registerAdmin(app: FastifyInstance, opts: {
-    getWaStatus: () => string;
-    getWaQr: () => Promise<string | null>;
-    connectWa: () => Promise<void>;
-    disconnectWa: () => Promise<void>;
-  }): void {
+/** Answers are stored by question key; keep the key (stable) and let the UI prettify it. */
+const labelAnswers = (answers: Record<string, string>, _qs?: { key: string; prompt: string }[]) => answers;
+
+const WS_FIELDS = [
+  'industry',
+  'businessName',
+  'tagline',
+  'description',
+  'welcomeIntro',
+  'formUrl',
+  'bookingUrl',
+  'bookingLabel',
+  'bookingNote',
+  'tone',
+  'knowledge',
+  'languages',
+  'timezone',
+  'notifyEmail',
+  'notifyPhone'
+] as const;
+const WS_MAX: Record<(typeof WS_FIELDS)[number], number> = {
+  industry: 60,
+  businessName: 80,
+  tagline: 120,
+  description: 500,
+  welcomeIntro: 300,
+  formUrl: 300,
+  bookingUrl: 300,
+  bookingLabel: 80,
+  bookingNote: 200,
+  tone: 40,
+  knowledge: 8000,
+  languages: 80,
+  timezone: 60,
+  notifyEmail: 254,
+  notifyPhone: 40
+};
+const URL_FIELDS = new Set(['formUrl', 'bookingUrl']);
+
+function pickWorkspaceFields(body: Record<string, unknown>): { data: Partial<Record<(typeof WS_FIELDS)[number], string>> } | { error: string } {
+  const data: Partial<Record<(typeof WS_FIELDS)[number], string>> = {};
+  for (const f of WS_FIELDS) {
+    if (body[f] === undefined) continue;
+    let v = String(body[f] ?? '').replace(/\r/g, '').trim().slice(0, WS_MAX[f]);
+    if (URL_FIELDS.has(f) && v) {
+      if (!/^https?:\/\//i.test(v)) v = `https://${v}`;
+      try {
+        new URL(v);
+      } catch {
+        return { error: `${f === 'formUrl' ? 'Form' : 'Booking'} link is not a valid URL` };
+      }
+    }
+    if (f === 'businessName' && !v) return { error: 'Business name cannot be empty' };
+    data[f] = v;
+  }
+  return { data };
+}
+
+const publicWorkspace = (w: Workspace) => ({
+  id: w.id,
+  slug: w.slug,
+  industry: w.industry,
+  businessName: w.businessName,
+  tagline: w.tagline,
+  description: w.description,
+  welcomeIntro: w.welcomeIntro,
+  formUrl: w.formUrl,
+  bookingUrl: w.bookingUrl,
+  bookingLabel: w.bookingLabel,
+  bookingNote: w.bookingNote,
+  tone: w.tone,
+  knowledge: w.knowledge,
+  languages: w.languages,
+  timezone: w.timezone,
+  notifyEmail: w.notifyEmail,
+  notifyPhone: w.notifyPhone,
+  onboardingCompleted: w.onboardingCompleted,
+  botEnabled: w.botEnabled
+});
+
+export function registerAdmin(app: FastifyInstance, opts: { getQr: (workspaceId: string) => Promise<string | null> }): void {
   const enabled = authConfigured();
   const attempts = new Map<string, { n: number; reset: number }>();
+  const signups = new Map<string, { n: number; reset: number }>();
 
   // Accept an empty body with Content-Type: application/json (DELETE/POST without payload) instead of failing with 400
   app.removeContentTypeParser('application/json');
@@ -98,11 +181,15 @@ export function registerAdmin(app: FastifyInstance, opts: {
     }
   });
 
-  bootstrapAdmin().catch((e) => console.error('[admin] bootstrap failed:', e));
+  (async () => {
+    await bootstrapAdmin();
+    await seedDefaultWorkspace();
+  })().catch((e) => console.error('[admin] bootstrap failed:', e));
 
-  const adminOf = async (req: FastifyRequest) => {
+  const adminOf = async (req: FastifyRequest): Promise<AdminCtx | null> => {
     const uid = readSession(cookie(req, 'mns_admin'));
-    return uid ? prisma.adminUser.findUnique({ where: { id: uid } }) : null;
+    const u = uid ? await prisma.adminUser.findUnique({ where: { id: uid } }) : null;
+    return u ? { id: u.id, email: u.email, workspaceId: u.workspaceId, role: u.role as Role, isSuperAdmin: u.isSuperAdmin } : null;
   };
   const guard = async (req: FastifyRequest, reply: FastifyReply) => {
     if (!enabled) return reply.status(404).send();
@@ -110,44 +197,88 @@ export function registerAdmin(app: FastifyInstance, opts: {
     if (!admin) return reply.status(401).send({ error: 'unauthorized' });
     (req as any).admin = admin;
   };
-  const me = (req: FastifyRequest) => (req as any).admin as { id: string; email: string };
+  /** Owners and admins may change settings; agents only work leads and the inbox. */
+  const manager = async (req: FastifyRequest, reply: FastifyReply) => {
+    const denied = await guard(req, reply);
+    if (denied) return denied;
+    if (me(req).role === 'agent') return reply.status(403).send({ error: 'Your role cannot change settings' });
+  };
+  const superOnly = async (req: FastifyRequest, reply: FastifyReply) => {
+    const denied = await guard(req, reply);
+    if (denied) return denied;
+    if (!me(req).isSuperAdmin) return reply.status(403).send({ error: 'Platform admins only' });
+  };
+  const me = (req: FastifyRequest) => (req as any).admin as AdminCtx;
+  const wsId = (req: FastifyRequest) => me(req).workspaceId;
   const secureFlag = (req: FastifyRequest) => (req.headers['x-forwarded-proto'] === 'https' ? '; Secure' : '');
   const setSession = (req: FastifyRequest, reply: FastifyReply, userId: string) =>
     reply.header('Set-Cookie', `mns_admin=${signSession(userId)}; HttpOnly; SameSite=Strict; Path=/admin; Max-Age=2592000${secureFlag(req)}`);
+  const clientIp = (req: FastifyRequest) => String(req.headers['x-forwarded-for'] ?? req.ip).split(',')[0].trim();
 
   // Failed-login throttle per IP and per email (in memory; resets on restart)
-  const throttled = (k: string) => {
-    const a = attempts.get(k);
-    return !!a && a.reset > Date.now() && a.n >= 10;
+  const throttled = (m: Map<string, { n: number; reset: number }>, k: string, max = 10) => {
+    const a = m.get(k);
+    return !!a && a.reset > Date.now() && a.n >= max;
   };
-  const fail = (k: string) => {
+  const bump = (m: Map<string, { n: number; reset: number }>, k: string, windowMs = 15 * 60_000) => {
     const now = Date.now();
-    const a = attempts.get(k);
-    attempts.set(k, a && a.reset > now ? { n: a.n + 1, reset: a.reset } : { n: 1, reset: now + 15 * 60_000 });
+    const a = m.get(k);
+    m.set(k, a && a.reset > now ? { n: a.n + 1, reset: a.reset } : { n: 1, reset: now + windowMs });
+  };
+
+  const meView = async (a: AdminCtx) => {
+    const w = await prisma.workspace.findUnique({ where: { id: a.workspaceId } });
+    return {
+      id: a.id,
+      email: a.email,
+      role: a.role,
+      isSuperAdmin: a.isSuperAdmin,
+      workspace: w ? { id: w.id, businessName: w.businessName, onboardingCompleted: w.onboardingCompleted, botEnabled: w.botEnabled } : null
+    };
   };
 
   // ---- auth ----
-  // Public: the login screen needs the business name before anyone is signed in
-  app.get('/admin/api/brand', async () => ({ businessName: BUSINESS_NAME, tagline: BUSINESS_TAGLINE }));
+  // Public: the login screen has no workspace yet
+  app.get('/admin/api/brand', async () => ({ productName: PRODUCT_NAME, signupEnabled: process.env.SIGNUP_ENABLED !== '0' }));
 
   app.post('/admin/api/login', async (req, reply) => {
     if (!enabled) return reply.status(404).send();
     const email = normalizeEmail((req.body as any)?.email);
     const password = String((req.body as any)?.password ?? '');
-    const ip = String(req.headers['x-forwarded-for'] ?? req.ip).split(',')[0].trim();
-    if (throttled(`ip:${ip}`) || throttled(`em:${email}`)) {
+    const ip = clientIp(req);
+    if (throttled(attempts, `ip:${ip}`) || throttled(attempts, `em:${email}`)) {
       return reply.status(429).send({ error: 'Too many attempts. Try again in 15 minutes.' });
     }
     const user = email ? await prisma.adminUser.findUnique({ where: { email } }) : null;
     const ok = user ? await verifyPassword(password, user.passwordHash) : await verifyAgainstDummy(password);
     if (!user || !ok) {
-      fail(`ip:${ip}`);
-      fail(`em:${email}`);
+      bump(attempts, `ip:${ip}`);
+      bump(attempts, `em:${email}`);
       return reply.status(401).send({ error: 'Wrong email or password' });
     }
     await prisma.adminUser.update({ where: { id: user.id }, data: { lastLoginAt: new Date() } });
     setSession(req, reply, user.id);
-    return { ok: true, user: { id: user.id, email: user.email } };
+    return { ok: true, user: await meView({ id: user.id, email: user.email, workspaceId: user.workspaceId, role: user.role as Role, isSuperAdmin: user.isSuperAdmin }) };
+  });
+
+  // Self-service sign-up: creates a new workspace (paused until the owner goes live) and its owner
+  app.post('/admin/api/signup', async (req, reply) => {
+    if (!enabled || process.env.SIGNUP_ENABLED === '0') return reply.status(404).send();
+    const b = (req.body ?? {}) as { businessName?: string; email?: string; password?: string };
+    const ip = clientIp(req);
+    if (throttled(signups, `ip:${ip}`, 5)) return reply.status(429).send({ error: 'Too many sign-ups from this network. Try again later.' });
+    const businessName = String(b.businessName ?? '').replace(/\s+/g, ' ').trim().slice(0, 80);
+    const email = normalizeEmail(b.email);
+    const password = String(b.password ?? '');
+    if (!businessName) return reply.status(400).send({ error: 'Enter your business name' });
+    if (!isValidEmail(email)) return reply.status(400).send({ error: 'Enter a valid email address' });
+    if (password.length < MIN_PASSWORD_LENGTH) return reply.status(400).send({ error: `Password must be at least ${MIN_PASSWORD_LENGTH} characters` });
+    if (await prisma.adminUser.findUnique({ where: { email } })) return reply.status(409).send({ error: 'An account with this email already exists. Sign in instead.' });
+    bump(signups, `ip:${ip}`, 60 * 60_000);
+    const ws = await createWorkspaceWithOwner({ businessName, email, password });
+    const owner = ws.adminUsers[0];
+    setSession(req, reply, owner.id);
+    return { ok: true, user: await meView({ id: owner.id, email, workspaceId: ws.id, role: 'owner', isSuperAdmin: false }) };
   });
 
   app.post('/admin/api/logout', async (_req, reply) => {
@@ -158,7 +289,7 @@ export function registerAdmin(app: FastifyInstance, opts: {
   app.get('/admin/api/me', async (req, reply) => {
     if (!enabled) return reply.status(404).send();
     const admin = await adminOf(req);
-    return admin ? { authed: true, user: { id: admin.id, email: admin.email } } : { authed: false };
+    return admin ? { authed: true, user: await meView(admin) } : { authed: false };
   });
 
   app.post('/admin/api/password', { preHandler: guard }, async (req, reply) => {
@@ -173,67 +304,182 @@ export function registerAdmin(app: FastifyInstance, opts: {
     return { ok: true };
   });
 
-  // ---- admin users ----
-  app.get('/admin/api/admins', { preHandler: guard }, async () => {
-    const rows = await prisma.adminUser.findMany({ orderBy: { createdAt: 'asc' } });
-    return { admins: rows.map((a) => ({ id: a.id, email: a.email, createdAt: a.createdAt.toISOString(), lastLoginAt: a.lastLoginAt?.toISOString() ?? null })) };
+  // ---- team (admin users of this workspace) ----
+  app.get('/admin/api/admins', { preHandler: guard }, async (req) => {
+    const rows = await prisma.adminUser.findMany({ where: { workspaceId: wsId(req) }, orderBy: { createdAt: 'asc' } });
+    return {
+      admins: rows.map((a) => ({
+        id: a.id,
+        email: a.email,
+        role: a.role,
+        createdAt: a.createdAt.toISOString(),
+        lastLoginAt: a.lastLoginAt?.toISOString() ?? null
+      }))
+    };
   });
 
-  app.post('/admin/api/admins', { preHandler: guard }, async (req, reply) => {
-    const b = (req.body ?? {}) as { email?: string; password?: string };
+  app.post('/admin/api/admins', { preHandler: manager }, async (req, reply) => {
+    const b = (req.body ?? {}) as { email?: string; password?: string; role?: string };
     const email = normalizeEmail(b.email);
     const password = String(b.password ?? '');
+    const role = b.role === 'agent' ? 'agent' : 'admin';
     if (!isValidEmail(email)) return reply.status(400).send({ error: 'Enter a valid email address' });
     if (password.length < MIN_PASSWORD_LENGTH) return reply.status(400).send({ error: `Password must be at least ${MIN_PASSWORD_LENGTH} characters` });
-    if (await prisma.adminUser.findUnique({ where: { email } })) return reply.status(409).send({ error: 'That email is already an admin' });
-    const a = await prisma.adminUser.create({ data: { email, passwordHash: await hashPassword(password) } });
-    return { admin: { id: a.id, email: a.email } };
+    if (await prisma.adminUser.findUnique({ where: { email } })) return reply.status(409).send({ error: 'That email is already registered' });
+    const a = await prisma.adminUser.create({ data: { email, passwordHash: await hashPassword(password), workspaceId: wsId(req), role } });
+    return { admin: { id: a.id, email: a.email, role: a.role } };
   });
 
-  app.delete('/admin/api/admins/:id', { preHandler: guard }, async (req, reply) => {
+  app.delete('/admin/api/admins/:id', { preHandler: manager }, async (req, reply) => {
     const { id } = req.params as { id: string };
     if (id === me(req).id) return reply.status(400).send({ error: 'You cannot remove your own account' });
-    const r = await prisma.adminUser.deleteMany({ where: { id } });
-    return r.count ? { ok: true } : reply.status(404).send({ error: 'Admin not found' });
+    const target = await prisma.adminUser.findFirst({ where: { id, workspaceId: wsId(req) } });
+    if (!target) return reply.status(404).send({ error: 'Team member not found' });
+    if (target.role === 'owner' && me(req).role !== 'owner') return reply.status(403).send({ error: 'Only an owner can remove an owner' });
+    await prisma.adminUser.delete({ where: { id } });
+    return { ok: true };
   });
 
-  // ---- data ----
-  app.get('/admin/api/overview', { preHandler: guard }, async () => ({
-    whatsapp: opts.getWaStatus(),
-    topmateUrl: TOPMATE_URL,
-    services: Object.entries(SERVICE_LABELS).map(([id, title]) => ({
-      id,
-      title,
-      questions: QUESTION_BRANCHES[id].map((q) => ({ key: q.key, prompt: q.question }))
-    }))
+  // ---- workspace settings ----
+  app.get('/admin/api/overview', { preHandler: guard }, async (req) => {
+    const cfg = await loadConfig(wsId(req));
+    return {
+      whatsapp: waFor(wsId(req)).status,
+      workspace: publicWorkspace(cfg.ws),
+      services: cfg.services.map((s) => ({ id: s.key, title: s.title, keywords: s.keywords, questions: s.questions.map((q) => ({ key: q.key, prompt: q.prompt })) }))
+    };
+  });
+
+  app.put('/admin/api/workspace', { preHandler: manager }, async (req, reply) => {
+    const picked = pickWorkspaceFields((req.body ?? {}) as Record<string, unknown>);
+    if ('error' in picked) return reply.status(400).send({ error: picked.error });
+    const w = await prisma.workspace.update({ where: { id: wsId(req) }, data: picked.data });
+    invalidateConfig(w.id);
+    return { workspace: publicWorkspace(w) };
+  });
+
+  app.put('/admin/api/services', { preHandler: manager }, async (req, reply) => {
+    try {
+      await saveServices(wsId(req), (req.body as any)?.services);
+    } catch (err) {
+      return reply.status(400).send({ error: (err as Error).message });
+    }
+    const cfg = await loadConfig(wsId(req));
+    return { services: cfg.services.map((s) => ({ id: s.key, title: s.title, keywords: s.keywords, questions: s.questions })) };
+  });
+
+  app.get('/admin/api/templates', { preHandler: guard }, async () => ({
+    templates: TEMPLATES.map((t) => ({ id: t.id, label: t.label, description: t.description, services: t.services.length }))
   }));
 
-  // ---- WhatsApp link ----
-  const waSnapshot = async () => ({ status: opts.getWaStatus(), qr: await opts.getWaQr() });
-  app.get('/admin/api/whatsapp', { preHandler: guard }, async (_req, reply) => reply.header('Cache-Control', 'no-store').send(await waSnapshot()));
-  app.post('/admin/api/whatsapp/connect', { preHandler: guard }, async () => {
-    await opts.connectWa();
-    return waSnapshot();
-  });
-  app.post('/admin/api/whatsapp/disconnect', { preHandler: guard }, async () => {
-    await opts.disconnectWa();
-    return waSnapshot();
+  app.post('/admin/api/templates/apply', { preHandler: manager }, async (req, reply) => {
+    const t = getTemplate(String((req.body as any)?.id ?? ''));
+    await saveServices(wsId(req), t.services);
+    const w = await prisma.workspace.update({
+      where: { id: wsId(req) },
+      data: { industry: t.id, welcomeIntro: t.welcomeIntro, bookingLabel: t.bookingLabel }
+    });
+    invalidateConfig(w.id);
+    return { workspace: publicWorkspace(w) };
   });
 
+  // Go live / pause: a new workspace never replies to customers until the owner switches it on
+  app.post('/admin/api/workspace/live', { preHandler: manager }, async (req) => {
+    const botEnabled = !!(req.body as any)?.enabled;
+    const w = await prisma.workspace.update({ where: { id: wsId(req) }, data: { botEnabled } });
+    invalidateConfig(w.id);
+    return { workspace: publicWorkspace(w) };
+  });
+
+  // ---- AI onboarding assistant ----
+  app.get('/admin/api/onboarding', { preHandler: guard }, async (req) => {
+    const w = await prisma.workspace.findUniqueOrThrow({ where: { id: wsId(req) } });
+    return { aiAvailable: onboardingAvailable(), completed: w.onboardingCompleted, businessName: w.businessName };
+  });
+
+  app.post('/admin/api/onboarding/chat', { preHandler: manager }, async (req, reply) => {
+    if (!onboardingAvailable()) return reply.status(503).send({ error: 'The AI assistant is not available right now. Pick a template instead.' });
+    const b = (req.body ?? {}) as { history?: ChatTurn[]; draft?: unknown };
+    const history = (Array.isArray(b.history) ? b.history : [])
+      .filter((t) => t && (t.role === 'user' || t.role === 'assistant') && typeof t.text === 'string')
+      .map((t) => ({ role: t.role, text: t.text }));
+    const ip = clientIp(req);
+    if (throttled(attempts, `ob:${wsId(req)}`, 120)) return reply.status(429).send({ error: 'Too many assistant requests, please wait a few minutes' });
+    bump(attempts, `ob:${wsId(req)}`, 60 * 60_000);
+    try {
+      return await onboardingTurn(history, parseDraft(b.draft));
+    } catch (err) {
+      console.error('[onboarding] failed:', (err as Error).message, ip);
+      return reply.status(502).send({ error: 'The assistant could not answer just now. Please try again.' });
+    }
+  });
+
+  app.post('/admin/api/onboarding/apply', { preHandler: manager }, async (req, reply) => {
+    const b = (req.body ?? {}) as { draft?: unknown; extras?: Record<string, unknown> };
+    const draft: Draft | null = parseDraft(b.draft);
+    if (!draft) return reply.status(400).send({ error: 'The proposed setup is incomplete. Ask the assistant to fix it.' });
+    const extras = pickWorkspaceFields({ ...(b.extras ?? {}) });
+    if ('error' in extras) return reply.status(400).send({ error: extras.error });
+    await saveServices(wsId(req), draft.services);
+    const picked = pickWorkspaceFields({
+      industry: draft.industry,
+      businessName: draft.businessName || undefined,
+      tagline: draft.tagline,
+      description: draft.description,
+      welcomeIntro: draft.welcomeIntro,
+      tone: draft.tone,
+      languages: draft.languages,
+      bookingLabel: draft.bookingLabel,
+      bookingNote: draft.bookingNote,
+      knowledge: draft.knowledge
+    });
+    if ('error' in picked) return reply.status(400).send({ error: picked.error });
+    const w = await prisma.workspace.update({
+      where: { id: wsId(req) },
+      data: { ...picked.data, ...extras.data, onboarding: JSON.parse(JSON.stringify(draft)), onboardingCompleted: true }
+    });
+    invalidateConfig(w.id);
+    return { workspace: publicWorkspace(w) };
+  });
+
+  app.post('/admin/api/onboarding/complete', { preHandler: manager }, async (req) => {
+    const w = await prisma.workspace.update({ where: { id: wsId(req) }, data: { onboardingCompleted: true } });
+    invalidateConfig(w.id);
+    return { workspace: publicWorkspace(w) };
+  });
+
+  // ---- WhatsApp link (one per workspace) ----
+  const waSnapshot = async (id: string) => ({ status: waFor(id).status, qr: await opts.getQr(id) });
+  app.get('/admin/api/whatsapp', { preHandler: guard }, async (req, reply) => reply.header('Cache-Control', 'no-store').send(await waSnapshot(wsId(req))));
+  app.post('/admin/api/whatsapp/connect', { preHandler: manager }, async (req) => {
+    await waFor(wsId(req)).connect();
+    return waSnapshot(wsId(req));
+  });
+  app.post('/admin/api/whatsapp/disconnect', { preHandler: manager }, async (req) => {
+    await waFor(wsId(req)).disconnect();
+    return waSnapshot(wsId(req));
+  });
+
+  // ---- contacts / leads ----
   app.get('/admin/api/contacts', { preHandler: guard }, async (req) => {
     const includeTest = (req.query as any).test === '1';
+    const cfg = await loadConfig(wsId(req));
     const sessions = await prisma.session.findMany({
-      where: includeTest ? {} : { phoneNumber: { not: { startsWith: SIM_PREFIX } } },
+      where: { workspaceId: wsId(req), ...(includeTest ? {} : { phoneNumber: { not: { startsWith: SIM_PREFIX } } }) },
       include: { lead: true },
       orderBy: { lastInteractionAt: 'desc' },
       take: 1000
     });
-    return { contacts: sessions.map(toContact) };
+    return { contacts: sessions.map((s) => toContact(s, cfg)) };
   });
 
   app.get('/admin/api/contacts/:phone/messages', { preHandler: guard }, async (req) => {
     const { phone } = req.params as { phone: string };
-    const rows = await prisma.webhookLog.findMany({ where: { phoneNumber: phone }, orderBy: { createdAt: 'desc' }, take: 200 });
+    const rows = await prisma.webhookLog.findMany({
+      where: { workspaceId: wsId(req), phoneNumber: phone },
+      orderBy: { createdAt: 'desc' },
+      take: 200
+    });
     return {
       messages: rows
         .reverse()
@@ -243,12 +489,14 @@ export function registerAdmin(app: FastifyInstance, opts: {
 
   app.patch('/admin/api/contacts/:phone', { preHandler: guard }, async (req, reply) => {
     const { phone } = req.params as { phone: string };
+    const w = wsId(req);
+    const key = { workspaceId_phoneNumber: { workspaceId: w, phoneNumber: phone } };
     const b = (req.body ?? {}) as { paused?: boolean; notes?: string; status?: Status };
-    const session = await prisma.session.findUnique({ where: { phoneNumber: phone }, include: { lead: true } });
+    const session = await prisma.session.findUnique({ where: key, include: { lead: true } });
     if (!session) return reply.status(404).send({ error: 'Contact not found' });
 
     if (typeof b.paused === 'boolean') {
-      await prisma.session.update({ where: { phoneNumber: phone }, data: { isAgentPaused: b.paused } });
+      await prisma.session.update({ where: key, data: { isAgentPaused: b.paused } });
     }
     if (b.notes !== undefined || b.status !== undefined) {
       if (!session.lead) return reply.status(409).send({ error: 'Notes and status can be set once the questionnaire is complete' });
@@ -259,22 +507,23 @@ export function registerAdmin(app: FastifyInstance, opts: {
       if (b.status === 'FOLLOW_UP') Object.assign(data, { isBookedTopmate: false, followUp: true });
       await prisma.lead.update({ where: { id: session.lead.id }, data });
     }
-    const fresh = await prisma.session.findUnique({ where: { phoneNumber: phone }, include: { lead: true } });
-    return { contact: toContact(fresh!) };
+    const fresh = await prisma.session.findUnique({ where: key, include: { lead: true } });
+    return { contact: toContact(fresh!, await loadConfig(w)) };
   });
 
   // Human reply from the Live Inbox. Only while the bot is paused for that chat, so it can't talk over the bot.
   app.post('/admin/api/contacts/:phone/send', { preHandler: guard }, async (req, reply) => {
     const { phone } = req.params as { phone: string };
+    const w = wsId(req);
     const text = String((req.body as any)?.text ?? '').trim().slice(0, 4000);
     if (!text) return reply.status(400).send({ error: 'Message is empty' });
     if (phone.startsWith(SIM_PREFIX)) return reply.status(400).send({ error: 'Cannot message a simulator contact' });
-    const session = await prisma.session.findUnique({ where: { phoneNumber: phone } });
+    const session = await prisma.session.findUnique({ where: { workspaceId_phoneNumber: { workspaceId: w, phoneNumber: phone } } });
     if (!session) return reply.status(404).send({ error: 'Contact not found' });
     if (!session.isAgentPaused) return reply.status(409).send({ error: 'Pause the bot for this chat before replying manually' });
-    if (opts.getWaStatus() !== 'ready') return reply.status(503).send({ error: 'WhatsApp is not connected' });
+    if (waFor(w).status !== 'ready') return reply.status(503).send({ error: 'WhatsApp is not connected' });
     try {
-      await sendTextMessage(phone, text);
+      await sendTextMessage(w, phone, text);
     } catch (err) {
       return reply.status(502).send({ error: `Could not send: ${(err as Error).message}` });
     }
@@ -286,33 +535,36 @@ export function registerAdmin(app: FastifyInstance, opts: {
 
   app.post('/admin/api/simulate', { preHandler: guard }, async (req, reply) => {
     const b = (req.body ?? {}) as { id?: string; name?: string; text?: string };
+    const w = wsId(req);
     const text = String(b.text ?? '').trim().slice(0, 1000);
     if (!text) return reply.status(400).send({ error: 'Message is empty' });
     const phone = simPhone(b.id);
-    const replies = await captureReplies(() => handleIncomingMessage(phone, b.name?.slice(0, 80) || 'Simulator User', text));
-    const s = await prisma.session.findUnique({ where: { phoneNumber: phone } });
+    const replies = await captureReplies(() => handleIncomingMessage(w, phone, b.name?.slice(0, 80) || 'Simulator User', text));
+    const s = await prisma.session.findUnique({ where: { workspaceId_phoneNumber: { workspaceId: w, phoneNumber: phone } } });
+    const cfg = await loadConfig(w);
     return {
       replies,
       state: {
         stage: s?.stage ?? SessionStage.WELCOME,
         service: s?.selectedService ?? null,
         step: s?.currentStep ?? 0,
-        totalSteps: s?.selectedService ? QUESTION_BRANCHES[s.selectedService].length : 0
+        totalSteps: cfg.services.find((x) => x.key === s?.selectedService)?.questions.length ?? 0
       }
     };
   });
 
   app.post('/admin/api/simulate/reset', { preHandler: guard }, async (req) => {
     const phone = simPhone((req.body as any)?.id);
-    await prisma.webhookLog.deleteMany({ where: { phoneNumber: phone } });
-    await prisma.session.deleteMany({ where: { phoneNumber: phone } });
+    await prisma.webhookLog.deleteMany({ where: { workspaceId: wsId(req), phoneNumber: phone } });
+    await prisma.session.deleteMany({ where: { workspaceId: wsId(req), phoneNumber: phone } });
     return { ok: true };
   });
 
   // ---- export ----
-  app.get('/admin/api/export.csv', { preHandler: guard }, async (_req, reply) => {
+  app.get('/admin/api/export.csv', { preHandler: guard }, async (req, reply) => {
+    const cfg = await loadConfig(wsId(req));
     const sessions = await prisma.session.findMany({
-      where: { phoneNumber: { not: { startsWith: SIM_PREFIX } }, lead: { isNot: null } },
+      where: { workspaceId: wsId(req), phoneNumber: { not: { startsWith: SIM_PREFIX } }, lead: { isNot: null } },
       include: { lead: true },
       orderBy: { createdAt: 'desc' }
     });
@@ -324,12 +576,12 @@ export function registerAdmin(app: FastifyInstance, opts: {
     };
     const lines = ['Received,Name,Phone,Service,Status,Notes,Answers'].concat(
       sessions.map((s) => {
-        const c = toContact(s);
+        const c = toContact(s, cfg);
         return [
           c.receivedAt,
           c.name,
           c.phone,
-          c.service ? SERVICE_LABELS[c.service] : '',
+          c.serviceTitle ?? '',
           c.status,
           c.notes,
           Object.entries(c.answers).map(([k, v]) => `${k.replace(/_/g, ' ')}: ${v}`).join(' | ')
@@ -338,6 +590,39 @@ export function registerAdmin(app: FastifyInstance, opts: {
     );
     reply.header('Content-Disposition', 'attachment; filename="leads.csv"');
     return reply.type('text/csv; charset=utf-8').send('﻿' + lines.join('\r\n'));
+  });
+
+  // ---- platform admin (you): every tenant at a glance ----
+  app.get('/admin/api/super/workspaces', { preHandler: superOnly }, async () => {
+    const rows = await prisma.workspace.findMany({
+      orderBy: { createdAt: 'desc' },
+      include: { _count: { select: { leads: true, sessions: true, adminUsers: true } }, adminUsers: { where: { role: 'owner' }, take: 1 } }
+    });
+    return {
+      workspaces: rows.map((w) => ({
+        id: w.id,
+        businessName: w.businessName,
+        slug: w.slug,
+        industry: w.industry,
+        owner: w.adminUsers[0]?.email ?? null,
+        whatsapp: waFor(w.id).status,
+        botEnabled: w.botEnabled,
+        onboardingCompleted: w.onboardingCompleted,
+        leads: w._count.leads,
+        contacts: w._count.sessions,
+        users: w._count.adminUsers,
+        createdAt: w.createdAt.toISOString()
+      }))
+    };
+  });
+
+  app.post('/admin/api/super/workspaces/:id/bot', { preHandler: superOnly }, async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const w = await prisma.workspace.findUnique({ where: { id } });
+    if (!w) return reply.status(404).send({ error: 'Workspace not found' });
+    await prisma.workspace.update({ where: { id }, data: { botEnabled: !!(req.body as any)?.enabled } });
+    invalidateConfig(id);
+    return { ok: true };
   });
 
   // ---- SPA (built from /web) ----

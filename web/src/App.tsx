@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Calendar, CheckCircle2, Clock, ExternalLink, Globe, MessageSquare, ShieldCheck, Smartphone, Users } from 'lucide-react';
+import { Building2, Calendar, CheckCircle2, Clock, ExternalLink, Globe, MessageSquare, ShieldCheck, Smartphone, Users } from 'lucide-react';
 import { api, UnauthorizedError } from './api';
 import type { AdminUser, Contact, Overview } from './types';
 import AccountMenu from './components/AccountMenu';
@@ -9,9 +9,11 @@ import Simulator from './components/Simulator';
 import Inbox from './components/Inbox';
 import Settings from './components/Settings';
 import Dossier from './components/Dossier';
-import { useBrand } from './brand';
+import Onboarding from './components/Onboarding';
+import Platform from './components/Platform';
+import { BrandContext } from './brand';
 
-type Tab = 'crm' | 'simulator' | 'inbox' | 'config';
+type Tab = 'crm' | 'simulator' | 'inbox' | 'config' | 'platform';
 
 export default function App() {
   const [user, setUser] = useState<AdminUser | null | undefined>(undefined);
@@ -22,11 +24,22 @@ export default function App() {
 
   if (user === undefined) return <div className="min-h-screen bg-slate-900" />;
   if (!user) return <Login onDone={setUser} />;
+  const signOut = () => api.logout().finally(() => setUser(null));
+  const reloadUser = () => api.me().then((r) => setUser(r.authed && r.user ? r.user : null)).catch(() => undefined);
+  if (user.workspace && !user.workspace.onboardingCompleted) {
+    return user.role === 'agent' ? (
+      <div className="min-h-screen bg-slate-900 text-slate-200 flex flex-col items-center justify-center gap-3 p-6 text-center">
+        <p>Your account owner has not finished setting up the chatbot yet.</p>
+        <button onClick={signOut} className="text-xs text-emerald-400">Sign out</button>
+      </div>
+    ) : (
+      <Onboarding user={user} onDone={reloadUser} onSignOut={signOut} />
+    );
+  }
   return <Console user={user} onSignedOut={() => setUser(null)} />;
 }
 
 function Console({ user, onSignedOut }: { user: AdminUser; onSignedOut: () => void }) {
-  const brand = useBrand();
   const [tab, setTab] = useState<Tab>('crm');
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [overview, setOverview] = useState<Overview | null>(null);
@@ -64,6 +77,8 @@ function Console({ user, onSignedOut }: { user: AdminUser; onSignedOut: () => vo
     };
   }, [contacts]);
 
+  const brand = useMemo(() => ({ businessName: overview?.workspace.businessName ?? user.workspace?.businessName ?? '', tagline: overview?.workspace.tagline ?? '' }), [overview, user]);
+  const isAgent = user.role === 'agent';
   const waReady = overview?.whatsapp === 'ready';
   const selectedContact = contacts.find((c) => c.phone === selected) ?? null;
 
@@ -93,6 +108,7 @@ function Console({ user, onSignedOut }: { user: AdminUser; onSignedOut: () => vo
   );
 
   return (
+    <BrandContext.Provider value={brand}>
     <div className="min-h-screen bg-slate-900 text-slate-100 flex flex-col font-sans">
       <header className="bg-slate-950 border-b border-slate-800 sticky top-0 z-40">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -124,14 +140,14 @@ function Console({ user, onSignedOut }: { user: AdminUser; onSignedOut: () => vo
                   WhatsApp: <strong>{waReady ? 'Connected' : overview?.whatsapp === 'off' ? 'Disconnected' : overview?.whatsapp ?? '…'}</strong>
                 </span>
               </button>
-              {overview && (
+              {overview?.workspace.bookingUrl && (
                 <a
-                  href={overview.topmateUrl}
+                  href={overview.workspace.bookingUrl}
                   target="_blank"
                   rel="noreferrer"
                   className="hidden md:flex items-center space-x-1.5 text-emerald-400 hover:text-emerald-300 bg-emerald-950/40 border border-emerald-800/60 px-3 py-1.5 rounded-lg transition"
                 >
-                  <span>Topmate</span>
+                  <span>Booking link</span>
                   <ExternalLink className="w-3.5 h-3.5" />
                 </a>
               )}
@@ -147,7 +163,8 @@ function Console({ user, onSignedOut }: { user: AdminUser; onSignedOut: () => vo
             {tabBtn('simulator', <Smartphone className="w-4 h-4 text-emerald-400" />, 'Bot Simulator', (
               <span className="ml-1 px-1.5 rounded text-[9px] bg-emerald-500/20 text-emerald-300 font-bold">TEST</span>
             ))}
-            {tabBtn('config', <ShieldCheck className="w-4 h-4" />, 'Questionnaires & Settings')}
+            {!isAgent && tabBtn('config', <ShieldCheck className="w-4 h-4" />, 'Bot & Settings')}
+            {user.isSuperAdmin && tabBtn('platform', <Building2 className="w-4 h-4" />, 'All businesses')}
           </div>
         </div>
       </header>
@@ -159,10 +176,17 @@ function Console({ user, onSignedOut }: { user: AdminUser; onSignedOut: () => vo
           </div>
         )}
 
+        {overview && !overview.workspace.botEnabled && (
+          <div className="mb-4 p-3 rounded-lg bg-amber-950/40 border border-amber-800/60 text-amber-200 text-xs flex flex-wrap items-center justify-between gap-2">
+            <span>The bot is paused: it is not replying to customers yet.</span>
+            {!isAgent && <button onClick={() => setTab('config')} className="font-semibold underline">Open Bot &amp; Settings to go live</button>}
+          </div>
+        )}
+
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4 mb-6">
           {kpi('Total Contacts', stats.total, 'text-white', <Users className="w-5 h-5" />, 'bg-blue-500/10 border-blue-500/20 text-blue-400')}
           {kpi('Fully Qualified', stats.qualified, 'text-emerald-400', <CheckCircle2 className="w-5 h-5" />, 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400')}
-          {kpi('Topmate Consultations', stats.booked, 'text-purple-400', <Calendar className="w-5 h-5" />, 'bg-purple-500/10 border-purple-500/20 text-purple-400')}
+          {kpi('Bookings', stats.booked, 'text-purple-400', <Calendar className="w-5 h-5" />, 'bg-purple-500/10 border-purple-500/20 text-purple-400')}
           {kpi('In Questionnaire', stats.inProgress, 'text-amber-400', <Clock className="w-5 h-5" />, 'bg-amber-500/10 border-amber-500/20 text-amber-400')}
         </div>
 
@@ -171,17 +195,19 @@ function Console({ user, onSignedOut }: { user: AdminUser; onSignedOut: () => vo
         )}
         {tab === 'inbox' && <Inbox contacts={contacts} waReady={waReady} onChanged={replaceContact} />}
         {tab === 'simulator' && <Simulator onActivity={refresh} />}
-        {tab === 'config' && overview && <Settings overview={overview} me={user} onWaChanged={refresh} />}
+        {tab === 'config' && !isAgent && overview && <Settings overview={overview} me={user} onChanged={refresh} />}
+        {tab === 'platform' && user.isSuperAdmin && <Platform />}
       </main>
 
       {selectedContact && (
         <Dossier
           contact={selectedContact}
-          topmateUrl={overview?.topmateUrl ?? ''}
+          bookingUrl={overview?.workspace.bookingUrl ?? ''}
           onClose={() => setSelected(null)}
           onChanged={replaceContact}
         />
       )}
     </div>
+    </BrandContext.Provider>
   );
 }

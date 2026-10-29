@@ -1,51 +1,37 @@
-import { SessionStage, ServiceCategory } from '@prisma/client';
-import {
-  QUESTION_BRANCHES,
-  SERVICE_SELECTION_MAP,
-  SERVICE_KEYWORDS,
-  WELCOME_MESSAGE,
-  INVALID_SELECTION_MESSAGE,
-  COMPLETION_MESSAGE,
-  CONSULTATION_REMINDER_MESSAGE,
-  POST_COMPLETION_MESSAGE,
-  BOOKED_CONFIRMATION_MESSAGE
-} from '../constants/questions';
+import { SessionStage } from '@prisma/client';
 import { prisma } from '../lib/prisma';
-import { sendTextMessage as send, logMessage, isCapturing } from './transport';
+import { sendTextMessage, logMessage, isCapturing } from './transport';
 import { answerFreeform } from './gemini';
+import {
+  loadConfig,
+  resolveService,
+  welcomeMessage,
+  menuPrompt,
+  invalidSelectionMessage,
+  completionMessage,
+  bookingReminderMessage,
+  postCompletionMessage,
+  bookedConfirmationMessage,
+  type BotConfig
+} from './botConfig';
 
 const RESET_COMMANDS = ['reset', 'menu', 'restart', 'start'];
-const BOOKED_RE = /already\s+booked|i\s+(have\s+)?booked|booking\s+done|booked\s+(a\s+)?(slot|consultation)/i;
+const BOOKED_RE = /already\s+booked|i\s+(have\s+)?booked|booking\s+done|booked\s+(a\s+)?(slot|consultation|appointment|call)/i;
 
-/** Maps "3", "3.", "option 3", "3️⃣" or "international jobs" to a branch key. */
-export function resolveService(text: string): string | undefined {
-  const digit = text.match(/^\D*([1-5])\D*$/);
-  if (digit) return SERVICE_SELECTION_MAP[digit[1]];
-  const lower = text.toLowerCase();
-  return SERVICE_KEYWORDS.find(([re]) => re.test(lower))?.[1];
-}
-
-/** Answer a side question via Gemini. Returns false if Gemini had nothing (not configured / failed). */
-async function tryAnswer(to: string, question: string): Promise<boolean> {
-  const answer = await answerFreeform(question);
-  if (!answer) return false;
-  await send(to, answer);
-  return true;
-}
+const looksLikeQuestion = (t: string) => t.includes('?') && t.length > 3;
 
 /** True when the most recent message we sent to this chat was exactly `text` (avoids repeating ourselves). */
-async function lastReplyWas(phone: string, text: string): Promise<boolean> {
+async function lastReplyWas(workspaceId: string, phone: string, text: string): Promise<boolean> {
   if (isCapturing()) return false;
   const last = await prisma.webhookLog.findFirst({
-    where: { phoneNumber: phone, direction: 'OUTBOUND' },
+    where: { workspaceId, phoneNumber: phone, direction: 'OUTBOUND' },
     orderBy: { createdAt: 'desc' }
   });
   return (last?.payload as { text?: string } | null)?.text === text;
 }
 
-const looksLikeQuestion =(t: string) => t.includes('?') && t.length > 3;
-
 export async function handleIncomingMessage(
+  workspaceId: string,
   phoneNumber: string,
   contactName: string | undefined,
   incomingText: string,
@@ -53,151 +39,138 @@ export async function handleIncomingMessage(
 ): Promise<void> {
   const text = incomingText.trim();
   if (!text) return;
-  if (!isCapturing()) await logMessage(phoneNumber, 'INBOUND', text, messageId);
+  if (!isCapturing()) await logMessage(workspaceId, phoneNumber, 'INBOUND', text, messageId);
   const lower = text.toLowerCase();
 
+  const cfg: BotConfig = await loadConfig(workspaceId);
+  const send = (to: string, body: string) => sendTextMessage(workspaceId, to, body);
+  const key = { workspaceId_phoneNumber: { workspaceId, phoneNumber } };
+
+  /** Answer a side question via Gemini. Returns false if Gemini had nothing (not configured / failed). */
+  const tryAnswer = async (question: string): Promise<boolean> => {
+    const answer = await answerFreeform(cfg, question);
+    if (!answer) return false;
+    await send(phoneNumber, answer);
+    return true;
+  };
+
   // 1. Fetch or create session
-  let session = await prisma.session.findUnique({ where: { phoneNumber } });
+  let session = await prisma.session.findUnique({ where: key });
   if (!session) {
-    session = await prisma.session.create({
-      data: { phoneNumber, contactName: contactName || null }
-    });
+    session = await prisma.session.create({ data: { workspaceId, phoneNumber, contactName: contactName || null } });
   } else {
-    await prisma.session.update({
-      where: { phoneNumber },
-      data: { lastInteractionAt: new Date() }
-    });
+    await prisma.session.update({ where: key, data: { lastInteractionAt: new Date() } });
   }
 
-  // A human agent has taken over: suppress automated replies
+  // A human agent has taken over, or the workspace has not gone live yet: suppress automated replies
   if (session.isAgentPaused || session.stage === SessionStage.AGENT_TAKEOVER) return;
+  if (!cfg.ws.botEnabled && !isCapturing()) return;
+  if (cfg.services.length === 0) return;
 
   // 2. Global reset commands
   if (RESET_COMMANDS.includes(lower)) {
     await prisma.session.update({
-      where: { phoneNumber },
-      data: {
-        stage: SessionStage.AWAITING_SERVICE_SELECTION,
-        selectedService: null,
-        currentStep: 0,
-        answers: {}
-      }
+      where: key,
+      data: { stage: SessionStage.AWAITING_SERVICE_SELECTION, selectedService: null, currentStep: 0, answers: {} }
     });
-    await send(phoneNumber, WELCOME_MESSAGE);
+    await send(phoneNumber, welcomeMessage(cfg));
     return;
   }
 
   // 3. Stage state machine
   switch (session.stage) {
     case SessionStage.WELCOME: {
-      await prisma.session.update({
-        where: { phoneNumber },
-        data: { stage: SessionStage.AWAITING_SERVICE_SELECTION }
-      });
-      await send(phoneNumber, WELCOME_MESSAGE);
+      await prisma.session.update({ where: key, data: { stage: SessionStage.AWAITING_SERVICE_SELECTION } });
+      await send(phoneNumber, welcomeMessage(cfg));
       break;
     }
 
     case SessionStage.AWAITING_SERVICE_SELECTION: {
-      const branchKey = resolveService(text);
-      if (!branchKey) {
-        if (looksLikeQuestion(text) && (await tryAnswer(phoneNumber, text))) {
-          await send(phoneNumber, 'To get started, please reply with the option number (1-5) for the service you need. 😊');
+      const serviceKey = resolveService(cfg, text);
+      if (!serviceKey) {
+        if (looksLikeQuestion(text) && (await tryAnswer(text))) {
+          await send(phoneNumber, menuPrompt(cfg));
         } else {
-          await send(phoneNumber, INVALID_SELECTION_MESSAGE);
+          await send(phoneNumber, invalidSelectionMessage(cfg));
         }
         return;
       }
 
       await prisma.session.update({
-        where: { phoneNumber },
-        data: {
-          stage: SessionStage.IN_QUESTIONNAIRE,
-          selectedService: branchKey as ServiceCategory,
-          currentStep: 0,
-          answers: {}
-        }
+        where: key,
+        data: { stage: SessionStage.IN_QUESTIONNAIRE, selectedService: serviceKey, currentStep: 0, answers: {} }
       });
-      await send(phoneNumber, QUESTION_BRANCHES[branchKey][0].question);
+      await send(phoneNumber, cfg.services.find((s) => s.key === serviceKey)!.questions[0].prompt);
       break;
     }
 
     case SessionStage.IN_QUESTIONNAIRE: {
-      const branch = session.selectedService;
-      const questions = branch ? QUESTION_BRANCHES[branch] : undefined;
-      if (!branch || !questions || session.currentStep >= questions.length) {
-        // Corrupt state: restart the funnel instead of crashing
+      const service = cfg.services.find((s) => s.key === session!.selectedService);
+      const questions = service?.questions;
+      if (!service || !questions || session.currentStep >= questions.length) {
+        // Corrupt state (or the menu was edited): restart the funnel instead of crashing
         await prisma.session.update({
-          where: { phoneNumber },
-          data: {
-            stage: SessionStage.AWAITING_SERVICE_SELECTION,
-            selectedService: null,
-            currentStep: 0,
-            answers: {}
-          }
+          where: key,
+          data: { stage: SessionStage.AWAITING_SERVICE_SELECTION, selectedService: null, currentStep: 0, answers: {} }
         });
-        await send(phoneNumber, WELCOME_MESSAGE);
+        await send(phoneNumber, welcomeMessage(cfg));
         return;
       }
 
       const step = session.currentStep;
 
       // A side question mid-flow: answer it, then repeat the pending question (answer not consumed)
-      if (looksLikeQuestion(text) && (await tryAnswer(phoneNumber, text))) {
-        await send(phoneNumber, questions[step].question);
+      if (looksLikeQuestion(text) && (await tryAnswer(text))) {
+        await send(phoneNumber, questions[step].prompt);
         return;
       }
 
-      const updatedAnswers = {
-        ...(session.answers as Record<string, string>),
-        [questions[step].key]: text
-      };
+      const updatedAnswers = { ...(session.answers as Record<string, string>), [questions[step].key]: text };
       const nextStep = step + 1;
 
       if (nextStep < questions.length) {
-        await prisma.session.update({
-          where: { phoneNumber },
-          data: { currentStep: nextStep, answers: updatedAnswers }
-        });
-        await send(phoneNumber, questions[nextStep].question);
+        await prisma.session.update({ where: key, data: { currentStep: nextStep, answers: updatedAnswers } });
+        await send(phoneNumber, questions[nextStep].prompt);
       } else {
         await prisma.$transaction([
           prisma.session.update({
-            where: { phoneNumber },
+            where: key,
             data: { stage: SessionStage.COMPLETED, currentStep: nextStep, answers: updatedAnswers }
           }),
           prisma.lead.upsert({
             where: { sessionId: session.id },
-            update: { serviceCategory: branch, collectedData: updatedAnswers },
+            update: { serviceCategory: service.key, collectedData: updatedAnswers },
             create: {
+              workspaceId,
               sessionId: session.id,
               phoneNumber,
-              serviceCategory: branch,
+              serviceCategory: service.key,
               collectedData: updatedAnswers
             }
           })
         ]);
-        await send(phoneNumber, COMPLETION_MESSAGE);
+        await send(phoneNumber, completionMessage(cfg));
       }
       break;
     }
 
     case SessionStage.COMPLETED: {
-      if (BOOKED_RE.test(text)) {
-        await prisma.lead.updateMany({ where: { phoneNumber }, data: { isBookedTopmate: true } });
-        await send(phoneNumber, BOOKED_CONFIRMATION_MESSAGE);
-      } else if (/consultation|book|fee/.test(lower)) {
-        await send(phoneNumber, CONSULTATION_REMINDER_MESSAGE);
-      } else if (looksLikeQuestion(text) && (await tryAnswer(phoneNumber, text))) {
+      const hasBooking = !!cfg.ws.bookingUrl.trim();
+      if (hasBooking && BOOKED_RE.test(text)) {
+        await prisma.lead.updateMany({ where: { workspaceId, phoneNumber }, data: { isBookedTopmate: true } });
+        await send(phoneNumber, bookedConfirmationMessage());
+      } else if (hasBooking && /consultation|appointment|book|fee/.test(lower)) {
+        await send(phoneNumber, bookingReminderMessage(cfg));
+      } else if (looksLikeQuestion(text) && (await tryAnswer(text))) {
         // answered a genuine question
-      } else if (!(await lastReplyWas(phoneNumber, POST_COMPLETION_MESSAGE))) {
-        await send(phoneNumber, POST_COMPLETION_MESSAGE);
+      } else if (!(await lastReplyWas(workspaceId, phoneNumber, postCompletionMessage()))) {
+        await send(phoneNumber, postCompletionMessage());
       }
       // otherwise stay quiet: the same acknowledgement was already the last thing we sent
       break;
     }
 
     default:
-      await send(phoneNumber, WELCOME_MESSAGE);
+      await send(phoneNumber, welcomeMessage(cfg));
   }
 }
