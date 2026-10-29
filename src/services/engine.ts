@@ -33,7 +33,17 @@ async function tryAnswer(to: string, question: string): Promise<boolean> {
   return true;
 }
 
-const looksLikeQuestion = (t: string) => t.includes('?') && t.length > 3;
+/** True when the most recent message we sent to this chat was exactly `text` (avoids repeating ourselves). */
+async function lastReplyWas(phone: string, text: string): Promise<boolean> {
+  if (isCapturing()) return false;
+  const last = await prisma.webhookLog.findFirst({
+    where: { phoneNumber: phone, direction: 'OUTBOUND' },
+    orderBy: { createdAt: 'desc' }
+  });
+  return (last?.payload as { text?: string } | null)?.text === text;
+}
+
+const looksLikeQuestion =(t: string) => t.includes('?') && t.length > 3;
 
 export async function handleIncomingMessage(
   phoneNumber: string,
@@ -178,9 +188,12 @@ export async function handleIncomingMessage(
         await send(phoneNumber, BOOKED_CONFIRMATION_MESSAGE);
       } else if (/consultation|book|fee/.test(lower)) {
         await send(phoneNumber, CONSULTATION_REMINDER_MESSAGE);
-      } else if (!(await tryAnswer(phoneNumber, text))) {
+      } else if (looksLikeQuestion(text) && (await tryAnswer(phoneNumber, text))) {
+        // answered a genuine question
+      } else if (!(await lastReplyWas(phoneNumber, POST_COMPLETION_MESSAGE))) {
         await send(phoneNumber, POST_COMPLETION_MESSAGE);
       }
+      // otherwise stay quiet: the same acknowledgement was already the last thing we sent
       break;
     }
 
