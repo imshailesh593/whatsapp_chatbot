@@ -39,6 +39,7 @@ import { createCoupon, grantPlan, redeemCoupon } from './services/coupons';
 import { affiliateAdminOverview, getAffiliateSettings, referralOverview, referrerFor, saveAffiliateSettings, setCommissionStatus } from './services/affiliate';
 import { authUrl, cancelAppointment, cleanRules, completeConnection, disconnect as disconnectCalendar, formatSlot, googleConfigured, readState } from './services/calendar';
 import { getUsage } from './services/usage';
+import { checkRazorpay } from './services/razorpaySetup';
 import { cancelSubscription, handleRazorpayWebhook, handleStripeWebhook, openPortal, providersAvailable, startCheckout } from './services/billing';
 
 const SIM_PREFIX = 'SIM-';
@@ -1016,6 +1017,24 @@ export function registerAdmin(app: FastifyInstance, opts: { getQr: (workspaceId:
   app.get('/admin/api/super/dashboard', { preHandler: superOnly }, async (req) => {
     const d = parseInt(String((req.query as any).days ?? '30'), 10);
     return platformDashboard([7, 30, 90].includes(d) ? d : 30);
+  });
+
+  // What is and is not ready for taking payments. ?live=1 also calls Razorpay to prove the keys and plans work.
+  app.get('/admin/api/super/payments-setup', { preHandler: superOnly }, async (req) => {
+    const env = (k: string) => !!process.env[k];
+    const base = publicUrl(req).replace(/\/$/, '');
+    const stripe = [
+      { label: 'Secret key', ok: env('STRIPE_SECRET_KEY'), detail: env('STRIPE_SECRET_KEY') ? 'Set' : 'Add STRIPE_SECRET_KEY' },
+      { label: 'Webhook secret', ok: env('STRIPE_WEBHOOK_SECRET'), detail: env('STRIPE_WEBHOOK_SECRET') ? 'Set' : 'Add STRIPE_WEBHOOK_SECRET' },
+      ...PLANS.map((p) => ({ label: `${p.name} price`, ok: env(`STRIPE_PRICE_${p.id.toUpperCase()}`), detail: env(`STRIPE_PRICE_${p.id.toUpperCase()}`) ? 'Set' : `Add STRIPE_PRICE_${p.id.toUpperCase()}` }))
+    ];
+    let razorpay;
+    try {
+      razorpay = await checkRazorpay((req.query as any).live === '1');
+    } catch (err) {
+      razorpay = [{ label: 'Check', ok: false, detail: (err as Error).message }];
+    }
+    return { razorpay, stripe, razorpayWebhook: `${base}/webhooks/razorpay`, stripeWebhook: `${base}/webhooks/stripe`, razorpayReady: providersAvailable().razorpay, stripeReady: providersAvailable().stripe };
   });
 
   app.get('/admin/api/super/payments', { preHandler: superOnly }, async () => {

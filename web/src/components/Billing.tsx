@@ -164,6 +164,7 @@ export default function Billing({ me }: { me: AdminUser }) {
               {redeemed && <span className="text-xs text-emerald-300">{redeemed}</span>}
             </div>
           )}
+          {anyProvider && owner && <p className="text-[11px] text-slate-500 mt-3">You pay on the payment provider&apos;s secure page. After paying, come back here: your plan switches on as soon as the payment is confirmed (usually within a minute; refresh if it still shows the trial).</p>}
           {!anyProvider && <p className="text-[11px] text-slate-500 mt-3">Online payment is not switched on for this account yet. Contact support to activate a plan.</p>}
           {!owner && <p className="text-[11px] text-slate-500 mt-3">Only the account owner can change the plan.</p>}
           {owner && b.status === 'active' && !b.cancelAtPeriodEnd && b.provider && !linkPaid && (

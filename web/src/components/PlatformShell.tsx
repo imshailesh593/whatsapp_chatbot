@@ -4,7 +4,7 @@ import {
 } from 'lucide-react';
 import { api } from '../api';
 import { ago } from '../config';
-import type { AdminUser, AffiliateAdmin, CouponInfo, PlatformSettingsInfo } from '../types';
+import type { AdminUser, AffiliateAdmin, CouponInfo, PaymentsSetup, PlatformSettingsInfo } from '../types';
 import Platform from './Platform';
 
 type View = 'dashboard' | 'clients' | 'subscriptions' | 'payments' | 'plans' | 'coupons' | 'affiliates' | 'audit' | 'settings';
@@ -426,6 +426,47 @@ function AuditView() {
 
 // ---------- settings ----------
 
+function PaymentsSetupCard() {
+  const [d, setD] = useState<PaymentsSetup | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const load = useCallback(async (live: boolean) => {
+    setBusy(true);
+    setError('');
+    try { setD(await api.platformPaymentsSetup(live)); } catch (err) { setError((err as Error).message); } finally { setBusy(false); }
+  }, []);
+  useEffect(() => { load(false); }, [load]);
+  const rows = (items: PaymentsSetup['razorpay']) => items.map((c) => (
+    <li key={c.label} className="flex items-start gap-2 text-sm"><span className={c.ok ? 'text-green-600' : 'text-rose-600'}>{c.ok ? '✓' : '✗'}</span><span><strong className="text-slate-800">{c.label}</strong> <span className="text-slate-500">{c.detail}</span></span></li>
+  ));
+  return (
+    <div className={card + ' p-5'}>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h3 className="font-bold text-slate-900">Payments setup</h3>
+          <p className="text-sm text-slate-500 mt-1">Owners can pay online once the keys, webhook and plans below are all ticked. Keys live in the server <code>.env</code>, never in the browser.</p>
+        </div>
+        <button onClick={() => load(true)} disabled={busy} className="px-4 py-2 bg-[#4b7f2c] hover:bg-green-800 text-white text-sm font-semibold rounded-lg disabled:opacity-50">{busy ? 'Checking…' : 'Check connection with Razorpay'}</button>
+      </div>
+      {error && <p className="text-sm text-rose-600 mt-2" role="alert">{error}</p>}
+      {d && (
+        <div className="mt-4 grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <div>
+            <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-2">Razorpay (₹) {d.razorpayReady ? <span className="text-green-700 normal-case">· ready</span> : <span className="text-amber-700 normal-case">· not ready</span>}</h4>
+            <ul className="space-y-1.5">{rows(d.razorpay)}</ul>
+            <p className="text-xs text-slate-500 mt-3">Webhook address to add in Razorpay: <code className="break-all">{d.razorpayWebhook}</code></p>
+          </div>
+          <div>
+            <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-2">Stripe ($) {d.stripeReady ? <span className="text-green-700 normal-case">· ready</span> : <span className="text-amber-700 normal-case">· not set up</span>}</h4>
+            <ul className="space-y-1.5">{rows(d.stripe)}</ul>
+            <p className="text-xs text-slate-500 mt-3">Webhook address to add in Stripe: <code className="break-all">{d.stripeWebhook}</code></p>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function PlatformSettings() {
   const [on, setOn] = useState<boolean | null>(null);
   const [cap, setCap] = useState<PlatformSettingsInfo | null>(null);
@@ -490,6 +531,7 @@ function PlatformSettings() {
           </div>
         </div>
       )}
+      <PaymentsSetupCard />
       <p className="text-xs text-slate-500 flex items-center space-x-1.5"><FileText className="w-3.5 h-3.5" /><span>Every change here is written to the audit log.</span></p>
     </div>
   );

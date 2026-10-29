@@ -1,4 +1,4 @@
-import type { AffiliateAdmin, ReferralInfo, CalendarInfo, CouponInfo, PlatformSettingsInfo, AuditEntry, PlatformDetail, PlatformOverview, LeadEventInfo, AnalyticsData, ApiKeyInfo, IntegrationsInfo, WebhookInfo, BroadcastInfo, StageDef, BillingInfo, AdminRow, AdminUser, ChatMessage, ChatTurn, Contact, Draft, Overview, PatchBody, PlatformWorkspace, ServiceDef, TemplateInfo, WaSnapshot, Workspace } from './types';
+import type { PaymentsSetup, AffiliateAdmin, ReferralInfo, CalendarInfo, CouponInfo, PlatformSettingsInfo, AuditEntry, PlatformDetail, PlatformOverview, LeadEventInfo, AnalyticsData, ApiKeyInfo, IntegrationsInfo, WebhookInfo, BroadcastInfo, StageDef, BillingInfo, AdminRow, AdminUser, ChatMessage, ChatTurn, Contact, Draft, Overview, PatchBody, PlatformWorkspace, ServiceDef, TemplateInfo, WaSnapshot, Workspace } from './types';
 
 export class UnauthorizedError extends Error {}
 
@@ -69,6 +69,7 @@ export const api = {
   cancelSubscription: () => post<{ ok: true }>('/admin/api/billing/cancel', {}),
   platformDashboard: (days: number) => request<any>(`/admin/api/super/dashboard?days=${days}`),
   platformSubscriptions: () => request<{ subscriptions: { id: string; business: string; owner: string | null; plan: string; status: string; access: string; provider: string | null; renews: string | null; cancelAtPeriodEnd: boolean; priceInr: number }[] }>('/admin/api/super/subscriptions').then((r) => r.subscriptions),
+  platformPaymentsSetup: (live: boolean) => request<PaymentsSetup>(`/admin/api/super/payments-setup${live ? '?live=1' : ''}`),
   platformPayments: () => request<{ payments: { id: string; business: string; provider: string; plan: string; amount: number; currency: string; status: string; at: string }[] }>('/admin/api/super/payments').then((r) => r.payments),
   platformPlans: () => request<{ plans: { id: string; name: string; price: { INR: number; USD: number }; limits: { conversations: number; aiReplies: number; seats: number; broadcasts: number }; integrations: boolean; clients: number }[]; trial: number; internal: number }>('/admin/api/super/plans'),
   platformSettings: () => request<PlatformSettingsInfo>('/admin/api/super/settings'),

@@ -169,7 +169,7 @@ Kept in the `.env` file on the server (never committed to git). Restart the bot 
 | `BROADCAST_DAILY_CAP` | Daily broadcast messages per business (default 150) |
 | `RESEND_API_KEY`, `MAIL_FROM` | Email through Resend (see below) |
 | `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM` | Email through plain SMTP, used only if no Resend key |
-| `STRIPE_*`, `RAZORPAY_*` | Online payments (see below). `RAZORPAY_MODE=subscription` switches Razorpay from payment links to recurring subscriptions |
+| `STRIPE_*`, `RAZORPAY_*` | Online payments (see below). `RAZORPAY_MODE=link` switches Razorpay from recurring subscriptions to 30-day payment links |
 | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | Google Calendar booking (see below) |
 | `BUSINESS_NAME`, `BUSINESS_TAGLINE`, `BUSINESS_DESCRIPTION`, `WELCOME_INTRO`, `FORM_URL`, `TOPMATE_URL` | Seed values for the default workspace, used only the first time |
 | `ALLOW_HTTP_WEBHOOKS` | Development only. Never set in production |
@@ -202,15 +202,16 @@ Each business connects its own Google account. Their refresh token is stored enc
 Payments are built but off. Add keys to switch them on. They apply to a business that pays itself; plans you grant, and redeem codes, never need them.
 
 - **Stripe** (dollars): create three recurring monthly Prices, then set `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_PRICE_STARTER`, `STRIPE_PRICE_GROWTH`, `STRIPE_PRICE_SCALE`. Add a webhook to `https://<your-domain>/webhooks/stripe` with these events: `checkout.session.completed`, `customer.subscription.created`, `customer.subscription.updated`, `customer.subscription.deleted`, `invoice.paid`, `invoice.payment_failed`.
-- **Razorpay payment links** (rupees, UPI and cards; the default, and the right choice while your website is not approved). Each time an owner pays, the app creates a one-off hosted Razorpay payment link for 30 days of the plan. When Razorpay confirms the payment by webhook, the plan switches on automatically.
-  1. In Razorpay (Test mode first), create an API key. Put `RAZORPAY_KEY_ID` and `RAZORPAY_KEY_SECRET` in `.env`.
-  2. Add a webhook to `https://<your-domain>/webhooks/razorpay`, choose the event **payment_link.paid**, and set a secret. Put the same secret in `RAZORPAY_WEBHOOK_SECRET`. Restart the bot.
-  3. No plans need creating in Razorpay and `RAZORPAY_PLAN_*` are not used.
-  - A plan paid this way **does not renew by itself**. Paying again before the end adds 30 days to the same plan. Three days before the end the owner gets a fresh payment link by WhatsApp or email (whichever they set up as alert channels). A different plan starts immediately for 30 days.
-  - An amount lower than the plan price is recorded but does not switch the plan on. Duplicate webhooks never give extra days.
-  - Referral commissions apply to these payments the same way.
-  - Razorpay's live mode needs your account activated (KYC). Ask Razorpay what they require for Payment Links on your account, since requirements for a website or app URL can differ by business type. Test mode needs no approval.
-  - To use recurring Razorpay Subscriptions instead, set `RAZORPAY_MODE=subscription`, create three monthly Plans, fill `RAZORPAY_PLAN_*`, and add the subscription webhook events: `subscription.activated`, `charged`, `halted`, `pending`, `cancelled`, `completed`, `resumed`.
+- **Razorpay** (rupees: UPI AutoPay, cards, netbanking). Recurring monthly subscriptions that renew by themselves. Needs your Razorpay account to be activated, which is when Razorpay issues live API keys.
+  1. **Keys.** Razorpay Dashboard → Account & Settings → API keys → generate. Put `RAZORPAY_KEY_ID` and `RAZORPAY_KEY_SECRET` in the server `.env`. Start with **Test mode** keys (they begin `rzp_test_`); no real money moves. Check that **Subscriptions** is enabled on your account.
+  2. **Plans.** On the server run once: `docker exec <bot-container> node dist/cli/razorpaySetup.js`. It creates three monthly plans in Razorpay with exactly your prices and prints three lines, `RAZORPAY_PLAN_STARTER=plan_...` and so on. Paste them into `.env`. **Run it only once**: Razorpay cannot delete plans, so a second run with the lines missing would create duplicates (plans already in `.env` are never recreated).
+  3. **Webhook.** Dashboard → Account & Settings → Webhooks → Add: URL `https://<your-domain>/webhooks/razorpay`, choose a secret, tick these events: `subscription.activated`, `subscription.charged`, `subscription.pending`, `subscription.halted`, `subscription.cancelled`, `subscription.completed`, `subscription.resumed`. Put the secret in `RAZORPAY_WEBHOOK_SECRET`.
+  4. Restart the bot, then open **Platform admin → Settings → Payments setup** and press **Check connection with Razorpay**. Every line must show a tick. It proves the keys work and that each plan exists with the right price and monthly period. The page also shows the exact webhook address to enter.
+  5. Test in Test mode: as an owner choose a plan, pay with Razorpay's test card or UPI, and watch the plan switch on. **Payments** and **Subscriptions** show the result. Then replace the test keys, plan ids and webhook secret with live ones (the plan ids differ between test and live, so run the plan step again in live mode, once).
+  - How it behaves: the owner is sent to Razorpay's hosted page to authorise the subscription. When Razorpay confirms (`subscription.activated` or `charged`), the plan switches on and its end date follows Razorpay's billing period. Each monthly charge extends it. A failed renewal puts the plan in a 3-day grace period (past due); success restores it; if Razorpay gives up (`halted`) or the owner cancels, the bot stops replying once the paid period ends. Cancelling stops renewal at the end of the period already paid for.
+  - Duplicate webhooks and repeated payments are counted once. Referral commissions are created for each recorded payment.
+  - Price or plan changes: edit `src/plans.ts`, create new plans in Razorpay (a plan's price cannot be edited) and update the `RAZORPAY_PLAN_*` lines. Existing subscribers stay on the old Razorpay plan until they resubscribe.
+  - **Alternative, payment links** (`RAZORPAY_MODE=link`): sells 30 days at a time instead of a subscription. It needs only the keys and a webhook with the event `payment_link.paid`; no plans. The plan does not renew by itself, so the owner pays again (they are sent a fresh link 3 days before the end). Use it only if you prefer not to run subscriptions.
 - Webhooks are verified by signature and processed once even if the provider repeats them.
 - Test with the providers' test modes before going live. Check **Payments** and **Subscriptions** afterwards.
 
@@ -332,6 +333,8 @@ Weekly: check free memory and slots, glance at the audit log, confirm backups ex
 | Google "redirect_uri_mismatch" | The redirect URI in Google Cloud does not exactly match `https://<your-domain>/admin/api/calendar/callback` |
 | All Google calendars suddenly disconnected | `SESSION_SECRET` was changed. Businesses must reconnect |
 | Webhook from Stripe or Razorpay rejected | Wrong signing secret, or the body was altered by a proxy |
+| Razorpay payment taken but plan not switched on | The webhook is not reaching the server or has the wrong secret. Check Razorpay Dashboard → Webhooks → recent deliveries, and Settings → Payments setup |
+| Payments setup says a plan "must match" | The price in Razorpay differs from `src/plans.ts`. Create a new plan in Razorpay with the right price and update the `RAZORPAY_PLAN_*` line |
 | Slots show full but few customers | Numbers stuck in "linking". Restart the bot, or raise the limit |
 | Memory climbing | Count linked numbers on the dashboard, lower the limit or add RAM |
 

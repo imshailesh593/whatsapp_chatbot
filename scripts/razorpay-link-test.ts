@@ -9,7 +9,7 @@ process.env.RAZORPAY_KEY_ID = 'rzp_test_key';
 process.env.RAZORPAY_KEY_SECRET = 'rzp_test_secret';
 process.env.RAZORPAY_WEBHOOK_SECRET = 'whsec_rz';
 process.env.PUBLIC_URL = 'https://bot.example';
-delete process.env.RAZORPAY_MODE;
+process.env.RAZORPAY_MODE = 'link';
 import crypto from 'crypto';
 import Fastify from 'fastify';
 import { registerAdmin } from '../src/admin';
@@ -51,14 +51,14 @@ async function cleanup() {
   const cookieOf = (r: any) => ({ cookie: String(r.headers['set-cookie']).split(';')[0], ...J });
 
   console.log('[availability]');
-  ok(providersAvailable().razorpay === true, 'payment-link mode needs only the keys and webhook secret (no plan ids, no live website)');
+  ok(providersAvailable().razorpay === true, 'payment-link mode needs only the keys and webhook secret (no plan ids)');
   const keep = process.env.RAZORPAY_WEBHOOK_SECRET;
   process.env.RAZORPAY_WEBHOOK_SECRET = '';
   ok(providersAvailable().razorpay === false, 'without a webhook secret payments could never be applied, so it is reported as not set up');
   process.env.RAZORPAY_WEBHOOK_SECRET = keep;
-  process.env.RAZORPAY_MODE = 'subscription';
-  ok(providersAvailable().razorpay === false, 'subscription mode still needs the Razorpay plan ids');
   delete process.env.RAZORPAY_MODE;
+  ok(providersAvailable().razorpay === false, 'the default (subscription) mode still needs the Razorpay plan ids');
+  process.env.RAZORPAY_MODE = 'link';
 
   // a business with an owner and an agent
   let r = await call(J, 'POST', '/admin/api/signup', { businessName: 'Link Co', email: `owner${DOMAIN}`, password: 'link owner password' });

@@ -12,18 +12,19 @@ const env = (k: string) => process.env[k] ?? '';
 
 /**
  * Razorpay works in one of two ways:
- *  - payment links (default): we create a hosted one-off payment link for 30 days of a plan and a webhook switches
- *    the plan on when it is paid. Needs no Razorpay Subscriptions product and no live website.
- *  - subscriptions (RAZORPAY_MODE=subscription): recurring plans created in the Razorpay dashboard.
+ *  - subscriptions (default): recurring monthly plans that renew by themselves (UPI AutoPay / cards). The three
+ *    Razorpay Plans are created once with `node dist/cli/razorpaySetup.js`; webhooks keep the app in step.
+ *  - payment links (RAZORPAY_MODE=link): a one-off hosted payment for 30 days; the owner pays again to renew.
  */
-export const razorpayLinkMode = () => env('RAZORPAY_MODE') !== 'subscription';
+export const razorpayLinkMode = () => env('RAZORPAY_MODE') === 'link';
 export const LINK_DAYS = 30;
 
 export function providersAvailable(): Record<Provider, boolean> {
   const keys = !!env('RAZORPAY_KEY_ID') && !!env('RAZORPAY_KEY_SECRET');
   return {
     stripe: !!env('STRIPE_SECRET_KEY') && PLANS.every((p) => !!env(`STRIPE_PRICE_${p.id.toUpperCase()}`)),
-    razorpay: keys && (razorpayLinkMode() ? !!env('RAZORPAY_WEBHOOK_SECRET') : PLANS.every((p) => !!env(`RAZORPAY_PLAN_${p.id.toUpperCase()}`)))
+    // Without the webhook secret a payment could never switch a plan on, so it counts as not set up
+    razorpay: keys && !!env('RAZORPAY_WEBHOOK_SECRET') && (razorpayLinkMode() || PLANS.every((p) => !!env(`RAZORPAY_PLAN_${p.id.toUpperCase()}`)))
   };
 }
 

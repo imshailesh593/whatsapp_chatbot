@@ -212,6 +212,15 @@ export interface BillingPlan {
   limits: { conversations: number; aiReplies: number; seats: number; broadcasts: number };
 }
 
+export interface PaymentsSetup {
+  razorpay: { label: string; ok: boolean; detail: string }[];
+  stripe: { label: string; ok: boolean; detail: string }[];
+  razorpayWebhook: string;
+  stripeWebhook: string;
+  razorpayReady: boolean;
+  stripeReady: boolean;
+}
+
 export interface BillingInfo {
   plan: string;
   planName: string;
