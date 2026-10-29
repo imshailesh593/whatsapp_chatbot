@@ -2,6 +2,8 @@ import { SessionStage } from '@prisma/client';
 import { prisma } from '../lib/prisma';
 import { sendTextMessage, logMessage, isCapturing } from './transport';
 import { answerFreeform } from './gemini';
+import { accessState } from '../plans';
+import { admitAiReply, admitConversation } from './usage';
 import {
   loadConfig,
   resolveService,
@@ -48,6 +50,8 @@ export async function handleIncomingMessage(
 
   /** Answer a side question via Gemini. Returns false if Gemini had nothing (not configured / failed). */
   const tryAnswer = async (question: string): Promise<boolean> => {
+    // Over the plan's AI allowance the bot keeps to its fixed replies
+    if (!isCapturing() && !(await admitAiReply(cfg.ws))) return false;
     const answer = await answerFreeform(cfg, question);
     if (!answer) return false;
     await send(phoneNumber, answer);
@@ -57,6 +61,8 @@ export async function handleIncomingMessage(
   // 1. Fetch or create session
   let session = await prisma.session.findUnique({ where: key });
   if (!session) {
+    // Trial over / subscription lapsed, or this month's conversation allowance is used: do not start new chats
+    if (!isCapturing() && (!accessState(cfg.ws).active || !(await admitConversation(cfg.ws)))) return;
     session = await prisma.session.create({ data: { workspaceId, phoneNumber, contactName: contactName || null } });
   } else {
     await prisma.session.update({ where: key, data: { lastInteractionAt: new Date() } });
@@ -65,6 +71,7 @@ export async function handleIncomingMessage(
   // A human agent has taken over, or the workspace has not gone live yet: suppress automated replies
   if (session.isAgentPaused || session.stage === SessionStage.AGENT_TAKEOVER) return;
   if (!cfg.ws.botEnabled && !isCapturing()) return;
+  if (!isCapturing() && !accessState(cfg.ws).active) return;
   if (cfg.services.length === 0) return;
 
   // 2. Global reset commands

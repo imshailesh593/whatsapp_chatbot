@@ -1,5 +1,6 @@
 import { prisma } from './prisma';
 import { hashPassword } from './auth';
+import { TRIAL_DAYS } from '../plans';
 
 export const DEFAULT_WORKSPACE_ID = 'default-workspace';
 
@@ -22,6 +23,7 @@ export async function createWorkspaceWithOwner(opts: { businessName: string; ema
       name: opts.businessName,
       businessName: opts.businessName,
       botEnabled: false,
+      trialEndsAt: new Date(Date.now() + TRIAL_DAYS * 86_400_000),
       adminUsers: { create: { email: opts.email, passwordHash, role: 'owner' } }
     },
     include: { adminUsers: true }

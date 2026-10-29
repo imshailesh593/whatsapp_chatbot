@@ -24,6 +24,9 @@ import { onboardingAvailable, onboardingTurn, parseDraft, type ChatTurn, type Dr
 import { TEMPLATES, getTemplate } from './templates';
 import { waFor } from './services/whatsapp';
 import { PRODUCT_NAME } from './brand';
+import { PLANS, accessState, planById } from './plans';
+import { getUsage } from './services/usage';
+import { cancelSubscription, handleRazorpayWebhook, handleStripeWebhook, openPortal, providersAvailable, startCheckout } from './services/billing';
 
 const SIM_PREFIX = 'SIM-';
 const WEB_DIST = path.join(__dirname, '..', 'web', 'dist');
@@ -172,6 +175,7 @@ export function registerAdmin(app: FastifyInstance, opts: { getQr: (workspaceId:
   // Accept an empty body with Content-Type: application/json (DELETE/POST without payload) instead of failing with 400
   app.removeContentTypeParser('application/json');
   app.addContentTypeParser('application/json', { parseAs: 'string' }, (_req, body, done) => {
+    (_req as any).rawBody = body;
     if (!body) return done(null, {});
     try {
       done(null, JSON.parse(body as string));
@@ -202,6 +206,11 @@ export function registerAdmin(app: FastifyInstance, opts: { getQr: (workspaceId:
     const denied = await guard(req, reply);
     if (denied) return denied;
     if (me(req).role === 'agent') return reply.status(403).send({ error: 'Your role cannot change settings' });
+  };
+  const ownerOnly = async (req: FastifyRequest, reply: FastifyReply) => {
+    const denied = await guard(req, reply);
+    if (denied) return denied;
+    if (me(req).role !== 'owner') return reply.status(403).send({ error: 'Only the account owner can manage billing' });
   };
   const superOnly = async (req: FastifyRequest, reply: FastifyReply) => {
     const denied = await guard(req, reply);
@@ -323,6 +332,11 @@ export function registerAdmin(app: FastifyInstance, opts: { getQr: (workspaceId:
     const email = normalizeEmail(b.email);
     const password = String(b.password ?? '');
     const role = b.role === 'agent' ? 'agent' : 'admin';
+    const wsRow = await prisma.workspace.findUniqueOrThrow({ where: { id: wsId(req) } });
+    const seatLimit = accessState(wsRow).limits.seats;
+    if (seatLimit !== Infinity && (await prisma.adminUser.count({ where: { workspaceId: wsId(req) } })) >= seatLimit) {
+      return reply.status(402).send({ error: `Your plan includes ${seatLimit} team members. Upgrade to add more.` });
+    }
     if (!isValidEmail(email)) return reply.status(400).send({ error: 'Enter a valid email address' });
     if (password.length < MIN_PASSWORD_LENGTH) return reply.status(400).send({ error: `Password must be at least ${MIN_PASSWORD_LENGTH} characters` });
     if (await prisma.adminUser.findUnique({ where: { email } })) return reply.status(409).send({ error: 'That email is already registered' });
@@ -338,6 +352,86 @@ export function registerAdmin(app: FastifyInstance, opts: { getQr: (workspaceId:
     if (target.role === 'owner' && me(req).role !== 'owner') return reply.status(403).send({ error: 'Only an owner can remove an owner' });
     await prisma.adminUser.delete({ where: { id } });
     return { ok: true };
+  });
+
+  // ---- billing ----
+  const publicUrl = (req: FastifyRequest) =>
+    process.env.PUBLIC_URL || `${req.headers['x-forwarded-proto'] ?? 'http'}://${req.headers['x-forwarded-host'] ?? req.headers.host}`;
+  const num = (n: number) => (n === Infinity ? null : n);
+
+  app.get('/admin/api/billing', { preHandler: guard }, async (req) => {
+    const w = await prisma.workspace.findUniqueOrThrow({ where: { id: wsId(req) } });
+    const access = accessState(w);
+    const [usage, seats, payments] = await Promise.all([
+      getUsage(w.id),
+      prisma.adminUser.count({ where: { workspaceId: w.id } }),
+      prisma.payment.findMany({ where: { workspaceId: w.id }, orderBy: { createdAt: 'desc' }, take: 12 })
+    ]);
+    return {
+      plan: w.plan,
+      planName: planById(w.plan)?.name ?? (w.plan === 'internal' ? 'Internal' : 'Free trial'),
+      status: w.planStatus,
+      active: access.active,
+      reason: access.reason,
+      trialEndsAt: w.trialEndsAt?.toISOString() ?? null,
+      currentPeriodEnd: w.currentPeriodEnd?.toISOString() ?? null,
+      cancelAtPeriodEnd: w.cancelAtPeriodEnd,
+      provider: w.billingProvider,
+      limits: { conversations: num(access.limits.conversations), aiReplies: num(access.limits.aiReplies), seats: num(access.limits.seats) },
+      usage: { ...usage, seats },
+      providers: providersAvailable(),
+      plans: PLANS.map((p) => ({ id: p.id, name: p.name, blurb: p.blurb, price: p.price, limits: p.limits })),
+      payments: payments.map((p) => ({ id: p.id, amount: p.amount, currency: p.currency, status: p.status, plan: p.plan, at: p.createdAt.toISOString() }))
+    };
+  });
+
+  app.post('/admin/api/billing/checkout', { preHandler: ownerOnly }, async (req, reply) => {
+    const b = (req.body ?? {}) as { plan?: string; provider?: string };
+    const w = await prisma.workspace.findUniqueOrThrow({ where: { id: wsId(req) } });
+    if (w.plan === 'internal') return reply.status(400).send({ error: 'This workspace is not billed' });
+    if (b.provider !== 'stripe' && b.provider !== 'razorpay') return reply.status(400).send({ error: 'Choose a payment method' });
+    try {
+      return await startCheckout(w, String(b.plan), b.provider, me(req).email, publicUrl(req));
+    } catch (err) {
+      return reply.status(400).send({ error: (err as Error).message });
+    }
+  });
+
+  app.post('/admin/api/billing/portal', { preHandler: ownerOnly }, async (req, reply) => {
+    try {
+      return await openPortal(await prisma.workspace.findUniqueOrThrow({ where: { id: wsId(req) } }), publicUrl(req));
+    } catch (err) {
+      return reply.status(400).send({ error: (err as Error).message });
+    }
+  });
+
+  app.post('/admin/api/billing/cancel', { preHandler: ownerOnly }, async (req, reply) => {
+    try {
+      await cancelSubscription(await prisma.workspace.findUniqueOrThrow({ where: { id: wsId(req) } }));
+    } catch (err) {
+      return reply.status(400).send({ error: (err as Error).message });
+    }
+    return { ok: true };
+  });
+
+  // Provider webhooks (public; authenticated by signature over the raw body)
+  app.post('/webhooks/stripe', async (req, reply) => {
+    const r = await handleStripeWebhook((req as any).rawBody ?? '', req.headers['stripe-signature'] as string | undefined).catch((e) => {
+      console.error('[stripe webhook]', e);
+      return { status: 500, body: 'error' };
+    });
+    return reply.status(r.status).send(r.body);
+  });
+  app.post('/webhooks/razorpay', async (req, reply) => {
+    const r = await handleRazorpayWebhook(
+      (req as any).rawBody ?? '',
+      req.headers['x-razorpay-signature'] as string | undefined,
+      req.headers['x-razorpay-event-id'] as string | undefined
+    ).catch((e) => {
+      console.error('[razorpay webhook]', e);
+      return { status: 500, body: 'error' };
+    });
+    return reply.status(r.status).send(r.body);
   });
 
   // ---- workspace settings ----
@@ -607,6 +701,9 @@ export function registerAdmin(app: FastifyInstance, opts: { getQr: (workspaceId:
         owner: w.adminUsers[0]?.email ?? null,
         whatsapp: waFor(w.id).status,
         botEnabled: w.botEnabled,
+        plan: w.plan,
+        planStatus: w.planStatus,
+        planAccess: accessState(w).reason,
         onboardingCompleted: w.onboardingCompleted,
         leads: w._count.leads,
         contacts: w._count.sessions,
@@ -621,6 +718,25 @@ export function registerAdmin(app: FastifyInstance, opts: { getQr: (workspaceId:
     const w = await prisma.workspace.findUnique({ where: { id } });
     if (!w) return reply.status(404).send({ error: 'Workspace not found' });
     await prisma.workspace.update({ where: { id }, data: { botEnabled: !!(req.body as any)?.enabled } });
+    invalidateConfig(id);
+    return { ok: true };
+  });
+
+  // Operator tool: put a business on a plan without a payment (pilot customers, extensions, comps)
+  app.post('/admin/api/super/workspaces/:id/plan', { preHandler: superOnly }, async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const b = (req.body ?? {}) as { plan?: string; days?: number };
+    const w = await prisma.workspace.findUnique({ where: { id } });
+    if (!w) return reply.status(404).send({ error: 'Workspace not found' });
+    const days = Math.min(Math.max(Math.floor(Number(b.days) || 30), 1), 3650);
+    const end = new Date(Date.now() + days * 86_400_000);
+    if (b.plan === 'trial') {
+      await prisma.workspace.update({ where: { id }, data: { plan: 'trial', planStatus: 'trialing', trialEndsAt: end } });
+    } else if (b.plan === 'internal' || planById(String(b.plan))) {
+      await prisma.workspace.update({ where: { id }, data: { plan: String(b.plan), planStatus: 'active', currentPeriodEnd: end, cancelAtPeriodEnd: false } });
+    } else {
+      return reply.status(400).send({ error: 'Unknown plan' });
+    }
     invalidateConfig(id);
     return { ok: true };
   });

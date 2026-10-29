@@ -3,8 +3,15 @@ import dotenv from 'dotenv';
 dotenv.config();
 process.env.ADMIN_TOKEN = 'testtoken';
 process.env.ADMIN_EMAIL = '';
-process.env.GEMINI_API_KEY = ''; // onboarding assistant must degrade gracefully
+process.env.GEMINI_API_KEY = '';
+process.env.STRIPE_WEBHOOK_SECRET = 'whsec_test';
+process.env.RAZORPAY_WEBHOOK_SECRET = 'rzp_test';
+process.env.STRIPE_SECRET_KEY = '';
+process.env.RAZORPAY_KEY_ID = ''; // onboarding assistant must degrade gracefully
+import crypto from 'crypto';
 import Fastify from 'fastify';
+import { accessState } from '../src/plans';
+import { invalidateConfig } from '../src/services/botConfig';
 import { registerAdmin } from '../src/admin';
 import { setTransport } from '../src/services/transport';
 import { waFor } from '../src/services/whatsapp';
@@ -18,6 +25,7 @@ const sent: string[] = [];
 const DOMAIN = '@admin-test.local';
 
 async function cleanup() {
+  await prisma.billingEvent.deleteMany({ where: { OR: [{ id: { startsWith: 'stripe:evt_' } }, { id: { startsWith: 'razorpay:rz_' } }] } });
   await prisma.workspace.deleteMany({ where: { adminUsers: { some: { email: { endsWith: DOMAIN } } } } });
   await prisma.adminUser.deleteMany({ where: { email: { endsWith: DOMAIN } } });
 }
@@ -168,6 +176,62 @@ async function cleanup() {
   r = await call(hA, 'GET', '/admin/api/export.csv');
   ok(r.headers['content-type']?.toString().startsWith('text/csv') && !r.body.includes('SIM-tst'), 'CSV excludes simulator contacts');
   ok((await app.inject('/admin/api/export.csv')).statusCode === 401, 'CSV requires login');
+
+  // ---- billing ----
+  r = await call(hA, 'GET', '/admin/api/billing');
+  ok(r.json().plan === 'trial' && r.json().status === 'trialing' && r.json().active && r.json().limits.conversations === 1500 && r.json().providers.stripe === false, 'billing: new workspace is on a 14-day trial with Growth limits, no providers configured');
+  ok(r.json().plans.length === 3 && !!r.json().trialEndsAt, 'billing: plans and trial end listed');
+  ok((await call(hA, 'POST', '/admin/api/billing/checkout', { plan: 'growth', provider: 'stripe' })).statusCode === 400, 'checkout refused while the provider is not configured');
+  await call(hA, 'POST', '/admin/api/admins', { email: `agent2${DOMAIN}`, password: 'agent password 2', role: 'agent' });
+  const hAg2 = cookieOf(await login(`agent2${DOMAIN}`, 'agent password 2'));
+  ok((await call(hAg2, 'GET', '/admin/api/billing')).statusCode === 200 && (await call(hAg2, 'POST', '/admin/api/billing/checkout', { plan: 'growth', provider: 'stripe' })).statusCode === 403, 'only the owner can start checkout');
+  ok((await call(hAg2, 'POST', '/admin/api/billing/cancel')).statusCode === 403, 'only the owner can cancel');
+
+  const stripeEvent = (id: string, type: string, object: any, secret = 'whsec_test', ts = Math.floor(Date.now() / 1000)) => {
+    const raw = JSON.stringify({ id, type, data: { object } });
+    const sig = crypto.createHmac('sha256', secret).update(`${ts}.${raw}`).digest('hex');
+    return app.inject({ method: 'POST', url: '/webhooks/stripe', headers: { 'content-type': 'application/json', 'stripe-signature': `t=${ts},v1=${sig}` }, payload: raw });
+  };
+  const wsRow = () => prisma.workspace.findUniqueOrThrow({ where: { id: wsA } });
+  const future = Math.floor(Date.now() / 1000) + 30 * 86400;
+  ok((await stripeEvent('evt_bad', 'invoice.paid', {}, 'wrong-secret')).statusCode === 400, 'stripe webhook: bad signature rejected');
+  ok((await stripeEvent('evt_old', 'invoice.paid', {}, 'whsec_test', Math.floor(Date.now() / 1000) - 3600)).statusCode === 400, 'stripe webhook: stale timestamp rejected');
+  ok((await stripeEvent('evt_1', 'checkout.session.completed', { client_reference_id: wsA, customer: 'cus_1', subscription: 'sub_1', metadata: {} })).statusCode === 200, 'stripe: checkout completed');
+  ok((await wsRow()).providerSubscriptionId === 'sub_1' && (await wsRow()).planStatus === 'active', 'stripe: subscription linked, workspace active');
+  await stripeEvent('evt_2', 'customer.subscription.updated', { object: 'subscription', id: 'sub_1', customer: 'cus_1', status: 'active', metadata: { workspaceId: wsA, plan: 'starter' }, current_period_end: future, cancel_at_period_end: false });
+  let w = await wsRow();
+  ok(w.plan === 'starter' && w.planStatus === 'active' && Math.abs(w.currentPeriodEnd!.getTime() / 1000 - future) < 2, 'stripe: plan + period end applied');
+  ok((await stripeEvent('evt_2', 'customer.subscription.updated', { object: 'subscription', id: 'sub_1', metadata: { workspaceId: wsA, plan: 'scale' } })).body === 'duplicate' && (await wsRow()).plan === 'starter', 'stripe: replayed event is ignored');
+  await stripeEvent('evt_3', 'invoice.paid', { id: 'in_1', subscription: 'sub_1', customer: 'cus_1', amount_paid: 99900, currency: 'inr', lines: { data: [{ metadata: { plan: 'starter' }, period: { end: future } }] } });
+  ok((await prisma.payment.count({ where: { workspaceId: wsA } })) === 1, 'stripe: payment recorded once');
+  r = await call(hA, 'GET', '/admin/api/billing');
+  ok(r.json().payments[0].amount === 99900 && r.json().planName === 'Starter' && r.json().limits.seats === 2, 'billing: starter limits and payment history shown');
+  await stripeEvent('evt_4', 'invoice.payment_failed', { subscription: 'sub_1', customer: 'cus_1' });
+  w = await wsRow();
+  ok(w.planStatus === 'past_due' && accessState(w).active, 'stripe: payment failure -> past_due, still active during the grace period');
+  await stripeEvent('evt_5', 'customer.subscription.deleted', { object: 'subscription', id: 'sub_1', customer: 'cus_1', metadata: { workspaceId: wsA } });
+  w = await wsRow();
+  ok(w.planStatus === 'canceled' && !accessState(w).active, 'stripe: subscription deleted -> access ends');
+
+  const rzp = (id: string, type: string, payload: any, secret = 'rzp_test') => {
+    const raw = JSON.stringify({ event: type, payload });
+    return app.inject({ method: 'POST', url: '/webhooks/razorpay', headers: { 'content-type': 'application/json', 'x-razorpay-signature': crypto.createHmac('sha256', secret).update(raw).digest('hex'), 'x-razorpay-event-id': id }, payload: raw });
+  };
+  const rzpBody = { subscription: { entity: { id: 'sub_rz', notes: { workspaceId: wsA, plan: 'growth' }, current_end: future } }, payment: { entity: { id: 'pay_1', amount: 299900, currency: 'INR' } } };
+  ok((await rzp('rz_bad', 'subscription.charged', rzpBody, 'nope')).statusCode === 400, 'razorpay webhook: bad signature rejected');
+  ok((await rzp('rz_1', 'subscription.charged', rzpBody)).statusCode === 200, 'razorpay: charged');
+  w = await wsRow();
+  ok(w.plan === 'growth' && w.planStatus === 'active' && w.billingProvider === 'razorpay' && accessState(w).active, 'razorpay: reactivated on Growth');
+  ok((await prisma.payment.count({ where: { workspaceId: wsA, provider: 'razorpay' } })) === 1, 'razorpay: payment recorded');
+  await rzp('rz_2', 'subscription.halted', rzpBody);
+  ok((await wsRow()).planStatus === 'past_due', 'razorpay: halted -> past_due');
+  await rzp('rz_3', 'subscription.cancelled', rzpBody);
+  ok((await wsRow()).planStatus === 'canceled', 'razorpay: cancelled');
+
+  // seats follow the plan (starter = 2): owner + agent + agent2 already exist, so the next one is refused
+  await prisma.workspace.update({ where: { id: wsA }, data: { plan: 'starter', planStatus: 'active', currentPeriodEnd: new Date(Date.now() + 86400000) } });
+  invalidateConfig(wsA);
+  ok((await call(hA, 'POST', '/admin/api/admins', { email: `s2${DOMAIN}`, password: 'seat password 1', role: 'agent' })).statusCode === 402, 'seat limit of the plan is enforced');
 
   // ---- platform admin ----
   await prisma.adminUser.create({ data: { email: `root${DOMAIN}`, passwordHash: await hashPassword('platform admin pw 1'), workspaceId: wsB, role: 'owner', isSuperAdmin: true } });

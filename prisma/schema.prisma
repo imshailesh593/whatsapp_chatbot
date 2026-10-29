@@ -40,7 +40,17 @@ model Workspace {
   onboardingCompleted Boolean  @default(false) @map("onboarding_completed")
   /// False until the owner presses "Go live"; a paused workspace never auto-replies
   botEnabled          Boolean  @default(true) @map("bot_enabled")
-  createdAt           DateTime @default(now()) @map("created_at")
+  /// trial | starter | growth | scale | internal (unlimited, for the operator's own business)
+  plan                   String    @default("trial")
+  /// trialing | active | past_due | canceled
+  planStatus             String    @default("trialing") @map("plan_status")
+  trialEndsAt            DateTime? @map("trial_ends_at")
+  currentPeriodEnd       DateTime? @map("current_period_end")
+  cancelAtPeriodEnd      Boolean   @default(false) @map("cancel_at_period_end")
+  billingProvider        String?   @map("billing_provider")
+  providerCustomerId     String?   @map("provider_customer_id")
+  providerSubscriptionId String?   @map("provider_subscription_id")
+  createdAt          DateTime @default(now()) @map("created_at")
   updatedAt           DateTime @updatedAt @map("updated_at")
 
   services   Service[]
@@ -48,6 +58,8 @@ model Workspace {
   leads      Lead[]
   logs       WebhookLog[]
   adminUsers AdminUser[]
+  usage      Usage[]
+  payments   Payment[]
 
   @@map("saas_workspaces")
 }
@@ -149,4 +161,42 @@ model AdminUser {
   lastLoginAt  DateTime?  @map("last_login_at")
 
   @@map("mns_admin_users")
+}
+
+/// Monthly counters used for plan limits (period = YYYY-MM)
+model Usage {
+  id            String    @id @default(uuid())
+  workspaceId   String    @map("workspace_id")
+  workspace     Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  period        String
+  conversations Int       @default(0)
+  aiReplies     Int       @default(0)
+
+  @@unique([workspaceId, period])
+  @@map("saas_usage")
+}
+
+model Payment {
+  id          String    @id @default(uuid())
+  workspaceId String    @map("workspace_id")
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  provider    String
+  providerRef String    @unique @map("provider_ref")
+  plan        String
+  /// Smallest currency unit (paise / cents)
+  amount      Int
+  currency    String
+  status      String
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  @@index([workspaceId, createdAt])
+  @@map("saas_payments")
+}
+
+/// Provider webhook ids already processed (idempotency)
+model BillingEvent {
+  id        String   @id
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("saas_billing_events")
 }

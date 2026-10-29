@@ -4,11 +4,12 @@
 import dotenv from 'dotenv';
 dotenv.config();
 import { prisma } from '../src/lib/prisma';
-import { setTransport } from '../src/services/transport';
+import { setTransport, captureReplies } from '../src/services/transport';
 import { handleIncomingMessage } from '../src/services/engine';
 import { loadConfig, resolveService, saveServices, invalidateConfig, sanitizeServices } from '../src/services/botConfig';
 import { getTemplate } from '../src/templates';
 
+const extra: string[] = [];
 const sent: { ws: string; to: string; text: string }[] = [];
 const wire = (ws: string) => setTransport(ws, { sendText: async (to, text) => void sent.push({ ws, to, text }) });
 const replies = (ws: string, to: string) => sent.filter((s) => s.ws === ws && s.to === to).map((s) => s.text);
@@ -24,11 +25,11 @@ async function main() {
     data: {
       slug: `e2e-a-${run}`, name: 'Acme Careers', businessName: 'Acme Careers', tagline: 'Your partner',
       welcomeIntro: 'We help with careers.', formUrl: 'https://forms.example/acme', bookingUrl: 'https://cal.example/acme',
-      bookingLabel: 'consultation', bookingNote: 'Fees adjusted later.', botEnabled: true, onboardingCompleted: true
+      bookingLabel: 'consultation', bookingNote: 'Fees adjusted later.', botEnabled: true, onboardingCompleted: true, plan: 'internal', planStatus: 'active'
     }
   });
   const B = await prisma.workspace.create({
-    data: { slug: `e2e-b-${run}`, name: 'Bolt Plumbing', businessName: 'Bolt Plumbing', botEnabled: true, onboardingCompleted: true }
+    data: { slug: `e2e-b-${run}`, name: 'Bolt Plumbing', businessName: 'Bolt Plumbing', botEnabled: true, onboardingCompleted: true, plan: 'internal', planStatus: 'active' }
   });
   try {
     wire(A.id);
@@ -111,6 +112,43 @@ async function main() {
     await handleIncomingMessage(A.id, mid, 'Mid', 'answer');
     assert(replies(A.id, mid).at(-1)!.includes('Only option'), 'removed service -> customer is sent back to the new menu');
 
+    console.log('\n[plan access and limits]');
+    const C = await prisma.workspace.create({
+      data: { slug: `e2e-c-${run}`, name: 'Cedar', businessName: 'Cedar', botEnabled: true, onboardingCompleted: true, trialEndsAt: new Date(Date.now() + 86400000) }
+    });
+    extra.push(C.id);
+    wire(C.id);
+    await saveServices(C.id, getTemplate('generic').services);
+    const pc = (n: number) => `9144${run}${n}`;
+    await handleIncomingMessage(C.id, pc(1), 'T', 'hi');
+    assert(replies(C.id, pc(1)).length === 1, 'active trial: bot replies');
+    assert((await prisma.usage.findFirst({ where: { workspaceId: C.id } }))?.conversations === 1, 'a new chat counts as one conversation');
+    await handleIncomingMessage(C.id, pc(1), 'T', 'menu');
+    assert((await prisma.usage.findFirst({ where: { workspaceId: C.id } }))?.conversations === 1, 'follow-up messages in the same chat are not counted again');
+    // conversation allowance used up: existing chats continue, new chats get nothing
+    await prisma.usage.updateMany({ where: { workspaceId: C.id }, data: { conversations: 1500 } });
+    const before = replies(C.id, pc(1)).length;
+    await handleIncomingMessage(C.id, pc(1), 'T', '1');
+    assert(replies(C.id, pc(1)).length === before + 1, 'limit reached: customers already chatting are still served');
+    await handleIncomingMessage(C.id, pc(2), 'T', 'hi');
+    assert(replies(C.id, pc(2)).length === 0 && (await prisma.session.count({ where: { workspaceId: C.id, phoneNumber: pc(2) } })) === 0, 'limit reached: no new chat is started');
+    // trial over
+    await prisma.workspace.update({ where: { id: C.id }, data: { trialEndsAt: new Date(Date.now() - 1000) } });
+    invalidateConfig(C.id);
+    const b2 = replies(C.id, pc(1)).length;
+    await handleIncomingMessage(C.id, pc(1), 'T', 'anyone there');
+    await handleIncomingMessage(C.id, pc(3), 'T', 'hi');
+    assert(replies(C.id, pc(1)).length === b2 && replies(C.id, pc(3)).length === 0, 'trial expired: bot goes quiet for everyone');
+    // simulator still works so the owner can finish setup
+    const sim = await captureReplies(() => handleIncomingMessage(C.id, 'SIM-x', 'S', 'hi'));
+    assert(sim.length === 1, 'trial expired: the simulator still works');
+    // paying again restores service (new month's allowance)
+    await prisma.usage.updateMany({ where: { workspaceId: C.id }, data: { conversations: 0 } });
+    await prisma.workspace.update({ where: { id: C.id }, data: { plan: 'growth', planStatus: 'active', currentPeriodEnd: new Date(Date.now() + 86400000) } });
+    invalidateConfig(C.id);
+    await handleIncomingMessage(C.id, pc(3), 'T', 'hi');
+    assert(replies(C.id, pc(3)).length === 1, 'subscription active: replies resume');
+
     console.log('\n[validation]');
     for (const bad of [[], [{ title: '', questions: [] }], [{ title: 'x', questions: [] }], Array.from({ length: 10 }, (_, i) => ({ title: `s${i}`, questions: [{ prompt: 'q' }] }))]) {
       let threw = false;
@@ -137,7 +175,7 @@ async function main() {
     }
     console.log('\nALL E2E CHECKS PASSED');
   } finally {
-    await prisma.workspace.deleteMany({ where: { id: { in: [A.id, B.id] } } }); // cascades to sessions, leads, logs
+    await prisma.workspace.deleteMany({ where: { id: { in: [A.id, B.id, ...extra] } } }); // cascades to sessions, leads, logs
   }
 }
 

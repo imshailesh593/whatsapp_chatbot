@@ -129,9 +129,37 @@ export interface PlatformWorkspace {
   owner: string | null;
   whatsapp: string;
   botEnabled: boolean;
+  plan: string;
+  planStatus: string;
+  planAccess: string;
   onboardingCompleted: boolean;
   leads: number;
   contacts: number;
   users: number;
   createdAt: string;
+}
+
+export interface BillingPlan {
+  id: string;
+  name: string;
+  blurb: string;
+  price: { INR: number; USD: number };
+  limits: { conversations: number; aiReplies: number; seats: number };
+}
+
+export interface BillingInfo {
+  plan: string;
+  planName: string;
+  status: 'trialing' | 'active' | 'past_due' | 'canceled';
+  active: boolean;
+  reason: 'ok' | 'trial_expired' | 'canceled' | 'past_due';
+  trialEndsAt: string | null;
+  currentPeriodEnd: string | null;
+  cancelAtPeriodEnd: boolean;
+  provider: string | null;
+  limits: { conversations: number | null; aiReplies: number | null; seats: number | null };
+  usage: { conversations: number; aiReplies: number; seats: number };
+  providers: { stripe: boolean; razorpay: boolean };
+  plans: BillingPlan[];
+  payments: { id: string; amount: number; currency: string; status: string; plan: string; at: string }[];
 }

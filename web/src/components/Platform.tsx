@@ -21,6 +21,15 @@ export default function Platform() {
     load();
   }
 
+  async function setPlan(w: PlatformWorkspace) {
+    const plan = window.prompt(`Plan for ${w.businessName} (trial / starter / growth / scale / internal):`, w.plan);
+    if (!plan) return;
+    const days = Number(window.prompt('For how many days?', '30'));
+    if (!days) return;
+    await api.platformPlan(w.id, plan.trim().toLowerCase(), days).catch((e) => setError((e as Error).message));
+    load();
+  }
+
   return (
     <div className="bg-slate-950 border border-slate-800 rounded-2xl shadow-lg overflow-hidden">
       <div className="p-5 border-b border-slate-800">
@@ -35,6 +44,7 @@ export default function Platform() {
               <th className="py-3 px-4">Owner</th>
               <th className="py-3 px-4">WhatsApp</th>
               <th className="py-3 px-4">Leads / contacts</th>
+              <th className="py-3 px-4">Plan</th>
               <th className="py-3 px-4">Setup</th>
               <th className="py-3 px-4">Bot</th>
             </tr>
@@ -46,6 +56,11 @@ export default function Platform() {
                 <td className="py-3 px-4 text-slate-300">{w.owner ?? '—'}</td>
                 <td className={`py-3 px-4 font-semibold ${WA[w.whatsapp] ?? 'text-amber-400'}`}>{w.whatsapp}</td>
                 <td className="py-3 px-4 text-slate-300">{w.leads} / {w.contacts}</td>
+                <td className="py-3 px-4 text-slate-300">
+                  <button onClick={() => setPlan(w)} title="Change plan" className="underline decoration-dotted">
+                    {w.plan} · {w.planAccess === 'ok' ? w.planStatus : w.planAccess.replace('_', ' ')}
+                  </button>
+                </td>
                 <td className="py-3 px-4 text-slate-300">{w.onboardingCompleted ? 'Done' : 'Onboarding'}</td>
                 <td className="py-3 px-4">
                   <button onClick={() => toggle(w)} className={`px-2.5 py-1 rounded-lg border text-[11px] font-semibold ${w.botEnabled ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/40' : 'bg-slate-800 text-slate-400 border-slate-700'}`}>

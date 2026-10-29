@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Building2, Calendar, CheckCircle2, Clock, ExternalLink, Globe, MessageSquare, ShieldCheck, Smartphone, Users } from 'lucide-react';
 import { api, UnauthorizedError } from './api';
-import type { AdminUser, Contact, Overview } from './types';
+import type { AdminUser, BillingInfo, Contact, Overview } from './types';
 import AccountMenu from './components/AccountMenu';
 import Login from './components/Login';
 import Crm from './components/Crm';
@@ -39,19 +39,23 @@ export default function App() {
   return <Console user={user} onSignedOut={() => setUser(null)} />;
 }
 
+const daysLeft = (iso: string | null) => (iso ? Math.max(0, Math.ceil((new Date(iso).getTime() - Date.now()) / 86_400_000)) : 0);
+
 function Console({ user, onSignedOut }: { user: AdminUser; onSignedOut: () => void }) {
   const [tab, setTab] = useState<Tab>('crm');
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [overview, setOverview] = useState<Overview | null>(null);
+  const [billing, setBilling] = useState<BillingInfo | null>(null);
   const [includeTest, setIncludeTest] = useState(false);
   const [selected, setSelected] = useState<string | null>(null);
   const [loadError, setLoadError] = useState('');
 
   const refresh = useCallback(async () => {
     try {
-      const [c, o] = await Promise.all([api.contacts(includeTest), api.overview()]);
+      const [c, o, bl] = await Promise.all([api.contacts(includeTest), api.overview(), api.billing().catch(() => null)]);
       setContacts(c);
       setOverview(o);
+      setBilling(bl);
       setLoadError('');
     } catch (err) {
       if (err instanceof UnauthorizedError) onSignedOut();
@@ -173,6 +177,19 @@ function Console({ user, onSignedOut }: { user: AdminUser; onSignedOut: () => vo
         {loadError && (
           <div className="mb-4 p-3 rounded-lg bg-rose-950/50 border border-rose-800/60 text-rose-300 text-xs">
             Could not load data: {loadError}
+          </div>
+        )}
+
+        {billing && billing.plan !== 'internal' && (!billing.active || billing.status === 'past_due' || (billing.status === 'trialing' && daysLeft(billing.trialEndsAt) <= 3)) && (
+          <div className={`mb-4 p-3 rounded-lg border text-xs flex flex-wrap items-center justify-between gap-2 ${billing.active ? 'bg-amber-950/40 border-amber-800/60 text-amber-200' : 'bg-rose-950/50 border-rose-800/60 text-rose-200'}`}>
+            <span>
+              {!billing.active
+                ? 'Your bot has stopped replying to new customers: ' + (billing.reason === 'trial_expired' ? 'the free trial has ended.' : 'the subscription has ended.')
+                : billing.status === 'past_due'
+                  ? 'Your last payment failed. Update your payment method to keep the bot running.'
+                  : `Your free trial ends in ${daysLeft(billing.trialEndsAt)} day(s).`}
+            </span>
+            {!isAgent && <button onClick={() => setTab('config')} className="font-semibold underline">Choose a plan</button>}
           </div>
         )}
 

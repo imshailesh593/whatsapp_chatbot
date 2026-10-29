@@ -1,4 +1,4 @@
-import type { AdminRow, AdminUser, ChatMessage, ChatTurn, Contact, Draft, Overview, PatchBody, PlatformWorkspace, ServiceDef, TemplateInfo, WaSnapshot, Workspace } from './types';
+import type { BillingInfo, AdminRow, AdminUser, ChatMessage, ChatTurn, Contact, Draft, Overview, PatchBody, PlatformWorkspace, ServiceDef, TemplateInfo, WaSnapshot, Workspace } from './types';
 
 export class UnauthorizedError extends Error {}
 
@@ -30,6 +30,11 @@ export const api = {
   whatsappConnect: () => post<WaSnapshot>('/admin/api/whatsapp/connect', {}),
   whatsappDisconnect: () => post<WaSnapshot>('/admin/api/whatsapp/disconnect', {}),
   overview: () => request<Overview>('/admin/api/overview'),
+  billing: () => request<BillingInfo>('/admin/api/billing'),
+  checkout: (plan: string, provider: 'stripe' | 'razorpay') => post<{ url: string }>('/admin/api/billing/checkout', { plan, provider }),
+  billingPortal: () => post<{ url: string }>('/admin/api/billing/portal', {}),
+  cancelSubscription: () => post<{ ok: true }>('/admin/api/billing/cancel', {}),
+  platformPlan: (id: string, plan: string, days: number) => post<{ ok: true }>(`/admin/api/super/workspaces/${encodeURIComponent(id)}/plan`, { plan, days }),
   saveWorkspace: (body: Partial<Workspace>) => request<{ workspace: Workspace }>('/admin/api/workspace', { method: 'PUT', body: JSON.stringify(body) }).then((r) => r.workspace),
   saveServices: (services: ServiceDef[]) => request<{ services: unknown }>('/admin/api/services', { method: 'PUT', body: JSON.stringify({ services }) }),
   templates: () => request<{ templates: TemplateInfo[] }>('/admin/api/templates').then((r) => r.templates),
