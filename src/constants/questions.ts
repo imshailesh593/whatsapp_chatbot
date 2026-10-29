@@ -61,11 +61,16 @@ export const SERVICE_KEYWORDS: [RegExp, string][] = [
 
 export const TOPMATE_URL = process.env.TOPMATE_URL || "https://topmate.io/mnsinstitute/";
 
+export const FORM_URL = process.env.FORM_URL || "https://tally.so/r/7Rrl70";
+
 export const WELCOME_MESSAGE = `Hello 👋 Welcome to MNS INSTITUTE & MNS INSTITUTE JOBS! 🌍
 
 We help students and professionals with international exam preparation, medical licensing, overseas job opportunities, and Visa/PR guidance.
 
-To assist you better, please select the service you are looking for:
+📝 Please fill out this short form so our team can understand your profile:
+👉 ${FORM_URL}
+
+Then, to assist you better, please select the service you are looking for:
 
 1️⃣ Coaching & Exam Preparation
 2️⃣ Medical Licensing
