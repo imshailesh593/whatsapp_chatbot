@@ -66,6 +66,8 @@ export async function redeemCoupon(workspaceId: string, rawCode: unknown): Promi
   if (!ws) return invalid;
   if (ws.plan === 'internal') return { ok: false, error: 'This account is not billed, so codes do not apply.' };
   if (ws.planStatus === 'active' && ws.providerSubscriptionId) return { ok: false, error: 'You have a paid subscription. Contact support to apply a code.' };
+  // A code must never replace a plan that is currently running (paid, or granted by the operator)
+  if (ws.planStatus === 'active' && ws.currentPeriodEnd && ws.currentPeriodEnd.getTime() > Date.now()) return { ok: false, error: 'You already have an active plan. Use a code once it has ended.' };
 
   const c = await prisma.coupon.findUnique({ where: { code } });
   if (!c || !c.active || (c.expiresAt && c.expiresAt.getTime() < Date.now())) return invalid;

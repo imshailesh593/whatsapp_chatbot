@@ -1,5 +1,6 @@
 import crypto from 'crypto';
 import { recordCommission } from './affiliate';
+import { deliverAlert } from './alerts';
 import type { Workspace } from '@prisma/client';
 import { prisma } from '../lib/prisma';
 import { invalidateConfig } from './botConfig';
@@ -9,10 +10,20 @@ export type Provider = 'stripe' | 'razorpay';
 
 const env = (k: string) => process.env[k] ?? '';
 
+/**
+ * Razorpay works in one of two ways:
+ *  - payment links (default): we create a hosted one-off payment link for 30 days of a plan and a webhook switches
+ *    the plan on when it is paid. Needs no Razorpay Subscriptions product and no live website.
+ *  - subscriptions (RAZORPAY_MODE=subscription): recurring plans created in the Razorpay dashboard.
+ */
+export const razorpayLinkMode = () => env('RAZORPAY_MODE') !== 'subscription';
+export const LINK_DAYS = 30;
+
 export function providersAvailable(): Record<Provider, boolean> {
+  const keys = !!env('RAZORPAY_KEY_ID') && !!env('RAZORPAY_KEY_SECRET');
   return {
     stripe: !!env('STRIPE_SECRET_KEY') && PLANS.every((p) => !!env(`STRIPE_PRICE_${p.id.toUpperCase()}`)),
-    razorpay: !!env('RAZORPAY_KEY_ID') && !!env('RAZORPAY_KEY_SECRET') && PLANS.every((p) => !!env(`RAZORPAY_PLAN_${p.id.toUpperCase()}`))
+    razorpay: keys && (razorpayLinkMode() ? !!env('RAZORPAY_WEBHOOK_SECRET') : PLANS.every((p) => !!env(`RAZORPAY_PLAN_${p.id.toUpperCase()}`)))
   };
 }
 
@@ -64,6 +75,11 @@ export async function startCheckout(ws: Workspace, planId: string, provider: Pro
     const s = await stripe<{ url: string }>('/checkout/sessions', body);
     return { url: s.url };
   }
+  if (razorpayLinkMode()) {
+    // A paid-up card or UPI subscription is managed by the provider, not by one-off links
+    if (ws.providerSubscriptionId && ws.planStatus === 'active') throw new Error('You already have an active subscription');
+    return { url: await createPaymentLink(ws, plan.id, email, back + '?billing=success') };
+  }
   const sub = await razorpay<{ id: string; short_url: string }>('/subscriptions', {
     plan_id: env(`RAZORPAY_PLAN_${plan.id.toUpperCase()}`),
     total_count: 120,
@@ -75,6 +91,26 @@ export async function startCheckout(ws: Workspace, planId: string, provider: Pro
   return { url: sub.short_url };
 }
 
+/** A hosted Razorpay page for one payment: LINK_DAYS days of a plan. The webhook turns the plan on when it is paid. */
+async function createPaymentLink(ws: Pick<Workspace, 'id' | 'businessName'>, planId: string, email: string | null, callbackUrl: string): Promise<string> {
+  const plan = planById(planId);
+  if (!plan) throw new Error('Unknown plan');
+  const link = await razorpay<{ id: string; short_url: string }>('/payment_links', {
+    amount: plan.price.INR,
+    currency: 'INR',
+    accept_partial: false,
+    description: `${plan.name} plan, ${LINK_DAYS} days`.slice(0, 250),
+    reference_id: `${ws.id.slice(0, 8)}-${plan.id}-${Date.now().toString(36)}`,
+    customer: email ? { name: ws.businessName.slice(0, 50), email } : { name: ws.businessName.slice(0, 50) },
+    notify: { email: false, sms: false },
+    reminder_enable: false,
+    notes: { workspaceId: ws.id, plan: plan.id },
+    callback_url: callbackUrl,
+    callback_method: 'get'
+  });
+  return link.short_url;
+}
+
 export async function openPortal(ws: Workspace, baseUrl: string): Promise<{ url: string }> {
   if (ws.billingProvider !== 'stripe' || !ws.providerCustomerId) throw new Error('No Stripe subscription to manage');
   const s = await stripe<{ url: string }>('/billing_portal/sessions', { customer: ws.providerCustomerId, return_url: `${baseUrl}/admin/` });
@@ -83,6 +119,7 @@ export async function openPortal(ws: Workspace, baseUrl: string): Promise<{ url:
 
 /** Cancel at the end of the paid period (the owner keeps access until then). */
 export async function cancelSubscription(ws: Workspace): Promise<void> {
+  if (ws.billingProvider === 'razorpay_link') throw new Error('Your plan is paid by link and does not renew by itself, so there is nothing to cancel. It simply ends on the date shown.');
   if (!ws.providerSubscriptionId || !ws.billingProvider) throw new Error('No active subscription');
   if (ws.billingProvider === 'stripe') await stripe(`/subscriptions/${ws.providerSubscriptionId}`, { cancel_at_period_end: 'true' });
   else await razorpay(`/subscriptions/${ws.providerSubscriptionId}/cancel`, { cancel_at_cycle_end: 1 });
@@ -229,6 +266,7 @@ export async function handleRazorpayWebhook(raw: string, signature: string | und
   if (!verifyRazorpaySignature(raw, signature, env('RAZORPAY_WEBHOOK_SECRET'))) return { status: 400, body: 'bad signature' };
   const event = JSON.parse(raw);
   if (eventId && !(await firstTime(`razorpay:${eventId}`))) return { status: 200, body: 'duplicate' };
+  if (event.event === 'payment_link.paid') return applyPaymentLink(event);
   const sub = event.payload?.subscription?.entity;
   const pay = event.payload?.payment?.entity;
   const wsId: string | null =
@@ -259,6 +297,64 @@ export async function handleRazorpayWebhook(raw: string, signature: string | und
       break;
   }
   return { status: 200, body: 'ok' };
+}
+
+/** A payment link was paid: switch the plan on (or extend it) for LINK_DAYS days. */
+async function applyPaymentLink(event: any): Promise<{ status: number; body: string }> {
+  const link = event.payload?.payment_link?.entity;
+  const pay = event.payload?.payment?.entity;
+  const wsId = String(link?.notes?.workspaceId ?? pay?.notes?.workspaceId ?? '');
+  const plan = planById(String(link?.notes?.plan ?? pay?.notes?.plan ?? ''));
+  const ws = wsId ? await prisma.workspace.findUnique({ where: { id: wsId } }) : null;
+  if (!ws || !plan || !pay?.id || ws.plan === 'internal') return { status: 200, body: 'ignored' };
+
+  const amount = Number(pay.amount ?? link?.amount_paid ?? 0);
+  const row = await prisma.payment
+    .create({ data: { workspaceId: ws.id, provider: 'razorpay', providerRef: String(pay.id), plan: plan.id, amount, currency: String(pay.currency ?? 'INR').toUpperCase(), status: 'paid' } })
+    .catch(() => null); // the same payment reported twice
+  if (!row) return { status: 200, body: 'duplicate' };
+  await recordCommission(row);
+  if (amount < plan.price.INR) return { status: 200, body: 'underpaid' }; // recorded, but not enough to switch the plan on
+
+  const now = Date.now();
+  // Paying again for the same plan before it ends adds days; a different plan starts now
+  const stacking = ws.plan === plan.id && ws.planStatus === 'active' && !!ws.currentPeriodEnd && ws.currentPeriodEnd.getTime() > now;
+  const from = stacking ? ws.currentPeriodEnd!.getTime() : now;
+  await prisma.workspace.update({
+    where: { id: ws.id },
+    data: { plan: plan.id, planStatus: 'active', currentPeriodEnd: new Date(from + LINK_DAYS * 86_400_000), cancelAtPeriodEnd: false, billingProvider: 'razorpay_link', providerSubscriptionId: null }
+  });
+  invalidateConfig(ws.id);
+  return { status: 200, body: 'ok' };
+}
+
+/** Link-paid plans do not renew by themselves: a few days before the end the owner gets a fresh payment link. */
+export async function renewalTick(now = Date.now(), baseUrl = process.env.PUBLIC_URL ?? ''): Promise<number> {
+  if (!providersAvailable().razorpay || !razorpayLinkMode()) return 0;
+  const due = await prisma.workspace.findMany({
+    where: { billingProvider: 'razorpay_link', planStatus: 'active', currentPeriodEnd: { gt: new Date(now), lt: new Date(now + 3 * 86_400_000) } },
+    include: { adminUsers: { where: { role: 'owner' }, take: 1 } },
+    take: 50
+  });
+  let sent = 0;
+  for (const ws of due) {
+    const plan = planById(ws.plan);
+    if (!plan || !(await firstTime(`renewal:${ws.id}:${ws.currentPeriodEnd!.toISOString().slice(0, 10)}`))) continue;
+    try {
+      const url = await createPaymentLink(ws, plan.id, ws.adminUsers[0]?.email ?? null, `${baseUrl.replace(/\/$/, '')}/admin/?billing=success`);
+      const end = ws.currentPeriodEnd!.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+      await deliverAlert(ws.id, `⏰ Your ${plan.name} plan ends on ${end}`, `To keep your bot replying, pay ₹${plan.price.INR / 100} for ${LINK_DAYS} more days: ${url}\n\nYou can also pay from Plan & billing in the dashboard.`);
+      sent++;
+    } catch (err) {
+      console.error('[billing] renewal reminder failed:', (err as Error).message);
+    }
+  }
+  return sent;
+}
+
+export function startRenewalWorker(): { stop(): void } {
+  const t = setInterval(() => renewalTick().catch((e) => console.error('[billing] renewal pass failed:', e)), 3600_000);
+  return { stop: () => clearInterval(t) };
 }
 
 export const trialEndDate = (from = new Date()) => new Date(from.getTime() + TRIAL_DAYS * 86_400_000);

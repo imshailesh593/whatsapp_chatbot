@@ -78,8 +78,11 @@ export default function Billing({ me }: { me: AdminUser }) {
 
   const internal = b.plan === 'internal';
   const anyProvider = b.providers.stripe || b.providers.razorpay;
+  // Paid by a one-off link: it does not renew by itself, so the owner can pay again at any time
+  const linkPaid = b.provider === 'razorpay_link';
   const statusText =
     b.status === 'trialing' ? (b.active ? `Free trial · ${daysLeft(b.trialEndsAt)} days left` : 'Free trial ended')
+    : b.status === 'active' && b.provider === 'razorpay_link' ? `Paid until ${day(b.currentPeriodEnd)} · renew before then`
     : b.status === 'active' ? (b.cancelAtPeriodEnd ? `Cancels on ${day(b.currentPeriodEnd)}` : `Renews on ${day(b.currentPeriodEnd)}`)
     : b.status === 'past_due' ? 'Payment failed: please update your payment method'
     : b.active ? `Ends on ${day(b.currentPeriodEnd)}` : 'Subscription ended';
@@ -137,16 +140,16 @@ export default function Billing({ me }: { me: AdminUser }) {
                     <li>{p.limits.broadcasts.toLocaleString()} broadcast messages / month</li>
                     <li>1 WhatsApp number</li>
                   </ul>
-                  {owner && !current && (
+                  {owner && (!current || linkPaid) && (
                     <div className="mt-4 flex flex-col gap-2">
                       <button disabled={!b.providers.razorpay || !!busy} onClick={() => go(`rz-${p.id}`, () => api.checkout(p.id, 'razorpay'))}
                         className="py-2 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs rounded-lg disabled:opacity-40 flex items-center justify-center space-x-1.5">
-                        {busy === `rz-${p.id}` && <Loader2 className="w-3.5 h-3.5 animate-spin" />}<span>Pay in ₹ (UPI, cards)</span>
+                        {busy === `rz-${p.id}` && <Loader2 className="w-3.5 h-3.5 animate-spin" />}<span>{current ? 'Renew for 30 days (₹)' : 'Pay in ₹ (UPI, cards)'}</span>
                       </button>
-                      <button disabled={!b.providers.stripe || !!busy} onClick={() => go(`st-${p.id}`, () => api.checkout(p.id, 'stripe'))}
+                      {!current && <button disabled={!b.providers.stripe || !!busy} onClick={() => go(`st-${p.id}`, () => api.checkout(p.id, 'stripe'))}
                         className="py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs rounded-lg border border-slate-700 disabled:opacity-40 flex items-center justify-center space-x-1.5">
                         {busy === `st-${p.id}` && <Loader2 className="w-3.5 h-3.5 animate-spin" />}<span>Pay in $ (card)</span>
-                      </button>
+                      </button>}
                     </div>
                   )}
                 </div>
@@ -163,7 +166,7 @@ export default function Billing({ me }: { me: AdminUser }) {
           )}
           {!anyProvider && <p className="text-[11px] text-slate-500 mt-3">Online payment is not switched on for this account yet. Contact support to activate a plan.</p>}
           {!owner && <p className="text-[11px] text-slate-500 mt-3">Only the account owner can change the plan.</p>}
-          {owner && b.status === 'active' && !b.cancelAtPeriodEnd && b.provider && (
+          {owner && b.status === 'active' && !b.cancelAtPeriodEnd && b.provider && !linkPaid && (
             <button onClick={cancel} disabled={!!busy} className="mt-4 text-xs text-slate-400 hover:text-rose-300 underline disabled:opacity-50">Cancel subscription</button>
           )}
         </>

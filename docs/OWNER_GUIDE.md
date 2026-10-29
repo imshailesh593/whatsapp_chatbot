@@ -169,7 +169,7 @@ Kept in the `.env` file on the server (never committed to git). Restart the bot 
 | `BROADCAST_DAILY_CAP` | Daily broadcast messages per business (default 150) |
 | `RESEND_API_KEY`, `MAIL_FROM` | Email through Resend (see below) |
 | `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM` | Email through plain SMTP, used only if no Resend key |
-| `STRIPE_*`, `RAZORPAY_*` | Online payments (see below) |
+| `STRIPE_*`, `RAZORPAY_*` | Online payments (see below). `RAZORPAY_MODE=subscription` switches Razorpay from payment links to recurring subscriptions |
 | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | Google Calendar booking (see below) |
 | `BUSINESS_NAME`, `BUSINESS_TAGLINE`, `BUSINESS_DESCRIPTION`, `WELCOME_INTRO`, `FORM_URL`, `TOPMATE_URL` | Seed values for the default workspace, used only the first time |
 | `ALLOW_HTTP_WEBHOOKS` | Development only. Never set in production |
@@ -199,10 +199,18 @@ If a send fails, the alert test shows the provider's message (for example "domai
 Each business connects its own Google account. Their refresh token is stored encrypted. Disconnecting revokes it at Google.
 
 ### Online payments (when you are ready)
-Payments are built but off. Add keys to switch them on.
+Payments are built but off. Add keys to switch them on. They apply to a business that pays itself; plans you grant, and redeem codes, never need them.
 
 - **Stripe** (dollars): create three recurring monthly Prices, then set `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_PRICE_STARTER`, `STRIPE_PRICE_GROWTH`, `STRIPE_PRICE_SCALE`. Add a webhook to `https://<your-domain>/webhooks/stripe` with these events: `checkout.session.completed`, `customer.subscription.created`, `customer.subscription.updated`, `customer.subscription.deleted`, `invoice.paid`, `invoice.payment_failed`.
-- **Razorpay** (rupees, UPI and cards): create three monthly Plans, then set `RAZORPAY_KEY_ID`, `RAZORPAY_KEY_SECRET`, `RAZORPAY_WEBHOOK_SECRET`, `RAZORPAY_PLAN_STARTER`, `RAZORPAY_PLAN_GROWTH`, `RAZORPAY_PLAN_SCALE`. Add a webhook to `https://<your-domain>/webhooks/razorpay` with events `subscription.activated`, `charged`, `halted`, `pending`, `cancelled`, `completed`, `resumed`.
+- **Razorpay payment links** (rupees, UPI and cards; the default, and the right choice while your website is not approved). Each time an owner pays, the app creates a one-off hosted Razorpay payment link for 30 days of the plan. When Razorpay confirms the payment by webhook, the plan switches on automatically.
+  1. In Razorpay (Test mode first), create an API key. Put `RAZORPAY_KEY_ID` and `RAZORPAY_KEY_SECRET` in `.env`.
+  2. Add a webhook to `https://<your-domain>/webhooks/razorpay`, choose the event **payment_link.paid**, and set a secret. Put the same secret in `RAZORPAY_WEBHOOK_SECRET`. Restart the bot.
+  3. No plans need creating in Razorpay and `RAZORPAY_PLAN_*` are not used.
+  - A plan paid this way **does not renew by itself**. Paying again before the end adds 30 days to the same plan. Three days before the end the owner gets a fresh payment link by WhatsApp or email (whichever they set up as alert channels). A different plan starts immediately for 30 days.
+  - An amount lower than the plan price is recorded but does not switch the plan on. Duplicate webhooks never give extra days.
+  - Referral commissions apply to these payments the same way.
+  - Razorpay's live mode needs your account activated (KYC). Ask Razorpay what they require for Payment Links on your account, since requirements for a website or app URL can differ by business type. Test mode needs no approval.
+  - To use recurring Razorpay Subscriptions instead, set `RAZORPAY_MODE=subscription`, create three monthly Plans, fill `RAZORPAY_PLAN_*`, and add the subscription webhook events: `subscription.activated`, `charged`, `halted`, `pending`, `cancelled`, `completed`, `resumed`.
 - Webhooks are verified by signature and processed once even if the provider repeats them.
 - Test with the providers' test modes before going live. Check **Payments** and **Subscriptions** afterwards.
 

@@ -274,7 +274,11 @@ What happens at a limit:
 
 **Have a code?** If you were given a redeem code (a pilot, partnership or goodwill offer), type it under Plan & billing and press **Apply code**. It switches the plan on, or adds trial days, without a payment. Only the owner can do this, and each code works once per business.
 
-**Paying online** (when your service has it switched on): owners can choose a plan and pay in rupees (UPI or card) or dollars (card). Cancel any time; you keep access until the end of the period you paid for. If online payment is not on yet, contact your service provider to activate a plan.
+**Paying online** (when your service has it switched on): owners can choose a plan and pay in rupees (UPI or card) or dollars (card).
+- **Rupee payments are for 30 days at a time.** You pay on a secure Razorpay page and your plan switches on within moments. It does not renew by itself: about 3 days before it ends you receive a new payment link by WhatsApp or email (if you set up alerts), and you can press **Renew for 30 days** in Plan & billing at any time. Paying early adds days to your current plan.
+- **Dollar payments** are a card subscription that renews monthly. Cancel any time; you keep access until the end of the period you paid for.
+- A redeem code cannot replace a plan that is still running; use it once the plan has ended.
+- If online payment is not on yet, contact your service provider to activate a plan.
 
 ---
 
