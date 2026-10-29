@@ -254,26 +254,14 @@ function Subscriptions() {
 
 function Payments() {
   const [rows, setRows] = useState<Awaited<ReturnType<typeof api.platformPayments>> | null>(null);
-  const [error, setError] = useState('');
-  const load = useCallback(() => api.platformPayments().then(setRows).catch(() => setRows([])), []);
-  useEffect(() => { load(); }, [load]);
-  const act = async (id: string, action: 'approve' | 'reject', ask: string) => {
-    if (!window.confirm(ask)) return;
-    setError('');
-    try { await api.platformPaymentAction(id, action); await load(); } catch (err) { setError((err as Error).message); }
-  };
+  useEffect(() => { api.platformPayments().then(setRows).catch(() => setRows([])); }, []);
   if (!rows) return <p className="text-sm text-slate-500">Loading…</p>;
-  const waiting = rows.filter((p) => p.status === 'pending').length;
   return (
-    <div className="space-y-3">
-    {waiting > 0 && <p className="text-sm bg-amber-50 border border-amber-200 text-amber-900 rounded-lg px-4 py-3">{waiting} payment{waiting > 1 ? 's' : ''} waiting for you. Check the reference in your payment account, then approve it to switch the plan on.</p>}
-    {error && <p className="text-sm text-rose-600" role="alert">{error}</p>}
-    <Table head={['Date', 'Business', 'Plan', 'Provider', 'Reference', 'Amount', 'Status', '']} empty={rows.length === 0 ? 'No payments yet. They appear here when a business submits a payment or Stripe or Razorpay reports a charge.' : undefined}>
+    <Table head={['Date', 'Business', 'Plan', 'Provider', 'Amount', 'Status']} empty={rows.length === 0 ? 'No payments yet. They appear here when Stripe or Razorpay report a charge.' : undefined}>
       {rows.map((p) => (
-        <tr key={p.id}><td className="py-3 px-4 text-slate-600">{new Date(p.at).toLocaleString()}</td><td className="py-3 px-4 font-semibold text-slate-900">{p.business}</td><td className="py-3 px-4 capitalize">{p.plan || '—'}</td><td className="py-3 px-4 text-slate-600">{p.provider}</td><td className="py-3 px-4 font-mono text-xs text-slate-600 break-all max-w-[12rem]">{p.provider === 'manual' ? p.ref : ''}</td><td className="py-3 px-4">{money(p.amount, p.currency)}</td><td className="py-3 px-4"><span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${p.status === 'paid' ? 'bg-green-100 text-green-800' : p.status === 'pending' ? 'bg-amber-100 text-amber-800' : 'bg-slate-200 text-slate-700'}`}>{p.status}</span></td><td className="py-3 px-4 text-right whitespace-nowrap">{p.status === 'pending' && p.provider === 'manual' && (<><button onClick={() => act(p.id, 'approve', `Approve ${money(p.amount, p.currency)} from ${p.business}? Only do this after you have seen the money arrive.`)} className="text-xs font-semibold text-green-700 mr-3">Approve</button><button onClick={() => act(p.id, 'reject', 'Reject this payment?')} className="text-xs font-semibold text-rose-600">Reject</button></>)}</td></tr>
+        <tr key={p.id}><td className="py-3 px-4 text-slate-600">{new Date(p.at).toLocaleString()}</td><td className="py-3 px-4 font-semibold text-slate-900">{p.business}</td><td className="py-3 px-4 capitalize">{p.plan || '—'}</td><td className="py-3 px-4 text-slate-600">{p.provider}</td><td className="py-3 px-4">{money(p.amount, p.currency)}</td><td className="py-3 px-4"><span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-green-100 text-green-800">{p.status}</span></td></tr>
       ))}
     </Table>
-    </div>
   );
 }
 
@@ -438,43 +426,6 @@ function AuditView() {
 
 // ---------- settings ----------
 
-function PaySettings() {
-  const [links, setLinks] = useState<Record<string, string>>({ starter: '', growth: '', scale: '' });
-  const [instructions, setInstructions] = useState('');
-  const [msg, setMsg] = useState('');
-  const [error, setError] = useState('');
-  useEffect(() => { api.platformPayInfo().then((i) => { setLinks({ starter: '', growth: '', scale: '', ...i.links }); setInstructions(i.instructions); }).catch((e) => setError((e as Error).message)); }, []);
-  async function save() {
-    setError('');
-    setMsg('');
-    try {
-      const i = await api.platformSavePayInfo({ links, instructions });
-      setLinks({ starter: '', growth: '', scale: '', ...i.links });
-      setMsg('Saved');
-    } catch (err) {
-      setError((err as Error).message);
-    }
-  }
-  const field = 'border border-slate-300 rounded-lg px-3 py-2 text-sm w-full';
-  return (
-    <div className={card + ' p-5'}>
-      <h3 className="font-bold text-slate-900">Payments without a gateway</h3>
-      <p className="text-sm text-slate-500 mt-1">No payment API needed. Make a payment link for each plan in your payment account (for example Razorpay Payment Links in the dashboard), or just give your UPI or bank details. Owners pay, submit the payment reference, and you approve it under Payments. If you add a Razorpay webhook (event <code>payment_link.paid</code>), matching payments confirm themselves.</p>
-      <div className="mt-3 grid grid-cols-1 md:grid-cols-3 gap-3">
-        {(['starter', 'growth', 'scale'] as const).map((p) => (
-          <label key={p} className="text-xs text-slate-600 capitalize">{p} plan pay link (https)<input value={links[p] ?? ''} onChange={(e) => setLinks({ ...links, [p]: e.target.value })} placeholder="https://rzp.io/l/…" className={field + ' mt-1 normal-case'} /></label>
-        ))}
-      </div>
-      <label className="text-xs text-slate-600 block mt-3">Shown to owners (UPI id, bank details, anything they need)<textarea rows={3} value={instructions} maxLength={600} onChange={(e) => setInstructions(e.target.value)} className={field + ' mt-1'} placeholder="UPI: yourname@bank" /></label>
-      <div className="mt-3 flex items-center gap-3">
-        <button onClick={save} className="px-4 py-2 bg-[#4b7f2c] hover:bg-green-800 text-white text-sm font-semibold rounded-lg">Save</button>
-        {msg && <span className="text-sm text-green-700">{msg}</span>}
-        {error && <span className="text-sm text-rose-600" role="alert">{error}</span>}
-      </div>
-    </div>
-  );
-}
-
 function PlatformSettings() {
   const [on, setOn] = useState<boolean | null>(null);
   const [cap, setCap] = useState<PlatformSettingsInfo | null>(null);
@@ -539,7 +490,6 @@ function PlatformSettings() {
           </div>
         </div>
       )}
-      <PaySettings />
       <p className="text-xs text-slate-500 flex items-center space-x-1.5"><FileText className="w-3.5 h-3.5" /><span>Every change here is written to the audit log.</span></p>
     </div>
   );

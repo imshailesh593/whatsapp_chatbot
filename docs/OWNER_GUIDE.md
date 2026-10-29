@@ -198,31 +198,11 @@ If a send fails, the alert test shows the provider's message (for example "domai
 
 Each business connects its own Google account. Their refresh token is stored encrypted. Disconnecting revokes it at Google.
 
-### Taking payments without a gateway API (works without Razorpay or any approval)
-Use this if you cannot get a payment API key. It needs no keys at all.
-
-1. Open **Platform admin → Settings → Payments without a gateway**.
-2. Optionally paste one **pay link per plan**. Make each link in your payment account's dashboard for the exact plan price, for example Razorpay **Payment Links** created in the Razorpay dashboard (not through the API), a Cashfree, PayU or Instamojo link, or any https page. Leave a plan blank if it has no link.
-3. Write what owners should see in **Shown to owners**: your UPI id, bank details, or "pay and paste the reference below".
-4. Save. Owners now see the pay links and a **Paid? Tell us** box in Plan & billing.
-
-What happens:
-- The owner pays, then enters the **payment reference** from the receipt (a Razorpay payment id like `pay_...`, a UPI reference or a bank UTR) and presses **I have paid**. They can have up to 3 submissions waiting. The same reference cannot be used twice.
-- You get a WhatsApp or email alert (to the number or email set on your own business) and a notice on **Payments**.
-- On **Payments**, check the reference and the money in your payment account, then press **Approve**. The plan switches on for 30 days. **Reject** closes a submission you cannot match. Approving is final and cannot be repeated, so there are no accidental extra days.
-- Plans do not renew by themselves. About 3 days before the end the owner receives your pay link (or your instructions) and a reminder to submit the new reference. Paying early adds days to the same plan; a different plan starts immediately.
-- Referral commissions are created when you approve.
-
-**Optional automatic confirmation with a Razorpay webhook.** If your Razorpay account lets you add webhooks (Dashboard → Settings → Webhooks, no API key needed), add `https://<your-domain>/webhooks/razorpay` with the event **payment_link.paid** and a secret, and put the secret in `RAZORPAY_WEBHOOK_SECRET`. Then:
-- A payment whose id matches a reference the owner already submitted confirms itself (if the amount is at least the plan price).
-- A payment with no submission is matched by the **payer's email** (it must be the owner's account email) and the **exact plan price**. Anything else is not guessed at: it is written to the Audit log as `payment.unmatched` for you to sort out by hand.
-- Tell owners to pay with the same email they use to sign in.
-
-### Online payments through payment-provider APIs (when you are ready and approved)
-These need API keys, which providers give only after approving your business or website. Payments are built but off. Add keys to switch them on. They apply to a business that pays itself; plans you grant, and redeem codes, never need them.
+### Online payments (when you are ready)
+Payments are built but off. Add keys to switch them on. They apply to a business that pays itself; plans you grant, and redeem codes, never need them.
 
 - **Stripe** (dollars): create three recurring monthly Prices, then set `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_PRICE_STARTER`, `STRIPE_PRICE_GROWTH`, `STRIPE_PRICE_SCALE`. Add a webhook to `https://<your-domain>/webhooks/stripe` with these events: `checkout.session.completed`, `customer.subscription.created`, `customer.subscription.updated`, `customer.subscription.deleted`, `invoice.paid`, `invoice.payment_failed`.
-- **Razorpay payment links created by the app** (rupees, UPI and cards; needs Razorpay API keys). Each time an owner pays, the app creates a one-off hosted Razorpay payment link for 30 days of the plan. When Razorpay confirms the payment by webhook, the plan switches on automatically.
+- **Razorpay payment links** (rupees, UPI and cards; the default, and the right choice while your website is not approved). Each time an owner pays, the app creates a one-off hosted Razorpay payment link for 30 days of the plan. When Razorpay confirms the payment by webhook, the plan switches on automatically.
   1. In Razorpay (Test mode first), create an API key. Put `RAZORPAY_KEY_ID` and `RAZORPAY_KEY_SECRET` in `.env`.
   2. Add a webhook to `https://<your-domain>/webhooks/razorpay`, choose the event **payment_link.paid**, and set a secret. Put the same secret in `RAZORPAY_WEBHOOK_SECRET`. Restart the bot.
   3. No plans need creating in Razorpay and `RAZORPAY_PLAN_*` are not used.
@@ -332,8 +312,7 @@ Weekly: check free memory and slots, glance at the audit log, confirm backups ex
 | "The bot is not replying" | Open the business: is the bot paused, WhatsApp connected, plan active, limits reached? Then continue as the owner and check the Simulator |
 | "WhatsApp keeps disconnecting" | The phone was logged out of linked devices, or the account was restricted. Ask them to reconnect and scan again |
 | "Connections are full" | Check the slots strip and audit log. Raise the limit if memory allows |
-| "My trial ended" | Give a redeem code or change plan, or point them to Plan & billing to pay |
-| "I paid but my plan is not on" | Payments page: look for their pending submission and Approve it. If they never submitted a reference, ask for it, and check the Audit log for a `payment.unmatched` entry |
+| "My trial ended" | Give a redeem code or change plan, or point them to payment when it is on |
 | "Email alerts do not arrive" | Check Resend is set up and the domain verified, then run a test alert for them |
 | "Calendar will not connect" | Check Google keys, the redirect URI and consent screen status ([section 10](#10-setting-up-the-optional-services)) |
 | "Delete my data" | Client Management → Delete, after a backup if required by your policy |

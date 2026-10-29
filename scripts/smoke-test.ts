@@ -109,21 +109,6 @@ async function cleanup() {
   await sleep(700);
   ok((await prisma.setting.findUnique({ where: { key: 'affiliate' } }))?.value && ((await prisma.setting.findUnique({ where: { key: 'affiliate' } }))!.value as any).enabled === true, 'switching the programme on is saved');
 
-  // payments without a gateway: the operator publishes a pay link and instructions
-  op.on('dialog', (d) => void d.accept());
-  await click(op, 'aside nav button', 'Settings');
-  await sleep(600);
-  await op.type('input[placeholder="https://rzp.io/l/…"]', 'https://rzp.io/l/smoke-pay');
-  await op.type('textarea[placeholder="UPI: yourname@bank"]', 'UPI: smoke@bank');
-  // the Save button inside the "Payments without a gateway" card (the page has several Save buttons)
-  await op.evaluate(() => {
-    const card = [...document.querySelectorAll('h3')].find((h) => h.textContent?.includes('Payments without a gateway'))?.parentElement;
-    ([...(card?.querySelectorAll('button') ?? [])].find((b) => b.textContent === 'Save') as HTMLElement | undefined)?.click();
-  });
-  await sleep(700);
-  const saved = (await prisma.setting.findUnique({ where: { key: 'payInfo' } }))?.value as any;
-  ok(Object.values(saved?.links ?? {}).includes('https://rzp.io/l/smoke-pay') && saved?.instructions === 'UPI: smoke@bank', 'the operator saves a pay link and instructions in Settings');
-
   // a referrer business exists so a referral link can be used
   const refWs = await prisma.workspace.create({ data: { slug: `smoke-ref-${Date.now().toString(36)}`, name: 'Referrer Co', businessName: 'Referrer Co', referralCode: 'SMOKE77', botEnabled: false, onboardingCompleted: true } });
   await prisma.adminUser.create({ data: { email: `referrer${DOMAIN}`, passwordHash: await hashPassword('referrer password 1'), role: 'owner', workspaceId: refWs.id } });
@@ -212,29 +197,6 @@ async function cleanup() {
   await sleep(700);
   ok((await prisma.workspace.findUnique({ where: { id: after!.id } }))?.handoffEnabled === false, 'the hand-off switch saves');
 
-  // the owner pays through the operator's link, then submits the reference
-  await sleep(300);
-  await ow.reload({ waitUntil: 'networkidle0' });
-  await click(ow, 'header button', 'Bot & Settings');
-  await waitText(ow, 'PAID? TELL US');
-  const payHref = await ow.$$eval('a', (els: any[]) => els.map((e) => e.href).find((h) => h.includes('smoke-pay')) ?? '');
-  ok(payHref === 'https://rzp.io/l/smoke-pay', 'the owner sees the operator pay link on the plan');
-  ok((await text(ow)).includes('UPI: smoke@bank'), '...and the payment instructions');
-  await ow.type('input[placeholder="Payment reference"]', 'SMOKEUTR12345');
-  await click(ow, 'button', 'I have paid');
-  await waitText(ow, 'Thank you');
-  ok((await prisma.payment.count({ where: { workspaceId: after!.id, providerRef: 'SMOKEUTR12345', status: 'pending' } })) === 1, 'the submitted payment waits for the operator');
-
-  // the operator approves it from the Payments page
-  await click(op, 'aside nav button', 'Payments');
-  await waitText(op, 'waiting for you');
-  await shot(op, 'op-payments');
-  await click(op, 'button', 'Approve');
-  await sleep(900);
-  const approved = await prisma.payment.findFirst({ where: { providerRef: 'SMOKEUTR12345' } });
-  ok(approved?.status === 'paid', 'approving in the Payments page confirms the payment');
-  ok((await prisma.workspace.findUnique({ where: { id: after!.id } }))?.billingProvider === 'manual_pay', 'and the plan is switched on');
-
   // mobile width: no horizontal scroll on the operator and owner screens
   await ow.setViewport({ width: 390, height: 800 });
   await sleep(500);
@@ -252,7 +214,6 @@ async function cleanup() {
   await cleanup();
   await prisma.workspace.deleteMany({ where: { id: { in: [opWs.id, refWs.id] } } });
   await setSetting('affiliate', {});
-  await setSetting('payInfo', {});
   await prisma.$disconnect();
 
   console.log(`\n${checks} checks, ${problems.length} problem(s)`);

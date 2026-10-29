@@ -1,8 +1,6 @@
 import crypto from 'crypto';
 import { recordCommission } from './affiliate';
 import { deliverAlert } from './alerts';
-import { LINK_DAYS, activatePaidPlan } from './paidPlan';
-import { getPayInfo, matchByPayer, payEnabled, recordUnmatched } from './manualPay';
 import type { Workspace } from '@prisma/client';
 import { prisma } from '../lib/prisma';
 import { invalidateConfig } from './botConfig';
@@ -19,6 +17,7 @@ const env = (k: string) => process.env[k] ?? '';
  *  - subscriptions (RAZORPAY_MODE=subscription): recurring plans created in the Razorpay dashboard.
  */
 export const razorpayLinkMode = () => env('RAZORPAY_MODE') !== 'subscription';
+export const LINK_DAYS = 30;
 
 export function providersAvailable(): Record<Provider, boolean> {
   const keys = !!env('RAZORPAY_KEY_ID') && !!env('RAZORPAY_KEY_SECRET');
@@ -120,7 +119,7 @@ export async function openPortal(ws: Workspace, baseUrl: string): Promise<{ url:
 
 /** Cancel at the end of the paid period (the owner keeps access until then). */
 export async function cancelSubscription(ws: Workspace): Promise<void> {
-  if (ws.billingProvider === 'razorpay_link' || ws.billingProvider === 'manual_pay') throw new Error('Your plan is paid by link and does not renew by itself, so there is nothing to cancel. It simply ends on the date shown.');
+  if (ws.billingProvider === 'razorpay_link') throw new Error('Your plan is paid by link and does not renew by itself, so there is nothing to cancel. It simply ends on the date shown.');
   if (!ws.providerSubscriptionId || !ws.billingProvider) throw new Error('No active subscription');
   if (ws.billingProvider === 'stripe') await stripe(`/subscriptions/${ws.providerSubscriptionId}`, { cancel_at_period_end: 'true' });
   else await razorpay(`/subscriptions/${ws.providerSubscriptionId}/cancel`, { cancel_at_cycle_end: 1 });
@@ -300,61 +299,40 @@ export async function handleRazorpayWebhook(raw: string, signature: string | und
   return { status: 200, body: 'ok' };
 }
 
-/**
- * A Razorpay payment link was paid. The business comes from (in order): a payment reference the owner already
- * submitted, the business id we put on a link we created, or the payer's email plus the exact plan price.
- */
+/** A payment link was paid: switch the plan on (or extend it) for LINK_DAYS days. */
 async function applyPaymentLink(event: any): Promise<{ status: number; body: string }> {
   const link = event.payload?.payment_link?.entity;
   const pay = event.payload?.payment?.entity;
-  if (!pay?.id) return { status: 200, body: 'ignored' };
-  const payId = String(pay.id);
-  const amount = Number(pay.amount ?? link?.amount_paid ?? 0);
-  const currency = String(pay.currency ?? 'INR').toUpperCase();
-
-  const existing = await prisma.payment.findFirst({ where: { providerRef: { equals: payId, mode: 'insensitive' } } });
-  if (existing?.status === 'paid') return { status: 200, body: 'duplicate' };
-
-  let wsId = String(link?.notes?.workspaceId ?? pay?.notes?.workspaceId ?? '');
-  let planId = String(link?.notes?.plan ?? pay?.notes?.plan ?? '');
-  if (existing) {
-    wsId = existing.workspaceId;
-    planId = existing.plan;
-  } else if (!wsId) {
-    const m = await matchByPayer(pay.email, amount);
-    if (m) ({ workspaceId: wsId, planId } = m);
-  }
-  const plan = planById(planId);
+  const wsId = String(link?.notes?.workspaceId ?? pay?.notes?.workspaceId ?? '');
+  const plan = planById(String(link?.notes?.plan ?? pay?.notes?.plan ?? ''));
   const ws = wsId ? await prisma.workspace.findUnique({ where: { id: wsId } }) : null;
-  if (!ws || !plan || ws.plan === 'internal') {
-    if (!existing) await recordUnmatched(payId, amount, pay.email);
-    return { status: 200, body: ws ? 'ignored' : 'unmatched' };
-  }
+  if (!ws || !plan || !pay?.id || ws.plan === 'internal') return { status: 200, body: 'ignored' };
 
-  const enough = amount >= plan.price.INR;
-  let row;
-  if (existing) {
-    // The owner had submitted this reference: confirm it only if the amount is right, otherwise leave it for the operator
-    row = await prisma.payment.update({ where: { id: existing.id }, data: { amount, currency, status: enough ? 'paid' : 'pending' } });
-  } else {
-    row = await prisma.payment
-      .create({ data: { workspaceId: ws.id, provider: 'razorpay', providerRef: payId, plan: plan.id, amount, currency, status: 'paid' } })
-      .catch(() => null); // the same payment reported twice
-  }
+  const amount = Number(pay.amount ?? link?.amount_paid ?? 0);
+  const row = await prisma.payment
+    .create({ data: { workspaceId: ws.id, provider: 'razorpay', providerRef: String(pay.id), plan: plan.id, amount, currency: String(pay.currency ?? 'INR').toUpperCase(), status: 'paid' } })
+    .catch(() => null); // the same payment reported twice
   if (!row) return { status: 200, body: 'duplicate' };
-  if (!enough) return { status: 200, body: 'underpaid' };
   await recordCommission(row);
-  await activatePaidPlan(ws.id, plan.id, 'razorpay_link');
+  if (amount < plan.price.INR) return { status: 200, body: 'underpaid' }; // recorded, but not enough to switch the plan on
+
+  const now = Date.now();
+  // Paying again for the same plan before it ends adds days; a different plan starts now
+  const stacking = ws.plan === plan.id && ws.planStatus === 'active' && !!ws.currentPeriodEnd && ws.currentPeriodEnd.getTime() > now;
+  const from = stacking ? ws.currentPeriodEnd!.getTime() : now;
+  await prisma.workspace.update({
+    where: { id: ws.id },
+    data: { plan: plan.id, planStatus: 'active', currentPeriodEnd: new Date(from + LINK_DAYS * 86_400_000), cancelAtPeriodEnd: false, billingProvider: 'razorpay_link', providerSubscriptionId: null }
+  });
+  invalidateConfig(ws.id);
   return { status: 200, body: 'ok' };
 }
 
 /** Link-paid plans do not renew by themselves: a few days before the end the owner gets a fresh payment link. */
 export async function renewalTick(now = Date.now(), baseUrl = process.env.PUBLIC_URL ?? ''): Promise<number> {
-  const apiLinks = providersAvailable().razorpay && razorpayLinkMode();
-  const info = await getPayInfo();
-  if (!apiLinks && !payEnabled(info)) return 0;
+  if (!providersAvailable().razorpay || !razorpayLinkMode()) return 0;
   const due = await prisma.workspace.findMany({
-    where: { billingProvider: { in: ['razorpay_link', 'manual_pay'] }, planStatus: 'active', currentPeriodEnd: { gt: new Date(now), lt: new Date(now + 3 * 86_400_000) } },
+    where: { billingProvider: 'razorpay_link', planStatus: 'active', currentPeriodEnd: { gt: new Date(now), lt: new Date(now + 3 * 86_400_000) } },
     include: { adminUsers: { where: { role: 'owner' }, take: 1 } },
     take: 50
   });
@@ -363,12 +341,9 @@ export async function renewalTick(now = Date.now(), baseUrl = process.env.PUBLIC
     const plan = planById(ws.plan);
     if (!plan || !(await firstTime(`renewal:${ws.id}:${ws.currentPeriodEnd!.toISOString().slice(0, 10)}`))) continue;
     try {
-      // With API keys we make a fresh link; otherwise point to the operator's own link or payment details
-      const url = apiLinks ? await createPaymentLink(ws, plan.id, ws.adminUsers[0]?.email ?? null, `${baseUrl.replace(/\/$/, '')}/admin/?billing=success`) : info.links[plan.id] ?? '';
+      const url = await createPaymentLink(ws, plan.id, ws.adminUsers[0]?.email ?? null, `${baseUrl.replace(/\/$/, '')}/admin/?billing=success`);
       const end = ws.currentPeriodEnd!.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
-      const how = url ? `: ${url}` : `.\n${info.instructions}`;
-      const after = apiLinks ? '' : '\nAfter paying, enter the payment reference under Plan & billing so it can be confirmed.';
-      await deliverAlert(ws.id, `⏰ Your ${plan.name} plan ends on ${end}`, `To keep your bot replying, pay ₹${plan.price.INR / 100} for ${LINK_DAYS} more days${how}${after}\n\nYou can also pay from Plan & billing in the dashboard.`);
+      await deliverAlert(ws.id, `⏰ Your ${plan.name} plan ends on ${end}`, `To keep your bot replying, pay ₹${plan.price.INR / 100} for ${LINK_DAYS} more days: ${url}\n\nYou can also pay from Plan & billing in the dashboard.`);
       sent++;
     } catch (err) {
       console.error('[billing] renewal reminder failed:', (err as Error).message);

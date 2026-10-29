@@ -39,7 +39,6 @@ import { createCoupon, grantPlan, redeemCoupon } from './services/coupons';
 import { affiliateAdminOverview, getAffiliateSettings, referralOverview, referrerFor, saveAffiliateSettings, setCommissionStatus } from './services/affiliate';
 import { authUrl, cancelAppointment, cleanRules, completeConnection, disconnect as disconnectCalendar, formatSlot, googleConfigured, readState } from './services/calendar';
 import { getUsage } from './services/usage';
-import { approveClaim, getPayInfo, payEnabled, rejectClaim, savePayInfo, submitClaim } from './services/manualPay';
 import { cancelSubscription, handleRazorpayWebhook, handleStripeWebhook, openPortal, providersAvailable, startCheckout } from './services/billing';
 
 const SIM_PREFIX = 'SIM-';
@@ -496,21 +495,9 @@ export function registerAdmin(app: FastifyInstance, opts: { getQr: (workspaceId:
       limits: { conversations: num(access.limits.conversations), aiReplies: num(access.limits.aiReplies), seats: num(access.limits.seats), broadcasts: num(access.limits.broadcasts) },
       usage: { ...usage, seats },
       providers: providersAvailable(),
-      pay: { ...(await getPayInfo()), enabled: payEnabled(await getPayInfo()) },
       plans: PLANS.map((p) => ({ id: p.id, name: p.name, blurb: p.blurb, price: p.price, limits: p.limits })),
       payments: payments.map((p) => ({ id: p.id, amount: p.amount, currency: p.currency, status: p.status, plan: p.plan, at: p.createdAt.toISOString() }))
     };
-  });
-
-  // The owner paid by link, UPI or bank transfer and submits the payment reference for the operator to confirm
-  app.post('/admin/api/billing/claim', { preHandler: ownerOnly }, async (req, reply) => {
-    if (throttled(attempts, `cl:${wsId(req)}`, 20)) return reply.status(429).send({ error: 'Too many submissions. Try again in a few minutes.' });
-    bump(attempts, `cl:${wsId(req)}`, 10 * 60_000);
-    const b = (req.body ?? {}) as { plan?: string; reference?: string };
-    const err = await submitClaim(wsId(req), String(b.plan ?? ''), b.reference);
-    if (err) return reply.status(400).send({ error: err });
-    void audit(req, 'payment.claim', wsId(req), `${b.plan}`);
-    return { ok: true };
   });
 
   app.post('/admin/api/billing/checkout', { preHandler: ownerOnly }, async (req, reply) => {
@@ -1031,28 +1018,9 @@ export function registerAdmin(app: FastifyInstance, opts: { getQr: (workspaceId:
     return platformDashboard([7, 30, 90].includes(d) ? d : 30);
   });
 
-  app.get('/admin/api/super/pay-info', { preHandler: superOnly }, async () => getPayInfo());
-  app.put('/admin/api/super/pay-info', { preHandler: superOnly }, async (req, reply) => {
-    try {
-      const info = await savePayInfo((req.body ?? {}) as Record<string, unknown>);
-      await audit(req, 'setting.payInfo', null, `${Object.keys(info.links).length} links`);
-      return info;
-    } catch (err) {
-      return reply.status(400).send({ error: (err as Error).message });
-    }
-  });
-  app.post('/admin/api/super/payments/:id/:action', { preHandler: superOnly }, async (req, reply) => {
-    const { id, action } = req.params as { id: string; action: string };
-    if (action !== 'approve' && action !== 'reject') return reply.status(404).send();
-    const err = action === 'approve' ? await approveClaim(id) : await rejectClaim(id);
-    if (err) return reply.status(err === 'Payment not found' ? 404 : 400).send({ error: err });
-    await audit(req, `payment.${action}`, null, id);
-    return { ok: true };
-  });
-
   app.get('/admin/api/super/payments', { preHandler: superOnly }, async () => {
     const rows = await prisma.payment.findMany({ orderBy: { createdAt: 'desc' }, take: 100, include: { workspace: { select: { businessName: true } } } });
-    return { payments: rows.map((p) => ({ id: p.id, ref: p.providerRef, business: p.workspace.businessName, provider: p.provider, plan: p.plan, amount: p.amount, currency: p.currency, status: p.status, at: p.createdAt.toISOString() })) };
+    return { payments: rows.map((p) => ({ id: p.id, business: p.workspace.businessName, provider: p.provider, plan: p.plan, amount: p.amount, currency: p.currency, status: p.status, at: p.createdAt.toISOString() })) };
   });
 
   app.get('/admin/api/super/subscriptions', { preHandler: superOnly }, async () => {
