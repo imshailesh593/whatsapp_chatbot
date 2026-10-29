@@ -128,17 +128,25 @@ model Lead {
   workspace       Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   sessionId       String    @unique @map("session_id")
   session         Session   @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  events          LeadEvent[]
   phoneNumber     String    @map("phone_number")
   serviceCategory String    @map("service_category")
   collectedData   Json      @map("collected_data")
   /// Pipeline stage (Stage.key within the workspace)
   stageKey        String    @default("new") @map("stage_key")
+  /// Team member responsible for this lead (AdminUser.id)
+  ownerId         String?   @map("owner_id")
+  tags            String[]  @default([])
+  followUpAt       DateTime? @map("follow_up_at")
+  followUpNotified Boolean   @default(false) @map("follow_up_notified")
   counsellorNotes String?   @map("counsellor_notes")
   createdAt       DateTime  @default(now()) @map("created_at")
   updatedAt       DateTime  @updatedAt @map("updated_at")
 
   @@index([workspaceId, phoneNumber])
   @@index([workspaceId, stageKey])
+  @@index([workspaceId, ownerId])
+  @@index([followUpAt])
   @@index([serviceCategory])
   @@map("mns_leads")
 }
@@ -319,4 +327,20 @@ model ApiKey {
 
   @@index([workspaceId])
   @@map("saas_api_keys")
+}
+
+/// Activity timeline of a lead
+model LeadEvent {
+  id          String   @id @default(uuid())
+  leadId      String   @map("lead_id")
+  lead        Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  workspaceId String   @map("workspace_id")
+  /// created | stage | owner | tags | follow_up | note
+  type        String
+  detail      String   @default("")
+  actor       String   @default("bot")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@index([leadId, createdAt])
+  @@map("saas_lead_events")
 }

@@ -30,7 +30,7 @@ const cut = (s: string, n: number) => (s.length > n ? s.slice(0, n - 1) + '…' 
 const dashboardUrl = () => (process.env.PUBLIC_URL || '').replace(/\/$/, '') + '/admin/';
 
 /** Delivers one alert to every channel the business configured. Never throws. */
-export async function deliverAlert(workspaceId: string, subject: string, body: string): Promise<AlertResult> {
+export async function deliverAlert(workspaceId: string, subject: string, body: string, alsoEmail?: string | null): Promise<AlertResult> {
   const { ws } = await loadConfig(workspaceId);
   const result: AlertResult = { whatsapp: 'skipped: no WhatsApp number set', email: 'skipped: no email set' };
 
@@ -47,11 +47,12 @@ export async function deliverAlert(workspaceId: string, subject: string, body: s
     }
   }
 
-  if (ws.notifyEmail.trim()) {
+  const recipients = [...new Set([ws.notifyEmail.trim(), (alsoEmail ?? '').trim()].filter(Boolean))];
+  if (recipients.length) {
     if (!smtpConfigured()) result.email = 'skipped: email sending is not set up on this server';
     else {
       try {
-        await transporter().sendMail({ from: process.env.SMTP_FROM, to: ws.notifyEmail.trim(), subject: subject.replace(/[\r\n]+/g, ' '), text: body });
+        await transporter().sendMail({ from: process.env.SMTP_FROM, to: recipients.join(', '), subject: subject.replace(/[\r\n]+/g, ' '), text: body });
         result.email = 'sent';
       } catch (err) {
         result.email = `failed: ${(err as Error).message}`;

@@ -28,6 +28,7 @@ import { sendTestAlert, smtpConfigured } from './services/alerts';
 import { getStages, saveStages, stageExists } from './services/pipeline';
 import QRCode from 'qrcode';
 import { analytics } from './services/analytics';
+import { cleanTags, logLeadEvent } from './services/crm';
 import { EVENTS, assertPublicUrl, createApiKey, createWebhook, deliverDue, dispatchEvent, leadSnapshot } from './services/integrations';
 import { createBroadcast, previewAudience, setStatus as setBroadcastStatus } from './services/broadcast';
 import { transportReady } from './services/transport';
@@ -57,7 +58,7 @@ function cookie(req: FastifyRequest, name: string): string | undefined {
 
 type SessionWithLead = Prisma.SessionGetPayload<{ include: { lead: true } }>;
 
-function toContact(s: SessionWithLead, cfg: BotConfig) {
+function toContact(s: SessionWithLead, cfg: BotConfig, owners: Map<string, string> = new Map()) {
   const lead = s.lead;
   const answers = ((lead ? lead.collectedData : s.answers) ?? {}) as Record<string, string>;
   const serviceKey = lead?.serviceCategory ?? s.selectedService ?? null;
@@ -73,6 +74,11 @@ function toContact(s: SessionWithLead, cfg: BotConfig) {
     service: serviceKey,
     serviceTitle: service?.title ?? serviceKey,
     pipeline,
+    ownerId: lead?.ownerId ?? null,
+    ownerEmail: lead?.ownerId ? owners.get(lead.ownerId) ?? null : null,
+    tags: lead?.tags ?? [],
+    followUpAt: lead?.followUpAt?.toISOString() ?? null,
+    source: s.source,
     stage: s.stage,
     step: s.currentStep,
     totalSteps: total,
@@ -720,7 +726,17 @@ export function registerAdmin(app: FastifyInstance, opts: { getQr: (workspaceId:
     }
   });
 
+  const ownerMap = async (workspaceId: string) =>
+    new Map((await prisma.adminUser.findMany({ where: { workspaceId }, select: { id: true, email: true } })).map((u) => [u.id, u.email] as const));
+
   // ---- contacts / leads ----
+  app.get('/admin/api/contacts/:phone/events', { preHandler: guard }, async (req) => {
+    const { phone } = req.params as { phone: string };
+    const lead = await prisma.lead.findFirst({ where: { workspaceId: wsId(req), phoneNumber: phone }, select: { id: true } });
+    const rows = lead ? await prisma.leadEvent.findMany({ where: { leadId: lead.id }, orderBy: { createdAt: 'desc' }, take: 50 }) : [];
+    return { events: rows.map((e) => ({ id: e.id, type: e.type, detail: e.detail, actor: e.actor, at: e.createdAt.toISOString() })) };
+  });
+
   app.get('/admin/api/contacts', { preHandler: guard }, async (req) => {
     const includeTest = (req.query as any).test === '1';
     const cfg = await loadConfig(wsId(req));
@@ -730,7 +746,8 @@ export function registerAdmin(app: FastifyInstance, opts: { getQr: (workspaceId:
       orderBy: { lastInteractionAt: 'desc' },
       take: 1000
     });
-    return { contacts: sessions.map((s) => toContact(s, cfg)) };
+    const owners = await ownerMap(wsId(req));
+    return { contacts: sessions.map((s) => toContact(s, cfg, owners)) };
   });
 
   app.get('/admin/api/contacts/:phone/messages', { preHandler: guard }, async (req) => {
@@ -751,24 +768,51 @@ export function registerAdmin(app: FastifyInstance, opts: { getQr: (workspaceId:
     const { phone } = req.params as { phone: string };
     const w = wsId(req);
     const key = { workspaceId_phoneNumber: { workspaceId: w, phoneNumber: phone } };
-    const b = (req.body ?? {}) as { paused?: boolean; notes?: string; stage?: string };
+    const b = (req.body ?? {}) as { paused?: boolean; notes?: string; stage?: string; ownerId?: string | null; tags?: unknown; followUpAt?: string | null };
     const session = await prisma.session.findUnique({ where: key, include: { lead: true } });
     if (!session) return reply.status(404).send({ error: 'Contact not found' });
 
     if (typeof b.paused === 'boolean') {
       await prisma.session.update({ where: key, data: { isAgentPaused: b.paused } });
     }
-    if (b.notes !== undefined || b.stage !== undefined) {
+    const crmEdit = b.ownerId !== undefined || b.tags !== undefined || b.followUpAt !== undefined;
+    if (b.notes !== undefined || b.stage !== undefined || crmEdit) {
       if (!session.lead) return reply.status(409).send({ error: 'Notes and stage can be set once the questionnaire is complete' });
       if (b.stage !== undefined && !(await stageExists(w, b.stage))) return reply.status(400).send({ error: 'Unknown pipeline stage' });
+      const owners = await ownerMap(w);
+      if (b.ownerId && !owners.has(b.ownerId)) return reply.status(400).send({ error: 'That person is not on your team' });
+      let tags: string[] | undefined;
+      try {
+        if (b.tags !== undefined) tags = cleanTags(b.tags);
+      } catch (err) {
+        return reply.status(400).send({ error: (err as Error).message });
+      }
+      let followUp: Date | null | undefined;
+      if (b.followUpAt !== undefined) {
+        followUp = b.followUpAt ? new Date(b.followUpAt) : null;
+        if (followUp && isNaN(followUp.getTime())) return reply.status(400).send({ error: 'Invalid follow-up date' });
+      }
       const data: Prisma.LeadUpdateInput = {};
       if (b.notes !== undefined) data.counsellorNotes = String(b.notes).slice(0, 4000) || null;
       if (b.stage !== undefined) data.stageKey = b.stage;
+      if (b.ownerId !== undefined) data.ownerId = b.ownerId || null;
+      if (tags) data.tags = tags;
+      if (followUp !== undefined) {
+        data.followUpAt = followUp;
+        data.followUpNotified = false;
+      }
       await prisma.lead.update({ where: { id: session.lead.id }, data });
+      const lid = session.lead.id;
+      const actor = me(req).email;
+      if (b.stage !== undefined && b.stage !== session.lead.stageKey) void logLeadEvent(lid, w, 'stage', `${session.lead.stageKey} → ${b.stage}`, actor);
+      if (b.ownerId !== undefined && (b.ownerId || null) !== session.lead.ownerId) void logLeadEvent(lid, w, 'owner', b.ownerId ? owners.get(b.ownerId)! : 'unassigned', actor);
+      if (tags && tags.join() !== session.lead.tags.join()) void logLeadEvent(lid, w, 'tags', tags.join(', ') || 'none', actor);
+      if (followUp !== undefined) void logLeadEvent(lid, w, 'follow_up', followUp ? followUp.toISOString() : 'cleared', actor);
+      if (b.notes !== undefined && (String(b.notes).slice(0, 4000) || null) !== session.lead.counsellorNotes) void logLeadEvent(lid, w, 'note', 'notes updated', actor);
       if (b.stage !== undefined && b.stage !== session.lead.stageKey) void dispatchEvent(w, 'lead.stage_changed', session.id, { previousStage: session.lead.stageKey });
     }
     const fresh = await prisma.session.findUnique({ where: key, include: { lead: true } });
-    return { contact: toContact(fresh!, await loadConfig(w)) };
+    return { contact: toContact(fresh!, await loadConfig(w), await ownerMap(w)) };
   });
 
   // Human reply from the Live Inbox. Only while the bot is paused for that chat, so it can't talk over the bot.

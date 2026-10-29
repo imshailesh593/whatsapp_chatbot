@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { BarChart3, Building2, Megaphone, Calendar, CheckCircle2, Clock, ExternalLink, Globe, MessageSquare, ShieldCheck, Smartphone, Users } from 'lucide-react';
 import { api, UnauthorizedError } from './api';
-import type { AdminUser, BillingInfo, Contact, Overview } from './types';
+import type { AdminRow, AdminUser, BillingInfo, Contact, Overview } from './types';
 import AccountMenu from './components/AccountMenu';
 import Login from './components/Login';
 import Crm from './components/Crm';
@@ -49,6 +49,8 @@ function Console({ user, onSignedOut }: { user: AdminUser; onSignedOut: () => vo
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [overview, setOverview] = useState<Overview | null>(null);
   const [billing, setBilling] = useState<BillingInfo | null>(null);
+  const [team, setTeam] = useState<AdminRow[]>([]);
+  useEffect(() => { api.admins().then(setTeam).catch(() => undefined); }, []);
   const [includeTest, setIncludeTest] = useState(false);
   const [selected, setSelected] = useState<string | null>(null);
   const [loadError, setLoadError] = useState('');
@@ -214,7 +216,7 @@ function Console({ user, onSignedOut }: { user: AdminUser; onSignedOut: () => vo
         </div>
 
         {tab === 'crm' && (
-          <Crm contacts={contacts} includeTest={includeTest} onIncludeTest={setIncludeTest} onOpen={setSelected} onChanged={replaceContact} />
+          <Crm contacts={contacts} includeTest={includeTest} onIncludeTest={setIncludeTest} onOpen={setSelected} onChanged={replaceContact} team={team} meId={user.id} />
         )}
         {tab === 'inbox' && <Inbox contacts={contacts} waReady={waReady} onChanged={replaceContact} />}
         {tab === 'simulator' && <Simulator onActivity={refresh} />}
@@ -228,6 +230,7 @@ function Console({ user, onSignedOut }: { user: AdminUser; onSignedOut: () => vo
         <Dossier
           contact={selectedContact}
           bookingUrl={overview?.workspace.bookingUrl ?? ''}
+          team={team}
           onClose={() => setSelected(null)}
           onChanged={replaceContact}
         />

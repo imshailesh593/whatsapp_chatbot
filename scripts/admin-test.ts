@@ -294,6 +294,32 @@ async function cleanup() {
   ok((await call(hB, 'GET', '/admin/api/analytics')).json().totals.started === 0, "analytics: another workspace's data is not included");
   ok((await call(hAg2, 'GET', '/admin/api/analytics')).statusCode === 403, 'agents cannot open analytics');
 
+  // ---- CRM: owner, tags, follow-ups, timeline ----
+  const crm = (payload: any) => call(hA, 'PATCH', '/admin/api/contacts/910000000077', payload);
+  r = await crm({ ownerId: ownerId, tags: ['VIP', ' hot lead ', 'vip', ''], followUpAt: new Date(Date.now() + 86400000).toISOString() });
+  ok(r.statusCode === 200 && r.json().contact.ownerEmail === `a${DOMAIN}` && r.json().contact.tags.join() === 'vip,hot-lead' && !!r.json().contact.followUpAt, 'owner, cleaned tags and follow-up saved');
+  ok((await crm({ ownerId: 'not-a-user' })).statusCode === 400, 'owner must be a team member of this workspace');
+  ok((await crm({ tags: Array.from({ length: 11 }, (_, i) => 't' + i) })).statusCode === 400, 'at most 10 tags');
+  ok((await crm({ followUpAt: 'tomorrow-ish' })).statusCode === 400, 'bad follow-up date refused');
+  const agentId2 = (await prisma.adminUser.findUnique({ where: { email: `agent2${DOMAIN}` } }))!.id;
+  ok((await call(hB, 'PATCH', '/admin/api/contacts/910000000077', { ownerId: agentId2 })).statusCode === 404, "another workspace cannot assign someone else's lead");
+  ok((await crm({ stage: 'site_visit', notes: 'called once' })).statusCode === 200, 'stage and notes saved with CRM fields');
+  await new Promise((res) => setTimeout(res, 300));
+  r = await call(hA, 'GET', '/admin/api/contacts/910000000077/events');
+  const types = r.json().events.map((e: any) => e.type);
+  ok(['owner', 'tags', 'follow_up', 'stage', 'note'].every((t) => types.includes(t)) && r.json().events.every((e: any) => e.actor === `a${DOMAIN}`), 'timeline records every change with who made it');
+  ok((await call(hB, 'GET', '/admin/api/contacts/910000000077/events')).json().events.length === 0, 'timeline is private to the workspace');
+  ok((await crm({ followUpAt: null })).json().contact.followUpAt === null, 'follow-up can be cleared');
+  // reminder worker
+  const { followUpTick } = await import('../src/services/crm');
+  await prisma.workspace.update({ where: { id: wsA }, data: { notifyPhone: '919000000555', plan: 'growth', planStatus: 'active', currentPeriodEnd: new Date(Date.now() + 86400000) } });
+  invalidateConfig(wsA);
+  setTransport(wsA, { sendText: async (to, text) => void sent.push(`${to}|${text}`), ready: () => true });
+  await crm({ followUpAt: new Date(Date.now() - 1000).toISOString() });
+  const before = sent.length;
+  ok((await followUpTick()) === 1 && sent.slice(before).some((t) => t.startsWith('919000000555|') && t.includes('Follow-up due: Zed Lead')), 'a due follow-up sends one reminder');
+  ok((await followUpTick()) === 0, 'and only one');
+
   // ---- platform admin ----
   await prisma.adminUser.create({ data: { email: `root${DOMAIN}`, passwordHash: await hashPassword('platform admin pw 1'), workspaceId: wsB, role: 'owner', isSuperAdmin: true } });
   const hRoot = cookieOf(await login(`root${DOMAIN}`, 'platform admin pw 1'));

@@ -13,6 +13,11 @@ export interface Contact {
   serviceTitle: string | null;
   /** Pipeline stage key once the questionnaire is complete; null while still answering */
   pipeline: string | null;
+  ownerId: string | null;
+  ownerEmail: string | null;
+  tags: string[];
+  followUpAt: string | null;
+  source: string | null;
   stage: string;
   step: number;
   totalSteps: number;
@@ -78,6 +83,17 @@ export interface PatchBody {
   paused?: boolean;
   notes?: string;
   stage?: string;
+  ownerId?: string | null;
+  tags?: string[];
+  followUpAt?: string | null;
+}
+
+export interface LeadEventInfo {
+  id: string;
+  type: string;
+  detail: string;
+  actor: string;
+  at: string;
 }
 
 export interface AdminUser {

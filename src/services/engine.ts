@@ -7,6 +7,7 @@ import { admitAiReply, admitConversation } from './usage';
 import { notifyBooked, notifyNewLead } from './alerts';
 import { getStages } from './pipeline';
 import { dispatchEvent } from './integrations';
+import { logLeadEvent } from './crm';
 import {
   loadConfig,
   resolveService,
@@ -152,7 +153,7 @@ export async function handleIncomingMessage(
         await prisma.session.update({ where: key, data: { currentStep: nextStep, answers: updatedAnswers } });
         await send(phoneNumber, questions[nextStep].prompt);
       } else {
-        await prisma.$transaction([
+        const [, newLead] = await prisma.$transaction([
           prisma.session.update({
             where: key,
             data: { stage: SessionStage.COMPLETED, currentStep: nextStep, answers: updatedAnswers }
@@ -169,6 +170,7 @@ export async function handleIncomingMessage(
             }
           })
         ]);
+        if (!isCapturing()) void logLeadEvent(newLead.id, workspaceId, 'created', service.title, 'bot');
         await send(phoneNumber, completionMessage(cfg));
         if (!isCapturing()) {
           void notifyNewLead(workspaceId, session.id);
@@ -187,7 +189,10 @@ export async function handleIncomingMessage(
         const moved = !!lead && lead.stageKey !== 'booked' && kind === 'open';
         if (moved) {
           await prisma.lead.update({ where: { id: lead!.id }, data: { stageKey: 'booked' } });
-          if (!isCapturing()) void dispatchEvent(workspaceId, 'lead.stage_changed', session.id, { previousStage: lead!.stageKey });
+          if (!isCapturing()) {
+            void dispatchEvent(workspaceId, 'lead.stage_changed', session.id, { previousStage: lead!.stageKey });
+            void logLeadEvent(lead!.id, workspaceId, 'stage', `${lead!.stageKey} → booked (customer confirmed)`, 'bot');
+          }
         }
         await send(phoneNumber, bookedConfirmationMessage());
         if (!isCapturing() && moved) void notifyBooked(workspaceId, phoneNumber);

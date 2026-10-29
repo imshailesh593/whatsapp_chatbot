@@ -4,6 +4,7 @@ import { loadConfig } from './services/botConfig';
 import { accessState } from './plans';
 import { dispatchEvent, leadSnapshot, workspaceForKey } from './services/integrations';
 import { getStages, stageExists } from './services/pipeline';
+import { logLeadEvent } from './services/crm';
 
 const hits = new Map<string, { n: number; reset: number }>();
 const LIMIT_PER_MINUTE = 60;
@@ -64,7 +65,10 @@ export function registerPublicApi(app: FastifyInstance): void {
       where: { id: s.lead.id },
       data: { ...(b.stage !== undefined ? { stageKey: String(b.stage) } : {}), ...(b.notes !== undefined ? { counsellorNotes: String(b.notes).slice(0, 4000) || null } : {}) }
     });
-    if (b.stage !== undefined && b.stage !== before) void dispatchEvent(ws(req), 'lead.stage_changed', s.id, { previousStage: before });
+    if (b.stage !== undefined && b.stage !== before) {
+      void dispatchEvent(ws(req), 'lead.stage_changed', s.id, { previousStage: before });
+      void logLeadEvent(s.lead.id, ws(req), 'stage', `${before} → ${b.stage}`, 'api');
+    }
     return { lead: await leadSnapshot(ws(req), s.id) };
   });
 }
