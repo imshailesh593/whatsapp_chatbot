@@ -93,6 +93,9 @@ function CheckoutPage({ user, onSkip, onSignOut }: { user: AdminUser; onSkip: ()
   );
 }
 
+/** Every button in the top bar: same height, border, text size and hover. */
+const topBtn = 'hidden md:inline-flex items-center gap-2 h-9 px-3 rounded-lg border border-slate-800 bg-slate-900/80 text-slate-300 hover:border-slate-600 hover:text-white transition whitespace-nowrap';
+
 const daysLeft = (iso: string | null) => (iso ? Math.max(0, Math.ceil((new Date(iso).getTime() - Date.now()) / 86_400_000)) : 0);
 
 function Console({ user, onSignedOut, onPlatform }: { user: AdminUser; onSignedOut: () => void; onPlatform?: () => void }) {
@@ -173,44 +176,35 @@ function Console({ user, onSignedOut, onPlatform }: { user: AdminUser; onSignedO
     <div className="min-h-screen bg-slate-900 text-slate-100 flex flex-col font-sans">
       <header className="bg-slate-950 border-b border-slate-800 sticky top-0 z-40">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between h-16">
-            <div className="flex items-center space-x-3">
+          <div className="flex items-center justify-between gap-4 h-16">
+            <div className="flex items-center gap-3 min-w-0">
               <Logo size={40} className="shadow-lg shadow-emerald-500/20" />
-              <div>
-                <div className="flex items-center space-x-2">
-                  <span className="font-extrabold text-base tracking-tight text-white">{brand.businessName}</span>
-                  {brand.tagline && (
-                    <span className="hidden sm:inline text-xs px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 font-semibold tracking-wide">
-                      {brand.tagline}
-                    </span>
-                  )}
-                </div>
-                <p className="text-[11px] text-slate-400">WhatsApp Lead Intelligence Console</p>
+              <div className="min-w-0">
+                <div className="font-extrabold text-base leading-tight tracking-tight text-white truncate" title={brand.businessName}>{brand.businessName}</div>
+                <p className="text-[11px] leading-tight text-slate-400 truncate mt-0.5" title={brand.tagline}>{brand.tagline || 'WhatsApp lead console'}</p>
               </div>
             </div>
 
-            <div className="flex items-center space-x-3 text-xs text-slate-300">
-              <button onClick={() => setTab('config')} title="Manage WhatsApp connection" className="hidden md:flex items-center space-x-2 bg-slate-900/80 px-3 py-1.5 rounded-lg border border-slate-800 hover:border-slate-700">
+            <div className="flex items-center gap-2 text-xs shrink-0">
+              <button onClick={() => setTab('config')} title="Manage WhatsApp connection" className={topBtn}>
                 <span className="relative flex h-2 w-2">
                   {waReady && <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />}
                   <span className={`relative inline-flex rounded-full h-2 w-2 ${waReady ? 'bg-emerald-500' : 'bg-rose-500'}`} />
                 </span>
-                <span>
-                  WhatsApp: <strong>{waReady ? 'Connected' : overview?.whatsapp === 'off' ? 'Disconnected' : overview?.whatsapp ?? '…'}</strong>
-                </span>
+                <span>WhatsApp <strong className="font-semibold text-white">{waReady ? 'Connected' : overview?.whatsapp === 'off' ? 'Disconnected' : overview?.whatsapp ?? '…'}</strong></span>
               </button>
               {overview?.workspace.bookingUrl && (
-                <a
-                  href={overview.workspace.bookingUrl}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="hidden md:flex items-center space-x-1.5 text-emerald-400 hover:text-emerald-300 bg-emerald-950/40 border border-emerald-800/60 px-3 py-1.5 rounded-lg transition"
-                >
-                  <span>Booking link</span>
+                <a href={overview.workspace.bookingUrl} target="_blank" rel="noreferrer" className={topBtn}>
                   <ExternalLink className="w-3.5 h-3.5" />
+                  <span>Booking link</span>
                 </a>
               )}
-              {onPlatform && <button onClick={onPlatform} className="hidden md:flex items-center space-x-1.5 text-xs font-semibold text-emerald-300 bg-emerald-950/40 border border-emerald-800/60 px-3 py-1.5 rounded-lg hover:bg-emerald-900/40"><Building2 className="w-3.5 h-3.5" /><span>Platform admin</span></button>}
+              {onPlatform && (
+                <button onClick={onPlatform} className={topBtn}>
+                  <Building2 className="w-3.5 h-3.5" />
+                  <span>Platform admin</span>
+                </button>
+              )}
               <AccountMenu user={user} onSignOut={() => api.logout().finally(onSignedOut)} />
             </div>
           </div>

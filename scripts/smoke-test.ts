@@ -15,6 +15,7 @@ import { prisma } from '../src/lib/prisma';
 import { hashPassword } from '../src/lib/auth';
 import { setTransport } from '../src/services/transport';
 import { setSetting } from '../src/services/settings';
+import { invalidateConfig } from '../src/services/botConfig';
 
 const OUT = process.argv[2] || '.';
 const DOMAIN = '@smoke.local';
@@ -153,6 +154,27 @@ async function cleanup() {
   await sleep(1000);
   await shot(ow, 'ow-2-console');
   ok((await text(ow)).includes('Glow Dental Clinic'), 'owner lands on the console after onboarding');
+
+  // A long business name and tagline must not break the top bar: one line, equal-height buttons, no sideways scroll
+  if (created) await prisma.workspace.update({ where: { id: created.id }, data: { businessName: 'MNS Institute | MNS Institute Jobs | WAPPO | ZEXY AI', tagline: 'Your Global Career Support Partner' } });
+  invalidateConfig(created!.id);
+  await ow.reload({ waitUntil: 'networkidle0' });
+  await ow.waitForSelector('header');
+  await sleep(600);
+  await shot(ow, 'ow-2b-long-name');
+  const bar = await ow.evaluate(() => {
+    const h = document.querySelector('header')!;
+    const name = h.querySelector('.truncate') as HTMLElement;
+    const btns = [...h.querySelectorAll('button.h-9, a.h-9')] as HTMLElement[];
+    return { nameLines: Math.round(name.getBoundingClientRect().height / parseFloat(getComputedStyle(name).lineHeight)), heights: [...new Set(btns.map((b) => Math.round(b.getBoundingClientRect().height)))], buttons: btns.length, overflow: document.documentElement.scrollWidth - window.innerWidth };
+  });
+  ok(bar.nameLines === 1 && bar.heights.length === 1 && bar.buttons >= 2 && bar.overflow <= 0, `the top bar stays tidy with a long business name (name on ${bar.nameLines} line, ${bar.buttons} buttons all ${bar.heights.join('/')}px, overflow ${bar.overflow}px)`);
+  const bar2 = await ow.evaluate(() => { const hs = [...document.querySelectorAll('main select, main input[type=text], main a[href$="export.csv"]')].map((e) => Math.round((e as HTMLElement).getBoundingClientRect().height)); return [...new Set(hs)]; });
+  ok(bar2.length === 1, `the leads filter bar controls share one height (${bar2.join('/')}px)`);
+  if (created) await prisma.workspace.update({ where: { id: created.id }, data: { businessName: 'Glow Dental Clinic', tagline: '' } });
+  invalidateConfig(created!.id);
+  await ow.reload({ waitUntil: 'networkidle0' });
+  await ow.waitForSelector('header');
 
   // simulator: chat through the funnel, then ask for a person
   if (created) setTransport(created.id, { sendText: async () => undefined, ready: () => true });

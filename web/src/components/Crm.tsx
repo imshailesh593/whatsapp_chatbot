@@ -61,7 +61,7 @@ export default function Crm({ contacts, includeTest, onIncludeTest, onOpen, onCh
     }
   }
 
-  const select = 'bg-slate-900 border border-slate-700/80 rounded-lg px-3 py-2 text-xs text-slate-300 focus:outline-none focus:border-emerald-500';
+  const select = 'h-9 bg-slate-900 border border-slate-700/80 rounded-lg px-3 text-xs text-slate-300 focus:outline-none focus:border-emerald-500';
 
   async function toggleBot(c: Contact) {
     onChanged(await api.patch(c.phone, { paused: c.botActive }));
@@ -69,18 +69,18 @@ export default function Crm({ contacts, includeTest, onIncludeTest, onOpen, onCh
 
   return (
     <div className="space-y-4">
-      <div className="bg-slate-950/80 border border-slate-800 rounded-xl p-4 flex flex-col md:flex-row gap-3 items-center justify-between">
-        <div className="relative w-full md:w-80">
+      <div className="bg-slate-950/80 border border-slate-800 rounded-xl p-4 flex flex-col xl:flex-row gap-3 xl:items-center xl:justify-between">
+        <div className="relative w-full xl:w-72 shrink-0">
           <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
           <input
             type="text"
             placeholder="Search by name, phone, or country..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full bg-slate-900 border border-slate-700/80 rounded-lg pl-9 pr-3 py-2 text-xs sm:text-sm text-slate-200 placeholder-slate-500 focus:outline-none focus:border-emerald-500"
+            className="w-full bg-slate-900 border border-slate-700/80 rounded-lg pl-9 pr-3 h-9 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-emerald-500"
           />
         </div>
-        <div className="flex flex-wrap items-center gap-2 w-full md:w-auto">
+        <div className="flex flex-wrap items-center gap-2 w-full xl:w-auto xl:justify-end">
           <select value={service} onChange={(e) => setService(e.target.value)} className={select}>
             <option value="ALL">All Services</option>
             {serviceOptions.map(([id, title]) => (
@@ -106,20 +106,20 @@ export default function Crm({ contacts, includeTest, onIncludeTest, onOpen, onCh
               {allTags.map((t) => <option key={t} value={t}>#{t}</option>)}
             </select>
           )}
-          <button onClick={() => setDueOnly((v) => !v)} className={`flex items-center space-x-1 px-3 py-2 rounded-lg text-xs font-medium border transition ${dueOnly ? 'bg-amber-500/20 text-amber-300 border-amber-500/50' : 'bg-slate-900 text-slate-300 border-slate-700/80'}`}>
+          <button onClick={() => setDueOnly((v) => !v)} className={`inline-flex items-center gap-1.5 h-9 px-3 whitespace-nowrap rounded-lg text-xs font-medium border transition ${dueOnly ? 'bg-amber-500/20 text-amber-300 border-amber-500/50' : 'bg-slate-900 text-slate-300 border-slate-700/80'}`}>
             <Clock className="w-3.5 h-3.5" /><span>Follow-ups due{dueCount ? ` (${dueCount})` : ''}</span>
           </button>
-          <div className="flex rounded-lg overflow-hidden border border-slate-700/80">
-            <button onClick={() => { setView('list'); localStorage.setItem('crmView', 'list'); }} title="List" className={`px-2.5 py-2 ${view === 'list' ? 'bg-emerald-500/20 text-emerald-300' : 'bg-slate-900 text-slate-400'}`}><List className="w-3.5 h-3.5" /></button>
-            <button onClick={() => { setView('board'); localStorage.setItem('crmView', 'board'); }} title="Board" className={`px-2.5 py-2 ${view === 'board' ? 'bg-emerald-500/20 text-emerald-300' : 'bg-slate-900 text-slate-400'}`}><LayoutGrid className="w-3.5 h-3.5" /></button>
+          <div className="flex h-9 rounded-lg overflow-hidden border border-slate-700/80">
+            <button onClick={() => { setView('list'); localStorage.setItem('crmView', 'list'); }} title="List" className={`px-2.5 inline-flex items-center ${view === 'list' ? 'bg-emerald-500/20 text-emerald-300' : 'bg-slate-900 text-slate-400'}`}><List className="w-3.5 h-3.5" /></button>
+            <button onClick={() => { setView('board'); localStorage.setItem('crmView', 'board'); }} title="Board" className={`px-2.5 inline-flex items-center ${view === 'board' ? 'bg-emerald-500/20 text-emerald-300' : 'bg-slate-900 text-slate-400'}`}><LayoutGrid className="w-3.5 h-3.5" /></button>
           </div>
-          <label className="flex items-center space-x-1.5 text-[11px] text-slate-400 cursor-pointer">
+          <label className="inline-flex items-center gap-1.5 h-9 whitespace-nowrap text-[11px] text-slate-400 cursor-pointer">
             <input type="checkbox" checked={includeTest} onChange={(e) => onIncludeTest(e.target.checked)} />
             <span>Show simulator data</span>
           </label>
           <a
             href="/admin/api/export.csv"
-            className="flex items-center space-x-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 px-3 py-2 rounded-lg text-xs font-medium border border-slate-700 transition"
+            className="inline-flex items-center gap-1.5 h-9 whitespace-nowrap bg-slate-800 hover:bg-slate-700 text-slate-200 px-3 rounded-lg text-xs font-medium border border-slate-700 transition"
           >
             <Download className="w-3.5 h-3.5" />
             <span>Export CSV</span>
@@ -203,9 +203,9 @@ export default function Crm({ contacts, includeTest, onIncludeTest, onOpen, onCh
                     </td>
                     <td className="py-3.5 px-4">
                       {svc ? (
-                        <span className={`inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium border ${svc.badge}`}>
-                          <span className="mr-1">{svc.icon}</span>
-                          {svc.shortTitle}
+                        <span title={svc.shortTitle} className={`inline-flex max-w-[260px] items-center px-2 py-0.5 rounded-md text-[11px] font-medium border ${svc.badge}`}>
+                          <span className="mr-1.5 text-[7px] leading-none shrink-0">{svc.icon}</span>
+                          <span className="truncate">{svc.shortTitle}</span>
                         </span>
                       ) : (
                         <span className="text-slate-500 text-[11px]">Choosing service…</span>
@@ -221,7 +221,7 @@ export default function Crm({ contacts, includeTest, onIncludeTest, onOpen, onCh
                       </div>
                     </td>
                     <td className="py-3.5 px-4">
-                      <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold border ${stageBadge(stages, c.pipeline).cls}`}>
+                      <span className={`inline-flex items-center whitespace-nowrap px-2 py-0.5 rounded-full text-[10px] font-semibold border ${stageBadge(stages, c.pipeline).cls}`}>
                         {stageBadge(stages, c.pipeline).label}
                       </span>
                     </td>
@@ -229,7 +229,7 @@ export default function Crm({ contacts, includeTest, onIncludeTest, onOpen, onCh
                       <button
                         onClick={() => toggleBot(c)}
                         disabled={c.isTest}
-                        className={`flex items-center space-x-1.5 text-[11px] px-2.5 py-1 rounded-lg border font-medium transition disabled:opacity-40 ${
+                        className={`flex items-center space-x-1.5 whitespace-nowrap text-[11px] px-2.5 py-1 rounded-lg border font-medium transition disabled:opacity-40 ${
                           c.botActive
                             ? 'bg-emerald-950/40 border-emerald-700/50 text-emerald-400 hover:bg-emerald-900/50'
                             : 'bg-rose-950/40 border-rose-700/50 text-rose-400 hover:bg-rose-900/50'
@@ -255,7 +255,7 @@ export default function Crm({ contacts, includeTest, onIncludeTest, onOpen, onCh
                         )}
                         <button
                           onClick={() => onOpen(c.phone)}
-                          className="px-2.5 py-1 text-xs bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg border border-slate-700 font-medium transition"
+                          className="px-2.5 py-1 text-xs whitespace-nowrap bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg border border-slate-700 font-medium transition"
                         >
                           View Dossier
                         </button>

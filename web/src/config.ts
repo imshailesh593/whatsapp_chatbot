@@ -1,20 +1,21 @@
 import type { StageDef } from './types';
 
-const ICONS = ['📚', '🩺', '💼', '✈️', '🌐', '🏠', '🛠️', '📞', '⭐'];
+/** One small dot in the badge's own colour, so every service looks the same apart from its colour. */
+const DOT = '●';
 const BADGES = [
-  'bg-blue-100 text-blue-800 border-blue-200',
-  'bg-emerald-100 text-emerald-800 border-emerald-200',
-  'bg-purple-100 text-purple-800 border-purple-200',
-  'bg-amber-100 text-amber-800 border-amber-200',
-  'bg-slate-100 text-slate-800 border-slate-200',
-  'bg-rose-100 text-rose-800 border-rose-200'
+  'bg-blue-500/15 text-blue-300 border-blue-500/30',
+  'bg-emerald-500/15 text-emerald-300 border-emerald-500/30',
+  'bg-purple-500/15 text-purple-300 border-purple-500/30',
+  'bg-amber-500/15 text-amber-300 border-amber-500/30',
+  'bg-cyan-500/15 text-cyan-300 border-cyan-500/30',
+  'bg-rose-500/15 text-rose-300 border-rose-500/30'
 ];
 
-/** Services are defined per business, so icon and colour are derived from the service key. */
+/** Services are defined per business, so the colour is derived from the service key. */
 export function serviceStyle(key: string | null, title: string | null) {
   let h = 0;
   for (const ch of key ?? '') h = (h * 31 + ch.charCodeAt(0)) >>> 0;
-  return { icon: ICONS[h % ICONS.length], shortTitle: title ?? key ?? '', badge: BADGES[h % BADGES.length] };
+  return { icon: DOT, shortTitle: title ?? key ?? '', badge: BADGES[h % BADGES.length] };
 }
 
 export const COLOR_CLS: Record<string, string> = {

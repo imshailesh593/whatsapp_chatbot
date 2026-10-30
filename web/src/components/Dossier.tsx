@@ -78,7 +78,7 @@ export default function Dossier({ contact, bookingUrl, onClose, onChanged, team 
           <div>
             <div className="flex items-center flex-wrap gap-2">
               <h3 className="text-base font-bold text-white">{contact.name || 'Unknown'}</h3>
-              {svc && <span className={`text-[10px] px-2 py-0.5 rounded font-semibold border ${svc.badge}`}>{svc.icon} {svc.shortTitle}</span>}
+              {svc && <span title={svc.shortTitle} className={`inline-flex max-w-full items-center text-[10px] px-2 py-0.5 rounded-md font-semibold border ${svc.badge}`}><span className="mr-1.5 text-[7px] leading-none shrink-0">{svc.icon}</span><span className="truncate">{svc.shortTitle}</span></span>}
             </div>
             <p className="text-xs text-slate-400 mt-0.5">
               {displayPhone(contact.phone)}

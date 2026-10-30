@@ -20,12 +20,12 @@ export default function AccountMenu({ user, onSignOut }: { user: AdminUser; onSi
     <div className="relative" ref={ref}>
       <button
         onClick={() => setOpen((o) => !o)}
-        className="flex items-center space-x-2 px-3 py-1.5 rounded-lg border border-slate-800 hover:bg-slate-900 text-slate-300 transition"
+        className="inline-flex items-center gap-2 h-9 px-3 rounded-lg border border-slate-800 bg-slate-900/80 text-xs text-slate-300 hover:border-slate-600 hover:text-white transition whitespace-nowrap"
       >
         <span className="w-5 h-5 rounded-full bg-emerald-500/20 text-emerald-400 text-[10px] font-bold flex items-center justify-center">
           {user.email.charAt(0).toUpperCase()}
         </span>
-        <span className="hidden sm:inline max-w-[160px] truncate">{user.email}</span>
+        <span className="hidden sm:inline max-w-[170px] truncate">{user.email}</span>
         <ChevronDown className="w-3.5 h-3.5" />
       </button>
 
