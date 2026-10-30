@@ -289,7 +289,7 @@ A provider only shows as available when its keys, webhook secret/id and plan ids
 flowchart LR
   Dev["Developer machine<br/>git, tests"] -- "git archive -> scp" --> VPS
   subgraph VPS["VPS 201.18.198.8 /srv/mns-whatsapp-bot"]
-    T["Coolify Traefik<br/>HTTPS + chatbot.zexyai.com"] --> BOT["bot container<br/>(this app)"]
+    T["Coolify Traefik<br/>HTTPS + wappoai.com"] --> BOT["bot container<br/>(this app)"]
     BOT --> DBC[("db container<br/>Postgres 16, volume pgdata")]
     BOT --- WAV[["volume wa_session<br/>/data/wa_auth"]]
   end
@@ -310,7 +310,7 @@ git archive -o bot.tar HEAD
 scp -i ~/.ssh/id_ed25519_mns_bot bot.tar root@201.18.198.8:/tmp/bot.tar
 ssh -i ~/.ssh/id_ed25519_mns_bot root@201.18.198.8 "cd /srv/mns-whatsapp-bot && tar -x -C /srv/mns-whatsapp-bot --exclude=.env -f /tmp/bot.tar && docker compose -p mnsbot -f docker-compose.yml -f docker-compose.vps.yml up -d --build bot"
 # 3. verify
-curl -s https://chatbot.zexyai.com/health
+curl -s https://wappoai.com/health
 ```
 
 `--exclude=.env` keeps the server's secrets. After a restart WhatsApp reconnects by itself within about a minute if the saved login is intact; if `/data/wa_auth/<workspace>` is empty the number was unlinked and must be scanned again.

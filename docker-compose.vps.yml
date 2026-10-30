@@ -47,9 +47,14 @@ services:
       - traefik.http.routers.mnsbot-old.tls=true
       - traefik.http.routers.mnsbot-old.tls.certresolver=letsencrypt
       - traefik.http.routers.mnsbot-old.service=mnsbot
+      # the previous domain sends everyone (and any webhook) to the primary one
+      - traefik.http.middlewares.mnsbot-old-redirect.redirectregex.regex=^https?://[^/]+/(.*)
+      - traefik.http.middlewares.mnsbot-old-redirect.redirectregex.replacement=https://${BOT_DOMAIN}/$${1}
+      - traefik.http.middlewares.mnsbot-old-redirect.redirectregex.permanent=true
+      - traefik.http.routers.mnsbot-old.middlewares=mnsbot-old-redirect
       - traefik.http.routers.mnsbot-old-http.rule=Host(`${BOT_DOMAIN_OLD:-no-old.invalid}`)
       - traefik.http.routers.mnsbot-old-http.entrypoints=http
-      - traefik.http.routers.mnsbot-old-http.middlewares=mnsbot-https
+      - traefik.http.routers.mnsbot-old-http.middlewares=mnsbot-old-redirect
       - traefik.http.routers.mnsbot-old-http.service=mnsbot
 
 networks:
