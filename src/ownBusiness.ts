@@ -13,7 +13,9 @@ const FORM = 'https://tally.so/r/7Rrl70';
 const TEAM_PHONE = '+91 8700825077';
 const ZEXY = 'https://zexyai.com';
 
-const closing = (lines: string[]) => ['Thank you for sharing your details! 🙌', ...lines, 'You can ask me any question here. To see the menu again, type *MENU*.'].join('\n\n');
+/** Every closing message tells the customer what to type for more. The consultation link itself is only sent when they ask. */
+const MORE = 'You can ask me any question here. For a detailed one-to-one discussion, reply *MORE INFO* and I will share the link to book a consultation. To see the menu again, type *MENU*.';
+const closing = (lines: string[]) => ['Thank you for sharing your details! 🙌', ...lines, MORE].join('\n\n');
 
 const profile = (...extra: { key: string; prompt: string }[]) => [
   { key: 'profession', prompt: 'What is your current profession?' },
@@ -36,8 +38,11 @@ export const OWN_SERVICES: TemplateService[] = [
       { key: 'timeline', prompt: 'When do you plan to take the exam?' }
     ],
     closingMessage: closing([
-      'Our team will review your requirements and guide you on the right course and next steps.',
-      `For a detailed one-to-one discussion about your preparation, course options and fees, you can book a consultation:\n👉 ${TOPMATE}`
+      `Our team will review your requirements and guide you on the right course and next steps.`,
+      `*Coaching fees*
+• IELTS, OET, PTE and NORCET: ₹14,500 for two months, or ₹12,000 for a one-month crash course.
+• DHA: ₹14,500 for two months (a one-month course is not available for DHA).`,
+      `Coaching fees are separate from study material and licensing packages. No exam score or result can be guaranteed.`
     ])
   },
   {
@@ -51,8 +56,15 @@ export const OWN_SERVICES: TemplateService[] = [
       { key: 'need', prompt: 'What are you looking for? (study material, practice tests, or both)' }
     ],
     closingMessage: closing([
-      'Our team will confirm the study material and practice resources available for your exam.',
-      `If you would like to discuss your preparation in detail, you can book a consultation:\n👉 ${TOPMATE}`
+      `Our team will confirm the study material and practice resources available for your exam.`,
+      `*Prometric exam study material: ₹8,000*
+For DHA, HAAD and other Prometric exams. Includes:
+• Study material
+• 50 test series
+• 50 mock tests
+• 30+ practice resources, where available[if profession ~ nurs]
+• Recorded lectures for nursing candidates[/if]`,
+      `This is a self-study package, not live coaching and not a complete licensing package.`
     ])
   },
   {
@@ -65,9 +77,14 @@ export const OWN_SERVICES: TemplateService[] = [
       { key: 'exam_status', prompt: 'Have you taken any licensing exam (for example DHA)? Please share the status and result. (type "no" if none)' }
     ),
     closingMessage: closing([
-      'The right licensing pathway depends on your qualification, experience, target country and existing registration. Our team will review your profile and guide you.',
-      `To discuss your eligibility, the applicable pricing and next steps in detail, please book a one-to-one consultation:\n👉 ${TOPMATE}`,
-      'If you decide to proceed, the applicable terms will be confirmed before enrollment.'
+      `The right licensing pathway depends on your qualification, experience, target country and existing registration. Our team will review your profile and guide you.`,
+      `*Complete licensing packages*
+• Nursing / Registered Nurse, Pharmacist, Medical Laboratory Technologist or Technician, and Radiologist: ₹1,75,000
+• BAMS: approximately ₹1,75,000 (it can vary by about ₹2,000 to ₹4,000 with individual requirements)
+• Other doctors and healthcare professionals: indicative minimum ₹1,75,000. The final quotation depends on qualification, specialization, experience, target country, existing licence, documents and eligibility.`,
+      `*After you pass DHA or another Prometric exam*
+Licensing service fee: ₹40,000, payable only after a positive result (no processing fee before it). It covers DataFlow processing, eligibility processing, Letter of Qualification where applicable, and guidance through the further licensing formalities.`,
+      `Examination, government, visa and other third-party charges are confirmed separately by our team. Final licensing decisions rest with the regulator, so approval cannot be guaranteed.`
     ])
   },
   {
@@ -80,8 +97,15 @@ export const OWN_SERVICES: TemplateService[] = [
       { key: 'existing_license', prompt: 'Do you already hold a professional license or registration? If yes, which one? (type "no" if none)' }
     ),
     closingMessage: closing([
-      `To see how our job assistance works and to enroll, please visit our official website:\n👉 ${JOBS}`,
-      `If you would like to discuss your profile before enrolling, you can book a one-to-one consultation:\n👉 ${TOPMATE}`
+      `*International job assistance: ₹50,000 in total*
+• ₹6,500 at enrollment
+• ₹43,500 after you receive an offer letter`,
+      `*What is included*
+• Professional CV preparation
+• Interview preparation, with relevant interview questions from previous candidate and employer experiences
+• Candidate portal: track your applications, interview scheduling status, offer-letter status and available organization details, with Gmail notifications`,
+      `*How long does it take?* It depends on your profile and the employer. Some employers respond within about three days, others take three weeks or longer. A job offer or joining date cannot be guaranteed. One-to-one interview training is optional and has a separate fee that our team will confirm.`,
+      `To enroll, please use our official website only:\n👉 ${JOBS}`
     ])
   },
   {
@@ -93,7 +117,12 @@ export const OWN_SERVICES: TemplateService[] = [
       { key: 'level', prompt: 'What is your current German level? (None / A1 / A2 / B1 or higher)' },
       { key: 'schedule', prompt: 'When would you like to start, and which time of day suits you best?' }
     ],
-    closingMessage: closing(['Our team will confirm the course details and the exact daily schedule with you.'])
+    closingMessage: closing([
+      `*German language course: ₹70,000 for four months*
+• One-to-one training
+• About 1 to 3 hours a day, six days a week`,
+      `Our team will confirm the exact daily schedule with you.`
+    ])
   },
   {
     key: 'VISA_PR',
@@ -108,8 +137,8 @@ export const OWN_SERVICES: TemplateService[] = [
       { key: 'license_exam', prompt: 'Do you hold any professional license, or have you taken any exam (IELTS, OET and so on)? Please share the status. (type "no" if none)' }
     ],
     closingMessage: closing([
-      'Eligibility, process and costs depend on your profile and the current requirements of the destination. Our team will review your details.',
-      `For a detailed discussion and an accurate quotation, please book a one-to-one consultation:\n👉 ${TOPMATE}`
+      `There is no fixed fee for study abroad, Malta nursing bridging, visa or PR guidance: the process, eligibility and cost depend on your profile and the current requirements of the destination.`,
+      `Our team will review your details and share an accurate quotation. No admission, visa or PR outcome can be guaranteed.`
     ])
   },
   {
@@ -122,7 +151,15 @@ export const OWN_SERVICES: TemplateService[] = [
       { key: 'features', prompt: 'Which features matter most to you? (for example custom questions and answers, CRM, replies in many languages)' },
       { key: 'ready', prompt: 'Do you already have your business questions, answers and instructions ready, or do you need help preparing them?' }
     ],
-    closingMessage: closing([`You can see how WAPPO works and get started here:\n👉 ${WAPPO}`])
+    closingMessage: closing([
+      `*WAPPO: ₹499 per month*
+• Unlimited messaging, with no per-message charge
+• Automated customer replies and business-specific questions and answers
+• Prompt-based instructions and custom chatbot behaviour
+• CRM portal
+• Basic setup takes about five minutes when your information is ready`,
+      `Learn more and get started:\n👉 ${WAPPO}`
+    ])
   },
   {
     key: 'ZEXY_AI',
@@ -134,7 +171,14 @@ export const OWN_SERVICES: TemplateService[] = [
       { key: 'platforms', prompt: 'Which platforms do you want to be on? (for example Instagram, YouTube, Facebook)' },
       { key: 'topics', prompt: 'What topics should the content cover, and how often would you like to post?' }
     ],
-    closingMessage: closing([`You can learn more about ZEXY AI here:\n👉 ${ZEXY}`, `If you would like to discuss your requirements first, you can book a consultation:\n👉 ${TOPMATE}`])
+    closingMessage: closing([
+      `*ZEXY AI: two options*
+
+1) Self-service AI video editing: ₹499. You edit your own videos with AI. Subscription duration and feature limits are confirmed by our team.
+
+2) Managed social media marketing: ₹14,500 for two months. Includes topic-based content planning, script and content creation, an AI avatar from an authorised photo of yours, voice integration, video generation and editing, titles, descriptions, tags and hashtags, SEO-oriented metadata, and uploading and publishing on the agreed platforms. The number of videos, platforms, posting frequency and revisions are confirmed before work starts.`,
+      `Learn more:\n👉 ${ZEXY}`
+    ])
   },
   {
     key: 'GENERAL',
@@ -144,7 +188,9 @@ export const OWN_SERVICES: TemplateService[] = [
       { key: 'message', prompt: 'Please tell us how we can help.' },
       { key: 'contact_time', prompt: 'What is the best time for our team to reach you?' }
     ],
-    closingMessage: closing(['Our team will read your message and get back to you.'])
+    closingMessage: closing([
+      `Our team will read your message and get back to you.`
+    ])
   }
 ];
 
@@ -152,7 +198,7 @@ export const OWN_KNOWLEDGE = `GENERAL RULES
 - Never invent prices, links, phone numbers, inclusions, timelines, discounts or payment options. Never guarantee exam results or scores, jobs, licence approval, visas, PR, SEO rankings, views or business growth.
 - Quote a price only when the customer asks about fees, price or cost; give the exact figure below with its inclusions. Otherwise explain the value of the service first.
 - Keep coaching, study material, licensing and job assistance clearly separate.
-- If you cannot answer confidently from these notes, say: "I want to make sure you receive accurate information. Please contact our team directly through a WhatsApp call or a normal phone call on ${TEAM_PHONE} so we can understand your situation and guide you correctly." For complex or individual cases also offer the consultation link. The team's number is ${TEAM_PHONE}; never give any other number and never claim a call, booking, payment or enrollment has happened.
+- If you cannot answer confidently from these notes, say: "I want to make sure you receive accurate information. Please contact our team directly through a WhatsApp call or a normal phone call on ${TEAM_PHONE} so we can understand your situation and guide you correctly." Share the consultation link only when the customer asks for more information, a detailed one-to-one discussion or to book. Never add it to ordinary answers or to the end of a conversation. The team's number is ${TEAM_PHONE}; never give any other number and never claim a call, booking, payment or enrollment has happened.
 - Share only the link for the service the customer asks about.
 
 OFFICIAL LINKS
@@ -205,6 +251,7 @@ export const OWN_PROFILE = {
   // The first message asks which of these the customer prefers; the menu, questions and answers then follow it
   languages: 'English, Hindi, Hinglish, Tamil, Malayalam',
   bookingLabel: 'one-to-one consultation with our team',
+  bookingUrl: TOPMATE,
   formUrl: FORM,
   languageStep: true,
   welcomeIntro: 'Thank you for contacting us. I am here to help you find the right solution for your needs.',

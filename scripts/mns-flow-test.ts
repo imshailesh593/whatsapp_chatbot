@@ -7,7 +7,7 @@ process.env.GEMINI_API_KEY = '';
 import { prisma } from '../src/lib/prisma';
 import { setTransport } from '../src/services/transport';
 import { handleIncomingMessage, looksLikeQuestion } from '../src/services/engine';
-import { invalidateConfig, loadConfig, resolveService } from '../src/services/botConfig';
+import { invalidateConfig, loadConfig, renderClosing, resolveService } from '../src/services/botConfig';
 import { setTranslatorForTests } from '../src/services/gemini';
 import { languageOptionsText, offeredLanguages, parseLanguage } from '../src/services/language';
 import { applyOwnBusiness, OWN_KNOWLEDGE, OWN_PROFILE, OWN_SERVICES } from '../src/ownBusiness';
@@ -48,8 +48,22 @@ setTranslatorForTests(async (text, language) => { translations++; return `[${lan
     ok(OWN_PROFILE.handoffMessage.includes('+91 8700825077') && OWN_KNOWLEDGE.includes('on +91 8700825077'), 'the hand-off message and the "call our team" answer carry it');
     const closingOf = (key: string) => cfg.services.find((s) => s.key === key)!.closingMessage;
     ok(closingOf('JOBS').includes('https://www.mnsinstitutejobs.com') && closingOf('WAPPO').includes('https://www.wappoai.com') && closingOf('ZEXY_AI').includes('https://zexyai.com'), 'each service closes with its own link');
-    ok(['COACHING', 'LICENSING', 'VISA_PR'].every((k) => closingOf(k).includes('https://topmate.io/mnsinstitute/')), 'coaching, licensing and visa close with the consultation link');
-    ok(!/₹|Rs\.? ?\d/.test(cfg.services.map((s) => s.closingMessage).join(' ')), 'no prices are pushed in the closing messages');
+    const TOPMATE = 'https://topmate.io/mnsinstitute/';
+    ok(cfg.services.every((s) => !s.closingMessage.includes('topmate')), 'no closing message sends the Topmate link on its own: it is only sent when the customer asks for more');
+    ok(cfg.services.every((s) => s.closingMessage.includes('*MORE INFO*') && s.closingMessage.length < 3000), 'each one tells the customer to reply MORE INFO for a consultation, and fits a WhatsApp message');
+    const all = (key: string, answers: Record<string, string> = {}) => renderClosing(closingOf(key), answers);
+    const has = (key: string, words: string[], answers: Record<string, string> = {}) => words.every((w) => all(key, answers).includes(w));
+    ok(has('COACHING', ['₹14,500', '₹12,000', 'DHA', 'two months']), 'coaching: both prices and the DHA rule');
+    ok(has('PROMETRIC_MATERIAL', ['₹8,000', '50 test series', '50 mock tests', '30+ practice resources'], { profession: 'Pharmacist' }), 'study material: the price and what it includes');
+    ok(all('PROMETRIC_MATERIAL', { profession: 'Staff nurse' }).includes('Recorded lectures') && all('PROMETRIC_MATERIAL', { profession: 'GNM nursing' }).includes('Recorded lectures'), 'recorded lectures are mentioned to nursing candidates');
+    ok(['Pharmacist', 'Lab technologist', 'Radiologist', 'Doctor', ''].every((p) => !/lecture/i.test(all('PROMETRIC_MATERIAL', { profession: p }))), 'and never to anyone else');
+    ok(has('LICENSING', ['₹1,75,000', 'BAMS', '₹2,000 to ₹4,000', '₹40,000', 'positive result', 'DataFlow', 'Letter of Qualification']), 'licensing: the packages, BAMS range and the post-result fee');
+    ok(has('JOBS', ['₹50,000', '₹6,500', '₹43,500', 'Professional CV', 'Candidate portal', 'Gmail', 'https://www.mnsinstitutejobs.com', 'three weeks']), 'jobs: the full fee split, inclusions, timeline and the website');
+    ok(has('GERMAN', ['₹70,000', 'four months', 'One-to-one', 'six days a week']), 'German: price, duration and schedule');
+    ok(has('VISA_PR', ['no fixed fee']) && !/₹/.test(all('VISA_PR')), 'study abroad and visa: no invented price, and it says why');
+    ok(has('WAPPO', ['₹499 per month', 'Unlimited messaging', 'no per-message charge', 'CRM portal', 'https://www.wappoai.com']), 'WAPPO: price, inclusions and its website');
+    ok(has('ZEXY_AI', ['₹499', '₹14,500', 'two months', 'AI avatar', 'https://zexyai.com']), 'ZEXY AI: both prices, inclusions and its website');
+    ok(!/₹|Rs/.test(all('GENERAL')), 'something else: no price');
 
     console.log('\n[service words]');
     for (const [input, want] of [
@@ -124,7 +138,11 @@ setTranslatorForTests(async (text, language) => { translations++; return `[${lan
     const answers = ['Staff nurse', 'B.Sc Nursing, 2018', '5 years', 'No gap', 'India, wants to work in the UAE', 'No', 'Not yet'];
     for (const a of answers) await say(hi, a);
     const last = to(hi).at(-1)!;
-    ok(last.startsWith('[Hindi] Thank you for sharing your details') && last.includes('https://topmate.io/mnsinstitute/'), 'the licensing closing message arrives translated, with the consultation link');
+    ok(last.startsWith('[Hindi] Thank you for sharing your details') && last.includes('₹1,75,000') && last.includes('₹40,000') && !last.includes('topmate'), 'the licensing closing message arrives translated, with the fees and no link');
+    await say(hi, 'DHA fees');
+    ok(!to(hi).at(-1)!.includes('topmate'), 'asking about fees afterwards does not send the consultation link');
+    await say(hi, 'I need more information');
+    ok(to(hi).at(-1)!.startsWith('[Hindi]') && to(hi).at(-1)!.includes(TOPMATE), 'asking for more information sends the consultation link, in the customer\'s language');
     const lead = await prisma.lead.findFirst({ where: { workspaceId: W.id, phoneNumber: hi } });
     ok(lead?.serviceCategory === 'LICENSING' && Object.keys(lead.collectedData as object).sort().join() === 'profession,qualification,experience,gap,location,existing_license,exam_status'.split(',').sort().join(), 'the lead is saved with all seven answers');
     await say(hi, 'menu');
@@ -160,7 +178,11 @@ setTranslatorForTests(async (text, language) => { translations++; return `[${lan
     await say(en2, 'hi'); await say(en2, 'english'); await say(en2, '4');
     ok(to(en2).at(-1) === 'What is your current profession?', 'jobs starts with the profile questions');
     for (const a of ['Nurse', 'GNM 2015', '8 years', 'None', 'India', 'Canada', 'No']) await say(en2, a);
-    ok(to(en2).at(-1)!.includes('https://www.mnsinstitutejobs.com') && to(en2).at(-1)!.includes('https://topmate.io/mnsinstitute/'), 'jobs closes with the website and the consultation link');
+    ok(to(en2).at(-1)!.includes('https://www.mnsinstitutejobs.com') && to(en2).at(-1)!.includes('₹50,000') && !to(en2).at(-1)!.includes('topmate'), 'jobs closes with the fees and the website, and no consultation link');
+    for (const [ask, wantsLink] of [['MORE INFO', true], ['more', true], ['Can I book a consultation?', true], ['tell me more', true], ['I want to discuss my profile', true], ['what is the fee?', false], ['ok thanks', false]] as const) {
+      await say(en2, ask);
+      ok(to(en2).at(-1)!.includes(TOPMATE) === wantsLink, `"${ask}" ${wantsLink ? 'sends' : 'does not send'} the consultation link`);
+    }
 
     console.log('\n[price questions without a question mark]');
     for (const t of ['DHA fees', 'ielts price', 'how much for german', 'kitna charge hai', 'what is the cost?']) ok(looksLikeQuestion(t), `"${t}" reaches the AI`);

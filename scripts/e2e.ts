@@ -74,7 +74,9 @@ async function main() {
       assert(qs.every((q, k) => data[q.key] === `answer-${k}`), `${svc.key}: all ${qs.length} answers stored`);
 
       await handleIncomingMessage(A.id, phone, 'Test', 'how much is the fee');
-      assert(replies(A.id, phone).at(-1)!.includes('cal.example'), `${svc.key}: fee question -> booking link`);
+      assert(!replies(A.id, phone).at(-1)!.includes('cal.example'), `${svc.key}: a fee question is not answered with the booking link`);
+      await handleIncomingMessage(A.id, phone, 'Test', 'can I get more information?');
+      assert(replies(A.id, phone).at(-1)!.includes('cal.example'), `${svc.key}: asking for more information -> booking link`);
       await handleIncomingMessage(A.id, phone, 'Test', 'I have already booked');
       assert((await prisma.lead.findFirst({ where: { workspaceId: A.id, phoneNumber: phone } }))?.stageKey === 'booked', `${svc.key}: booking moves the lead to the Booked stage`);
       await handleIncomingMessage(A.id, phone, 'Test', 'menu');

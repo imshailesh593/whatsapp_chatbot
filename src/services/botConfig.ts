@@ -85,7 +85,7 @@ export function sanitizeServices(input: unknown): TemplateService[] {
       .map((k: unknown) => clean(k, 40).toLowerCase())
       .filter(Boolean)
       .slice(0, 12);
-    const closingMessage = String(raw?.closingMessage ?? '').replace(/\r/g, '').trim().slice(0, 1200);
+    const closingMessage = String(raw?.closingMessage ?? '').replace(/\r/g, '').trim().slice(0, 3000);
     return { key, title, keywords, questions, closingMessage };
   });
 }
@@ -188,10 +188,24 @@ function bookingBlock(cfg: BotConfig, lead: string): string[] {
   return out;
 }
 
-export function completionMessage(cfg: BotConfig, serviceKey?: string | null): string {
+/**
+ * A closing message can hold parts shown only for some customers: "[if profession ~ nurs|staff nurse]...[/if]" is kept when the
+ * answer to the question called "profession" contains any of the words after "~" (separated by |), and dropped otherwise.
+ */
+export function renderClosing(text: string, answers: Record<string, unknown>): string {
+  return text
+    .replace(/\[if (\w+) ~ ([^\]\n]+)\]([\s\S]*?)\[\/if\]/g, (_m, key: string, words: string, body: string) => {
+      const value = String(answers[key] ?? '').toLowerCase();
+      return words.split('|').some((w) => w.trim() && value.includes(w.trim().toLowerCase())) ? body : '';
+    })
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
+export function completionMessage(cfg: BotConfig, serviceKey?: string | null, answers: Record<string, unknown> = {}): string {
   const { ws } = cfg;
   const own = cfg.services.find((s) => s.key === serviceKey)?.closingMessage.trim();
-  if (own) return own;
+  if (own) return renderClosing(own, answers);
   const parts = [
     'Thank you for sharing your details! 🙌',
     'Our team will review your requirements and guide you regarding the relevant process and next steps.'

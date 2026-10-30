@@ -27,6 +27,8 @@ import {
 const RESET_COMMANDS = ['reset', 'menu', 'restart', 'start'];
 const OPT_OUT_COMMANDS = ['stop', 'unsubscribe', 'stop all'];
 const LANGUAGE_COMMANDS = ['language', 'change language', 'lang', 'भाषा'];
+// The consultation link goes out only when the customer asks for more information, a detailed talk or to book (fee questions are answered, not redirected)
+const MORE_INFO_RE = /\bconsultation\b|\bappointment\b|\bbook(ing)?\b|\bmore\s+(info|information|details)\b|\bmore\b\W*$|know more|tell me more|\bdiscuss\b|\bcounsel(l)?(ing|or)?\b|jaankari|janakari|one[- ]to[- ]one/i;
 const BOOKED_RE = /already\s+booked|i\s+(have\s+)?booked|booking\s+done|booked\s+(a\s+)?(slot|consultation|appointment|call)/i;
 
 // A question mark, or a plain price question typed without one ("DHA fees", "ielts price", "kitna charge")
@@ -235,7 +237,7 @@ export async function handleIncomingMessage(
           })
         ]);
         if (!isCapturing()) void logLeadEvent(newLead.id, workspaceId, 'created', service.title, 'bot');
-        await speak(completionMessage(cfg, service.key));
+        await speak(completionMessage(cfg, service.key, updatedAnswers));
         if (!isCapturing()) {
           void notifyNewLead(workspaceId, session.id);
           void dispatchEvent(workspaceId, 'lead.created', session.id);
@@ -253,7 +255,7 @@ export async function handleIncomingMessage(
         const moved = await markLeadBooked(workspaceId, phoneNumber, session.id, 'customer confirmed', !isCapturing());
         await speak(bookedConfirmationMessage());
         if (!isCapturing() && moved) void notifyBooked(workspaceId, phoneNumber);
-      } else if (hasBooking && /consultation|appointment|book|fee/.test(lower)) {
+      } else if (hasBooking && MORE_INFO_RE.test(lower)) {
         await speak(bookingReminderMessage(cfg));
       } else if (looksLikeQuestion(text) && (await tryAnswer(text))) {
         // answered a genuine question
