@@ -13,12 +13,12 @@ services:
       - traefik.http.services.mnsbot.loadbalancer.server.port=3000
       - traefik.http.middlewares.mnsbot-https.redirectscheme.scheme=https
       # primary domain
-      - traefik.http.routers.mnsbot.rule=Host(`${BOT_DOMAIN}`)
+      - traefik.http.routers.mnsbot.rule=Host(`${BOT_DOMAIN}`) || Host(`${BOT_DOMAIN_WWW:-no-www.invalid}`) || Host(`${BOT_DOMAIN_OLD:-no-old.invalid}`)
       - traefik.http.routers.mnsbot.entrypoints=https
       - traefik.http.routers.mnsbot.tls=true
       - traefik.http.routers.mnsbot.tls.certresolver=letsencrypt
       - traefik.http.routers.mnsbot.service=mnsbot
-      - traefik.http.routers.mnsbot-http.rule=Host(`${BOT_DOMAIN}`)
+      - traefik.http.routers.mnsbot-http.rule=Host(`${BOT_DOMAIN}`) || Host(`${BOT_DOMAIN_WWW:-no-www.invalid}`) || Host(`${BOT_DOMAIN_OLD:-no-old.invalid}`)
       - traefik.http.routers.mnsbot-http.entrypoints=http
       - traefik.http.routers.mnsbot-http.middlewares=mnsbot-https
       - traefik.http.routers.mnsbot-http.service=mnsbot
