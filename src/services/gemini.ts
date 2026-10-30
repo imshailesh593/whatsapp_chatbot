@@ -11,13 +11,16 @@ export function getClient(): GoogleGenAI | null {
 }
 export const geminiModel = () => MODEL;
 
+/** What a language name means for the model; Hinglish is Hindi typed in English letters, the way people text in India. */
+const describeLanguage = (l: string) => (/^hinglish$/i.test(l) ? 'Hinglish (Hindi written in English/Latin letters, the casual way people text in India)' : l);
+
 function systemPrompt(cfg: BotConfig, language?: string | null): string {
   const { ws, services } = cfg;
   const lines = [
     `You are the WhatsApp assistant of ${ws.businessName}${ws.description ? `, ${ws.description}` : ''}.`,
     services.length ? `Services offered: ${services.map((s) => s.title).join('; ')}.` : '',
     'Rules:',
-    `- ${language && !/^english$/i.test(language) ? `Reply in ${language} (the customer chose it).` : /\bonly\b/i.test(ws.languages) ? `Always reply in ${ws.languages.replace(/\s*\bonly\b\s*/i, '').trim() || 'English'}, even if the customer writes in another language. If they need another language, say politely that you can help in ${ws.languages.replace(/\s*\bonly\b\s*/i, '').trim() || 'English'} only.` : `Reply in the same language as the user${ws.languages ? ` (the business usually works in: ${ws.languages})` : ''}.`} Tone: ${ws.tone || 'friendly'}. Keep it under 80 words, plain text, at most one emoji, no markdown headings or tables.`,
+    `- ${language && !/^english$/i.test(language) ? `Reply in ${describeLanguage(language)} (the customer chose it).` : /\bonly\b/i.test(ws.languages) ? `Always reply in ${ws.languages.replace(/\s*\bonly\b\s*/i, '').trim() || 'English'}, even if the customer writes in another language. If they need another language, say politely that you can help in ${ws.languages.replace(/\s*\bonly\b\s*/i, '').trim() || 'English'} only.` : `Reply in the same language as the user${ws.languages ? ` (the business usually works in: ${ws.languages})` : ''}.`} Tone: ${ws.tone || 'friendly'}. Keep it under 80 words, plain text, at most one emoji, no markdown headings or tables.`,
     '- Give general, helpful orientation only. Never quote prices or fees unless they appear in the business notes below, never promise outcomes, and never state exact timelines or legal/eligibility conclusions as certain.',
     ws.bookingUrl
       ? `- For personalised evaluation, pricing or next steps, direct the user to the ${ws.bookingLabel}: ${ws.bookingUrl}${ws.bookingNote ? ` (${ws.bookingNote})` : ''}.`
@@ -69,7 +72,7 @@ export async function translateText(text: string, language: string): Promise<str
       model: MODEL,
       contents: text.slice(0, 3000),
       config: {
-        systemInstruction: `Translate the user's WhatsApp message into ${language.slice(0, 40)}. Keep every number, URL, emoji, line break and *bold* mark exactly as they are, and keep the words MENU, STOP, START, BOOK and LANGUAGE in Latin letters. Do not add or remove anything. Output only the translation.`,
+        systemInstruction: `Translate the user's WhatsApp message into ${describeLanguage(language.slice(0, 40))}. Keep every number, URL, emoji, line break and *bold* mark exactly as they are, and keep the words MENU, STOP, START, BOOK and LANGUAGE in Latin letters. Do not add or remove anything. Output only the translation.`,
         temperature: 0.1,
         maxOutputTokens: 1500,
         thinkingConfig: { thinkingBudget: 0 }

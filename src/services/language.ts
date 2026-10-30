@@ -1,4 +1,4 @@
-import type { BotConfig } from './botConfig';
+import { DEFAULT_LANGUAGE_WELCOME, type BotConfig } from './botConfig';
 import { translateText } from './gemini';
 import { admitAiReply } from './usage';
 
@@ -50,20 +50,60 @@ const LANGUAGE_NAMES: Record<string, string[]> = {
 const LOOKUP = new Map<string, string>();
 for (const [name, aliases] of Object.entries(LANGUAGE_NAMES)) for (const a of [name.toLowerCase(), ...aliases]) LOOKUP.set(a.toLowerCase(), name);
 
-/** Turns what the customer typed ("1", "hindi", "हिन्दी", "Tamil") into a language name, or null when it is not a known language. */
-export function parseLanguage(input: string): string | null {
-  const t = input.trim().toLowerCase().replace(/[.!,]+$/g, '').replace(/^(in|speak|i speak|i want|please|pls)\s+/g, '').trim();
-  if (!t || t.length > 30) return null;
-  if (/^(1|option 1)$/.test(t)) return 'English';
-  if (/^(2|option 2)$/.test(t)) return 'Hindi';
-  return LOOKUP.get(t) ?? null;
+/** How each language is written on the choice list: its own script first, so people recognise it. */
+const LABELS: Record<string, string> = {
+  English: 'English',
+  Hindi: 'हिन्दी (Hindi)',
+  Hinglish: 'Hinglish (Hindi in English letters)',
+  Tamil: 'தமிழ் (Tamil)',
+  Malayalam: 'മലയാളം (Malayalam)',
+  Telugu: 'తెలుగు (Telugu)',
+  Kannada: 'ಕನ್ನಡ (Kannada)',
+  Marathi: 'मराठी (Marathi)',
+  Gujarati: 'ગુજરાતી (Gujarati)',
+  Bengali: 'বাংলা (Bengali)',
+  Punjabi: 'ਪੰਜਾਬੀ (Punjabi)',
+  Urdu: 'اردو (Urdu)'
+};
+const NUM = ['1️⃣', '2️⃣', '3️⃣', '4️⃣', '5️⃣', '6️⃣', '7️⃣', '8️⃣', '9️⃣'];
+
+/** The languages a business offers, from its "languages" setting ("English, Hindi, Hinglish, Tamil, Malayalam"), in that order. At least two, at most nine. */
+export function offeredLanguages(setting: string): string[] {
+  const out: string[] = [];
+  for (const part of setting.split(/[,/&]|\band\b/i)) {
+    const name = LOOKUP.get(part.trim().toLowerCase().replace(/\s*only$/, ''));
+    if (name && !out.includes(name)) out.push(name);
+  }
+  return out.length >= 2 ? out.slice(0, 9) : ['English', 'Hindi'];
 }
 
-export const LANGUAGE_EXAMPLES = 'English, Hindi, Tamil, Telugu, Marathi, Bengali, Arabic, French';
+/** The numbered choice list shown with the language question. */
+export const languageOptionsText = (offered: string[]) => offered.map((l, i) => `${NUM[i]} ${LABELS[l] ?? l}`).join('\n');
 
-/** Sent when the answer to the language question was not a language we recognise. */
-export const languageHintMessage = () =>
-  `Sorry, I did not catch that. Which language would you like to continue in? For example: ${LANGUAGE_EXAMPLES}. Just type the language name.`;
+/**
+ * Turns what the customer typed ("3", "hindi", "हिन्दी", "Tamil") into a language name, or null when it is not one of the
+ * languages offered. With no list, any known language is accepted and 1 and 2 mean English and Hindi.
+ */
+export function parseLanguage(input: string, offered?: string[]): string | null {
+  const t = input.trim().toLowerCase().replace(/[.!,)]+$/g, '').replace(/^(in|speak|i speak|i want|please|pls|option)\s+/g, '').trim();
+  if (!t || t.length > 30) return null;
+  const list = offered ?? ['English', 'Hindi'];
+  const digit = /^([1-9])$/.exec(t);
+  if (digit) return list[Number(digit[1]) - 1] ?? null;
+  const name = LOOKUP.get(t) ?? null;
+  if (!name) return null;
+  return offered && !offered.includes(name) ? null : name;
+}
+
+/** The first message of a workspace that asks the language first: the greeting, then the numbered choices. */
+export function languagePrompt(cfg: BotConfig): string {
+  const greeting = cfg.ws.languageWelcome.trim() || DEFAULT_LANGUAGE_WELCOME;
+  return `${greeting}\n\n${languageOptionsText(offeredLanguages(cfg.ws.languages))}\n\nPlease reply with the number, or type the language name.`;
+}
+
+/** Sent when the answer to the language question was not one of the languages offered. */
+export const languageHintMessage = (cfg: BotConfig) =>
+  `Sorry, I did not catch that. Please choose your language:\n\n${languageOptionsText(offeredLanguages(cfg.ws.languages))}\n\nReply with the number, or type the language name.`;
 
 /** After two misses the chat carries on in English instead of getting stuck. */
 export const languageFallbackMessage = () => 'No problem, we will continue in English. Type *LANGUAGE* at any time to change it.';

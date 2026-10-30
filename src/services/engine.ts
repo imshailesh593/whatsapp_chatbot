@@ -8,14 +8,13 @@ import { notifyBooked, notifyNewLead } from './alerts';
 import { dispatchEvent } from './integrations';
 import { logLeadEvent } from './crm';
 import { startHandoff, wantsHuman } from './handoff';
-import { languageFallbackMessage, languageHintMessage, localize, parseLanguage } from './language';
+import { languageFallbackMessage, languageHintMessage, languagePrompt, localize, offeredLanguages, parseLanguage } from './language';
 import { calendarConnected, handleBookingMessage, markLeadBooked } from './calendar';
 import {
   loadConfig,
   resolveService,
   welcomeMessage,
   menuOnlyMessage,
-  languagePromptMessage,
   menuPrompt,
   invalidSelectionMessage,
   completionMessage,
@@ -94,7 +93,7 @@ export async function handleIncomingMessage(
   const entry = async () => {
     if (cfg.ws.languageStep && !session!.language) {
       await prisma.session.update({ where: key, data: { stage: SessionStage.AWAITING_LANGUAGE } });
-      await send(phoneNumber, languagePromptMessage(cfg));
+      await send(phoneNumber, languagePrompt(cfg));
     } else if (cfg.ws.languageStep) {
       await speak(menuOnlyMessage(cfg));
     } else {
@@ -119,7 +118,7 @@ export async function handleIncomingMessage(
   if (cfg.ws.languageStep && LANGUAGE_COMMANDS.includes(lower)) {
     await prisma.session.update({ where: key, data: { stage: SessionStage.AWAITING_LANGUAGE, language: null, selectedService: null, currentStep: 0, answers: {} } });
     session.language = null;
-    await send(phoneNumber, languagePromptMessage(cfg));
+    await send(phoneNumber, languagePrompt(cfg));
     return;
   }
 
@@ -148,12 +147,12 @@ export async function handleIncomingMessage(
         await send(phoneNumber, welcomeMessage(cfg));
         break;
       }
-      const parsed = parseLanguage(text);
+      const parsed = parseLanguage(text, offeredLanguages(cfg.ws.languages));
       // A reply that is not a language ("Hy", "hello", a question) gets one hint; a second miss carries on in English
       const misses = Number((session.answers as Record<string, unknown> | null)?._lang_misses ?? 0);
       if (!parsed && misses < 1) {
         await prisma.session.update({ where: key, data: { answers: { _lang_misses: misses + 1 } } });
-        await send(phoneNumber, languageHintMessage());
+        await send(phoneNumber, languageHintMessage(cfg));
         return;
       }
       const language = parsed ?? 'English';
