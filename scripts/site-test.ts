@@ -9,7 +9,7 @@ delete process.env.SIGNUP_ENABLED;
 process.env.PUBLIC_URL = 'https://site.example/';
 import Fastify from 'fastify';
 import { registerSite } from '../src/site';
-import { PLANS, TRIAL_DAYS } from '../src/plans';
+import { PLANS } from '../src/plans';
 
 const ok = (c: any, m: string) => { if (!c) throw new Error('FAIL: ' + m); console.log('  ok -', m); };
 
@@ -45,13 +45,13 @@ const ok = (c: any, m: string) => { if (!c) throw new Error('FAIL: ' + m); conso
   const l = html['/'];
   ok(/<h1>[^<]*WhatsApp[^<]*<\/h1>/.test(l), 'a clear headline about WhatsApp leads');
   for (const p of PLANS) ok(l.includes(p.name) && l.includes('₹' + (p.price.INR / 100).toLocaleString('en-IN')) && l.includes('$' + p.price.USD / 100), `pricing shows ${p.name} in rupees and dollars`);
-  ok(l.includes(`${TRIAL_DAYS}-day free trial`), 'the free trial is stated');
+  ok(!/free trial/i.test(l), 'there is no free trial on the landing page');
   for (const f of ['Capture and qualify', 'Answer and hand over', 'Book and follow up', 'Manage your leads (CRM)', 'Grow and measure', 'Connect your tools']) ok(l.includes(f), `feature group "${f}" is listed`);
   for (const w of ['Google Calendar', 'Broadcasts', 'Webhooks', 'REST API', 'simulator', 'Analytics', 'real person']) ok(l.toLowerCase().includes(w.toLowerCase()), `the page mentions ${w}`);
   ok((l.match(/<details>/g) ?? []).length >= 8, 'an FAQ with at least eight questions');
   ok(l.includes('not the official WhatsApp Business API') && l.includes('can limit or ban numbers'), 'it is honest that this is not the official API and numbers can be restricted');
   ok(l.includes('not affiliated with, endorsed by or sponsored by WhatsApp'), 'the non-affiliation notice is in the footer');
-  ok(l.includes('Start your 14-day free trial'), 'sign-up open: the main button offers the free trial');
+  ok(l.includes('Get started') && !/free trial/i.test(l), 'sign-up open: the main button says Get started');
   ok(!/\bMNS\b|Topmate|Samir/.test(l), 'no leftover content from the original single business');
 
   console.log('\n[policies]');
@@ -59,10 +59,10 @@ const ok = (c: any, m: string) => { if (!c) throw new Error('FAIL: ' + m); conso
   ok(['Digital Personal Data Protection', 'grievance officer', 'Razorpay', 'Stripe', 'Gemini', 'Google API Services User Data Policy', 'processor', 'Your rights'].every((k) => pv.includes(k)), 'privacy policy covers the legal basics, providers, Google data and rights');
   ok(pv.includes('data fiduciary') && pv.includes('Cookies'), '...roles and cookies');
   const tm = html['/terms'];
-  ok(['Acceptable use', 'Linked devices', 'AI-generated content', 'Limit of liability', 'Governing law', 'Indemnity', 'Plans, free trial and payment'].every((k) => tm.includes(k)), 'terms cover use, WhatsApp risk, AI, liability, law and billing');
+  ok(['Acceptable use', 'Linked devices', 'AI-generated content', 'Limit of liability', 'Governing law', 'Indemnity', 'Plans and payment'].every((k) => tm.includes(k)), 'terms cover use, WhatsApp risk, AI, liability, law and billing');
   ok(tm.includes('laws of India') && tm.includes('the operator&#39;s place of residence in India'), 'governing law is India (jurisdiction placeholder is generic until set)');
   const rf = html['/refunds'];
-  ok(['7 days', '5 to 7 working days', 'Cancel subscription', 'Duplicate or wrong charges', 'not refundable', 'Free trial'].every((k) => rf.includes(k)), 'refund policy states the window, timeline, cancellation steps and exclusions');
+  ok(['7 days', '5 to 7 working days', 'Cancel subscription', 'Duplicate or wrong charges', 'not refundable', 'How billing works'].every((k) => rf.includes(k)) && !/free trial/i.test(rf), 'refund policy states the window, timeline, cancellation steps and exclusions');
   ok(pv.includes('Operator:') && html['/contact'].includes('Operator:') && rf.includes('Operator:'), 'contact details block (operator name) appears on the policies');
   ok(!html['/contact'].includes('mailto:'), 'with no email configured, no empty mailto link is shown');
 
@@ -74,7 +74,7 @@ const ok = (c: any, m: string) => { if (!c) throw new Error('FAIL: ' + m); conso
   ok(ab.includes('operated by <strong>Rajni</strong>') && ab.includes('not affiliated with WhatsApp or Meta') && ab.includes('Operator:'), 'the about page says what the service is and who runs it');
   const pr = html['/pricing'];
   ok(PLANS.every((p) => pr.includes('₹' + (p.price.INR / 100).toLocaleString('en-IN')) && pr.includes('$' + p.price.USD / 100)), 'the pricing page shows the plan in rupees and in dollars');
-  ok(pr.includes('Taxes') && pr.includes('renews every month') && pr.includes(`${TRIAL_DAYS}-day free trial`) && pr.includes('href="/refunds"') && pr.includes('href="/shipping"'), '...with billing terms, the free trial and links to refunds and delivery');
+  ok(pr.includes('Taxes') && pr.includes('renews every month') && !/free trial/i.test(pr) && pr.includes('href="/refunds"') && pr.includes('href="/shipping"'), '...with billing terms, the free trial and links to refunds and delivery');
 
   console.log('\n[prices follow the visitor\'s country]');
   const visit = (url: string, headers: Record<string, string> = {}) => app.inject({ method: 'GET', url, headers: { accept: 'text/html', ...headers } });

@@ -4,7 +4,7 @@ import { deliverAlert } from './alerts';
 import type { Workspace } from '@prisma/client';
 import { prisma } from '../lib/prisma';
 import { invalidateConfig } from './botConfig';
-import { PLANS, planById, TRIAL_DAYS } from '../plans';
+import { PLANS, planById } from '../plans';
 import { PRODUCT_NAME } from '../brand';
 import { cancelPaypalSubscription, createSubscription, getSubscription, paypalKeys, paypalPlanEnv, planFromPaypal, verifyPaypalWebhook } from './paypal';
 
@@ -164,7 +164,7 @@ export async function applySubscription(workspaceId: string, s: SubState): Promi
   await prisma.workspace.update({
     where: { id: workspaceId },
     data: {
-      plan: s.plan && planById(s.plan) ? s.plan : ws.plan === 'trial' ? 'pro' : ws.plan,
+      plan: s.plan && planById(s.plan) ? s.plan : ws.plan,
       planStatus: s.status,
       currentPeriodEnd: s.periodEnd === undefined ? ws.currentPeriodEnd : s.periodEnd,
       cancelAtPeriodEnd: s.cancelAtPeriodEnd ?? ws.cancelAtPeriodEnd,
@@ -443,4 +443,3 @@ export function startRenewalWorker(): { stop(): void } {
   return { stop: () => clearInterval(t) };
 }
 
-export const trialEndDate = (from = new Date()) => new Date(from.getTime() + TRIAL_DAYS * 86_400_000);

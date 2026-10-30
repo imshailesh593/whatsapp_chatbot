@@ -36,7 +36,7 @@ export default function ReferAndEarn({ me }: { me: AdminUser }) {
     <div className={card}>
       <h3 className="font-bold text-white text-base flex items-center space-x-2"><Gift className="w-4 h-4 text-emerald-400" /><span>Refer &amp; earn</span></h3>
       <p className="text-[11px] text-slate-500 mt-1">
-        Share your link. Every business that signs up through it gets {r.bonusDays} extra free trial days, and you earn {r.percent}% of what it pays for its first {r.months} payments.
+        Share your link. When a business signs up through it, you earn {r.percent}% of what it pays for its first {r.months} payments.
       </p>
       <div className="mt-3 flex items-center gap-2">
         <input readOnly value={r.link} onFocus={(e) => e.currentTarget.select()} className="flex-1 min-w-0 bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-200" />

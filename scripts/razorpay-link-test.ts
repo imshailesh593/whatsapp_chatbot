@@ -80,7 +80,7 @@ async function cleanup() {
   ok(created.body.notes.workspaceId === wsId && created.body.notes.plan === 'pro', 'the business and plan travel with the link');
   ok(created.body.reference_id.length <= 40 && created.body.notify.email === false && created.body.reminder_enable === false, 'reference id fits Razorpay limits and Razorpay sends nothing itself');
   ok(created.body.callback_url === 'https://bot.example/admin/?billing=success', 'the customer returns to the dashboard afterwards');
-  ok((await prisma.workspace.findUnique({ where: { id: wsId } }))!.plan === 'trial', 'creating a link changes nothing until it is paid');
+  ok((await prisma.workspace.findUnique({ where: { id: wsId } }))!.planStatus === 'inactive', 'creating a link changes nothing until it is paid');
   r = await call(hO, 'GET', '/admin/api/billing');
   ok(r.json().providers.razorpay === true, 'the dashboard offers the rupee payment');
 
@@ -96,7 +96,7 @@ async function cleanup() {
   const row = () => prisma.workspace.findUniqueOrThrow({ where: { id: wsId } });
 
   ok((await hook('rzl_bad', 'payment_link.paid', paid('pay_x', 'pro', 49_900), 'wrong')).statusCode === 400, 'a webhook with a bad signature is rejected');
-  ok((await row()).plan === 'trial', '...and changes nothing');
+  ok((await row()).planStatus === 'inactive', '...and changes nothing');
   ok((await hook('rzl_1', 'payment_link.paid', paid('pay_1', 'pro', 49_900))).statusCode === 200, 'a paid link is accepted');
   let w = await row();
   ok(w.plan === 'pro' && w.planStatus === 'active' && w.billingProvider === 'razorpay_link' && w.providerSubscriptionId === null, 'the plan is switched on, paid by link');
@@ -159,7 +159,7 @@ async function cleanup() {
   await setSetting('affiliate', {});
 
   console.log('\n[redeem codes next to link payments]');
-  await prisma.coupon.create({ data: { code: 'RZLINK01', plan: 'trial', days: 5, note: 'rzl' } });
+  await prisma.coupon.create({ data: { code: 'RZLINK01', plan: 'pro', days: 5, note: 'rzl' } });
   r = await call(hO, 'POST', '/admin/api/billing/redeem', { code: 'RZLINK01' });
   ok(r.statusCode === 400 && /active plan/.test(r.json().error) && (await row()).plan === 'pro', 'a code cannot overwrite a plan that is running');
   await prisma.workspace.update({ where: { id: wsId }, data: { currentPeriodEnd: new Date(Date.now() - DAY) } });

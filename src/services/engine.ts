@@ -74,7 +74,7 @@ export async function handleIncomingMessage(
   // 1. Fetch or create session
   let session = await prisma.session.findUnique({ where: key });
   if (!session) {
-    // Trial over / subscription lapsed, or this month's conversation allowance is used: do not start new chats
+    // Not paid yet / subscription lapsed, or this month's conversation allowance is used: do not start new chats
     if (!isCapturing() && (!accessState(cfg.ws).active || !(await admitConversation(cfg.ws)))) return;
     // A click-to-chat link can carry a campaign tag: "... (ref: summer24)"
     const source = /\(ref:\s*([A-Za-z0-9_-]{1,30})\)/i.exec(text)?.[1]?.toLowerCase() ?? null;

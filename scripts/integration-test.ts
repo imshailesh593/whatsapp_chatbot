@@ -130,7 +130,7 @@ async function main() {
     let last = 200;
     for (let i = 0; i < 62; i++) last = (await app.inject({ url: '/api/v1/stages', headers: H })).statusCode;
     assert(last === 429, 'rate limited to 60 requests a minute');
-    await prisma.workspace.update({ where: { id: W.id }, data: { trialEndsAt: null, planStatus: 'canceled', currentPeriodEnd: new Date(Date.now() - 86_400_000) } });
+    await prisma.workspace.update({ where: { id: W.id }, data: { planStatus: 'canceled', currentPeriodEnd: new Date(Date.now() - 86_400_000) } });
     invalidateConfig(W.id);
     await new Promise((r) => setTimeout(r, 1));
     console.log('\nINTEGRATION TESTS PASSED');

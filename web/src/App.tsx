@@ -79,14 +79,14 @@ function CheckoutPage({ user, onSkip, onSignOut }: { user: AdminUser; onSkip: ()
           <Logo size={36} />
           <div>
             <h1 className="text-xl font-extrabold text-white">Choose your plan</h1>
-            <p className="text-xs text-slate-400 mt-1">Pay now to switch on your plan, or start your free trial and pay later from Plan &amp; billing.</p>
+            <p className="text-xs text-slate-400 mt-1">Choose your plan and pay to switch your bot on. You can set everything up first, but the bot stays off until you subscribe.</p>
           </div>
           </div>
           <button onClick={onSignOut} className="text-xs text-slate-400 hover:text-slate-200">Sign out</button>
         </div>
         <Billing me={user} />
         <div className="mt-4 text-center">
-          <button onClick={onSkip} className="px-4 py-2 text-sm text-emerald-300 hover:text-emerald-200 border border-slate-700 rounded-lg">Start my free trial first</button>
+          <button onClick={onSkip} className="px-4 py-2 text-sm text-emerald-300 hover:text-emerald-200 border border-slate-700 rounded-lg">Set up my account first</button>
         </div>
       </div>
     </div>
@@ -96,7 +96,6 @@ function CheckoutPage({ user, onSkip, onSignOut }: { user: AdminUser; onSkip: ()
 /** Every button in the top bar: same height, border, text size and hover. */
 const topBtn = 'hidden md:inline-flex items-center gap-2 h-9 px-3 rounded-lg border border-slate-800 bg-slate-900/80 text-slate-300 hover:border-slate-600 hover:text-white transition whitespace-nowrap';
 
-const daysLeft = (iso: string | null) => (iso ? Math.max(0, Math.ceil((new Date(iso).getTime() - Date.now()) / 86_400_000)) : 0);
 
 function Console({ user, onSignedOut, onPlatform }: { user: AdminUser; onSignedOut: () => void; onPlatform?: () => void }) {
   const [tab, setTab] = useState<Tab>('crm');
@@ -231,14 +230,14 @@ function Console({ user, onSignedOut, onPlatform }: { user: AdminUser; onSignedO
           </div>
         )}
 
-        {billing && billing.plan !== 'internal' && (!billing.active || billing.status === 'past_due' || (billing.status === 'trialing' && daysLeft(billing.trialEndsAt) <= 3)) && (
+        {billing && billing.plan !== 'internal' && (!billing.active || billing.status === 'past_due') && (
           <div className={`mb-4 p-3 rounded-lg border text-xs flex flex-wrap items-center justify-between gap-2 ${billing.active ? 'bg-amber-950/40 border-amber-800/60 text-amber-200' : 'bg-rose-950/50 border-rose-800/60 text-rose-200'}`}>
             <span>
               {!billing.active
-                ? 'Your bot has stopped replying to new customers: ' + (billing.reason === 'trial_expired' ? 'the free trial has ended.' : 'the subscription has ended.')
+                ? 'Your bot has stopped replying to new customers: ' + (billing.reason === 'unpaid' ? 'choose a plan to switch it on.' : 'the subscription has ended.')
                 : billing.status === 'past_due'
                   ? 'Your last payment failed. Update your payment method to keep the bot running.'
-                  : `Your free trial ends in ${daysLeft(billing.trialEndsAt)} day(s).`}
+                  : ''}
             </span>
             {!isAgent && <button onClick={() => setTab('config')} className="font-semibold underline">Choose a plan</button>}
           </div>

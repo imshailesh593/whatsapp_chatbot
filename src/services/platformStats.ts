@@ -32,7 +32,7 @@ export async function platformDashboard(period: number) {
   yearAgo.setUTCMonth(yearAgo.getUTCMonth() - 11);
 
   const [workspaces, users, newUsers, payments, sessions, convPeriod, messages, contacts] = await Promise.all([
-    prisma.workspace.findMany({ select: { id: true, plan: true, planStatus: true, trialEndsAt: true, currentPeriodEnd: true, createdAt: true } }),
+    prisma.workspace.findMany({ select: { id: true, plan: true, planStatus: true, currentPeriodEnd: true, createdAt: true } }),
     prisma.adminUser.count(),
     prisma.adminUser.count({ where: { createdAt: { gte: since } } }),
     prisma.payment.findMany({ where: { createdAt: { gte: yearAgo }, status: 'paid' }, select: { amount: true, currency: true, createdAt: true } }),
@@ -88,7 +88,6 @@ export async function platformDashboard(period: number) {
       paymentsThisMonth,
       otherCurrencies,
       activeSubscriptions: paid.length,
-      trialing: workspaces.filter((w) => w.planStatus === 'trialing' && accessState(w).active).length,
       totalClients: workspaces.length,
       newClients,
       newClientsChange: pctChange(newClients, prevNewClients),

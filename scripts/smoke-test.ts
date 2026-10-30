@@ -124,11 +124,11 @@ async function cleanup() {
   await gs.type('#password', 'visitor password 1');
   await click(gs, 'form button', 'Create account');
   await waitText(gs, 'Choose your plan');
-  ok((await text(gs)).includes('Start my free trial first'), 'after signing up the owner lands on the payment page first');
+  ok((await text(gs)).includes('Set up my account first'), 'after signing up the owner lands on the payment page first');
   await shot(gs, 'gs-1-choose-plan');
-  await click(gs, 'button', 'Start my free trial first');
+  await click(gs, 'button', 'Set up my account first');
   await waitText(gs, 'Pick a starting point');
-  ok(true, 'choosing the free trial continues to set-up');
+  ok(true, 'continuing from the payment page goes to set-up');
 
   // ============ business owner ============
   console.log('\n[business owner]');

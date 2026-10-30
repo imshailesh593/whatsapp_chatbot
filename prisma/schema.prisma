@@ -55,11 +55,10 @@ model Workspace {
   /// Workspace that referred this one (plain text so deleting a referrer does not touch the referred)
   referredById           String?   @map("referred_by_id")
   payoutDetails          String    @default("") @map("payout_details")
-  /// trial | starter | growth | scale | internal (unlimited, for the operator's own business)
-  plan                   String    @default("trial")
-  /// trialing | active | past_due | canceled
-  planStatus             String    @default("trialing") @map("plan_status")
-  trialEndsAt            DateTime? @map("trial_ends_at")
+  /// pro | internal (unlimited, for the operator's own business); older starter / growth / scale count as pro
+  plan                   String    @default("pro")
+  /// inactive (not paid yet) | active | past_due | canceled
+  planStatus             String    @default("inactive") @map("plan_status")
   currentPeriodEnd       DateTime? @map("current_period_end")
   cancelAtPeriodEnd      Boolean   @default(false) @map("cancel_at_period_end")
   billingProvider        String?   @map("billing_provider")
@@ -397,7 +396,7 @@ model Setting {
   @@map("saas_settings")
 }
 
-/// Redeem code: gives a business a plan (or a longer trial) for N days without a payment
+/// Redeem code: gives a business a plan for N days without a payment
 model Coupon {
   id             String    @id @default(uuid())
   code           String    @unique

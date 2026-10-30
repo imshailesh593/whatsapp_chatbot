@@ -196,8 +196,8 @@ async function cleanup() {
 
   // ---- billing ----
   r = await call(hA, 'GET', '/admin/api/billing');
-  ok(r.json().plan === 'trial' && r.json().status === 'trialing' && r.json().active && r.json().limits.conversations === 1500 && r.json().providers.stripe === false, 'billing: new workspace is on a 14-day trial with Growth limits, no providers configured');
-  ok(r.json().plans.length === 1 && !!r.json().trialEndsAt, 'billing: plans and trial end listed');
+  ok(r.json().plan === 'pro' && r.json().status === 'inactive' && !r.json().active && r.json().reason === 'unpaid' && r.json().limits.conversations === 1500 && r.json().providers.stripe === false, 'billing: a new workspace has no free trial: it must subscribe first, no providers configured');
+  ok(r.json().plans.length === 1 && r.json().trialEndsAt === undefined, 'billing: the plan is listed and there is no trial');
   ok(r.json().currency === 'USD', 'billing: an owner whose country is unknown is shown dollars');
   ok((await call({ ...hA, 'x-real-ip': '49.36.1.1' }, 'GET', '/admin/api/billing')).json().currency === 'INR', 'billing: an owner in India is shown rupees');
   ok((await call({ ...hA, 'x-real-ip': '8.8.8.8' }, 'GET', '/admin/api/billing')).json().currency === 'USD', 'billing: an owner abroad is shown dollars');
@@ -348,7 +348,7 @@ async function cleanup() {
   ok((await call(hA, 'POST', '/admin/api/billing/redeem', { code: 'NOPE1234' })).statusCode === 400, 'unknown code is refused');
   const subscribed = (await prisma.workspace.findUnique({ where: { id: wsA } }))!.providerSubscriptionId;
   if (subscribed) ok((await call(hA, 'POST', '/admin/api/billing/redeem', { code })).statusCode === 400, 'a business with a paid subscription cannot redeem a code');
-  await prisma.workspace.updateMany({ where: { id: { in: [wsA, wsB] } }, data: { plan: 'trial', planStatus: 'trialing', trialEndsAt: new Date(Date.now() + 14 * 86_400_000), providerSubscriptionId: null, billingProvider: null } });
+  await prisma.workspace.updateMany({ where: { id: { in: [wsA, wsB] } }, data: { plan: 'pro', planStatus: 'inactive', providerSubscriptionId: null, billingProvider: null } });
   r = await call(hA, 'POST', '/admin/api/billing/redeem', { code: code.toLowerCase() });
   ok(r.statusCode === 200 && r.json().plan === 'growth', 'a business redeems a code (case-insensitive)');
   r = await call(hA, 'GET', '/admin/api/billing');
@@ -358,11 +358,7 @@ async function cleanup() {
   r = await call(hRoot, 'GET', '/admin/api/super/coupons');
   const row = r.json().coupons.find((c: any) => c.code === code);
   ok(row.redeemed === 1, 'redemption count is tracked');
-  const trial = (await call(hRoot, 'POST', '/admin/api/super/coupons', { plan: 'trial', days: 10 })).json().code as string;
-  const trialBefore = new Date((await call(hB, 'GET', '/admin/api/billing')).json().trialEndsAt).getTime();
-  await call(hB, 'POST', '/admin/api/billing/redeem', { code: trial });
-  const trialAfter = new Date((await call(hB, 'GET', '/admin/api/billing')).json().trialEndsAt).getTime();
-  ok(Math.abs(trialAfter - trialBefore - 10 * 86_400_000) < 5 * 60_000, 'a trial code adds days to what is left of the trial');
+  ok((await call(hRoot, 'POST', '/admin/api/super/coupons', { plan: 'trial', days: 10 })).statusCode === 400, 'there is no trial code any more');
   const off = (await call(hRoot, 'POST', '/admin/api/super/coupons', { plan: 'starter', days: 5 })).json().code as string;
   const offId = (await call(hRoot, 'GET', '/admin/api/super/coupons')).json().coupons.find((c: any) => c.code === off).id;
   await call(hRoot, 'POST', `/admin/api/super/coupons/${offId}/active`, { active: false });
@@ -403,16 +399,16 @@ async function cleanup() {
   ok((await prisma.workspace.findUnique({ where: { id: r.json().user.workspace.id } }))!.referredById === null, 'while the programme is off, referral links are ignored');
   ok((await call(hA, 'PUT', '/admin/api/super/affiliates/settings', { enabled: true })).statusCode === 403, 'a business cannot change the programme');
   ok((await call(hRoot, 'PUT', '/admin/api/super/affiliates/settings', { percent: 95 })).statusCode === 400 && (await call(hRoot, 'PUT', '/admin/api/super/affiliates/settings', { months: 0 })).statusCode === 400, 'out-of-range programme settings are refused');
-  r = await call(hRoot, 'PUT', '/admin/api/super/affiliates/settings', { enabled: true, percent: 20, months: 3, bonusDays: 5 });
+  r = await call(hRoot, 'PUT', '/admin/api/super/affiliates/settings', { enabled: true, percent: 20, months: 3 });
   ok(r.statusCode === 200 && r.json().enabled && r.json().percent === 20, 'the operator switches the programme on');
   r = await call(J, 'POST', '/admin/api/signup', { businessName: 'Referred Co', email: `ref1${DOMAIN}`, password: 'referred owner password', ref: refCode.toLowerCase() });
   const wsR = r.json().user.workspace.id as string;
   const refRow = (await prisma.workspace.findUnique({ where: { id: wsR } }))!;
   ok(refRow.referredById === wsA, 'signing up through the link records who referred the business (case-insensitive)');
-  ok(Math.abs(refRow.trialEndsAt!.getTime() - (Date.now() + 19 * 86_400_000)) < 3_600_000, 'the new business gets the bonus trial days on top of the normal trial');
+  ok(refRow.planStatus === 'inactive' && refRow.plan === 'pro', 'a referred business gets no free days: it pays first like everyone else');
   r = await call(J, 'POST', '/admin/api/signup', { businessName: 'Bogus Ref', email: `ref2${DOMAIN}`, password: 'bogus owner password', ref: 'ZZZZZZZ' });
   const bogus = (await prisma.workspace.findUnique({ where: { id: r.json().user.workspace.id } }))!;
-  ok(r.statusCode === 200 && bogus.referredById === null && Math.abs(bogus.trialEndsAt!.getTime() - (Date.now() + 14 * 86_400_000)) < 3_600_000, 'an unknown code does not block sign-up and gives no bonus');
+  ok(r.statusCode === 200 && bogus.referredById === null, 'an unknown code does not block sign-up');
 
   const pay = async (amount: number, ref: string, status = 'paid', workspaceId = wsR) => {
     const p = await prisma.payment.create({ data: { workspaceId, provider: 'stripe', providerRef: ref, plan: 'growth', amount, currency: 'INR', status } });

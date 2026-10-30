@@ -130,7 +130,7 @@ async function cleanup() {
   ok(sub.body.plan_id === process.env.RAZORPAY_PLAN_PRO && sub.body.total_count >= 12 && sub.body.notes.workspaceId === wsId && sub.body.notes.plan === 'pro', 'the subscription uses the Pro plan and carries the business id');
   const subId = (await row()).providerSubscriptionId!;
   ok(/^sub_fake\d$/.test(subId) && (await row()).billingProvider === 'razorpay', 'the pending subscription is remembered');
-  ok((await row()).plan === 'trial', 'nothing is switched on until Razorpay confirms payment');
+  ok((await row()).planStatus === 'inactive', 'nothing is switched on until Razorpay confirms payment');
 
   console.log('\n[webhooks]');
   const hook = (id: string, event: string, payload: any, secret = 'whsec_sub') => {
@@ -143,7 +143,7 @@ async function cleanup() {
     payment: { entity: { id: 'pay_s1', amount: 49_900, currency: 'INR' } }
   });
   ok((await hook('rzs_bad', 'subscription.activated', body(end1), 'wrong')).statusCode === 400, 'a webhook with a bad signature is rejected');
-  ok((await row()).plan === 'trial', '...and changes nothing');
+  ok((await row()).planStatus === 'inactive', '...and changes nothing');
   ok((await hook('rzs_1', 'subscription.activated', body(end1))).statusCode === 200, 'subscription.activated is accepted');
   let w = await row();
   ok(w.plan === 'pro' && w.planStatus === 'active' && w.billingProvider === 'razorpay' && accessState(w).active, 'the plan is switched on');

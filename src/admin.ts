@@ -318,7 +318,7 @@ export function registerAdmin(app: FastifyInstance, opts: { getQr: (workspaceId:
     if (await prisma.adminUser.findUnique({ where: { email } })) return reply.status(409).send({ error: 'An account with this email already exists. Sign in instead.' });
     bump(signups, `ip:${ip}`, 60 * 60_000);
     const referredById = await referrerFor(b.ref);
-    const ws = await createWorkspaceWithOwner({ businessName, email, password, referredById, bonusTrialDays: (await getAffiliateSettings()).bonusDays });
+    const ws = await createWorkspaceWithOwner({ businessName, email, password, referredById });
     const owner = ws.adminUsers[0];
     setSession(req, reply, owner.id);
     return { ok: true, user: await meView({ id: owner.id, email, workspaceId: ws.id, role: 'owner', isSuperAdmin: false }) };
@@ -492,11 +492,10 @@ export function registerAdmin(app: FastifyInstance, opts: { getQr: (workspaceId:
     ]);
     return {
       plan: w.plan,
-      planName: planById(w.plan)?.name ?? (w.plan === 'internal' ? 'Internal' : 'Free trial'),
+      planName: planById(w.plan)?.name ?? (w.plan === 'internal' ? 'Internal' : 'No plan yet'),
       status: w.planStatus,
       active: access.active,
       reason: access.reason,
-      trialEndsAt: w.trialEndsAt?.toISOString() ?? null,
       currentPeriodEnd: w.currentPeriodEnd?.toISOString() ?? null,
       cancelAtPeriodEnd: w.cancelAtPeriodEnd,
       provider: w.billingProvider,
@@ -1080,7 +1079,7 @@ export function registerAdmin(app: FastifyInstance, opts: { getQr: (workspaceId:
   app.get('/admin/api/super/plans', { preHandler: superOnly }, async () => {
     const counts = await prisma.workspace.groupBy({ by: ['plan'], _count: { _all: true } });
     const n = new Map(counts.map((c) => [c.plan, c._count._all]));
-    return { plans: PLANS.map((p) => ({ id: p.id, name: p.name, price: p.price, limits: p.limits, integrations: p.integrations, clients: n.get(p.id) ?? 0 })), trial: n.get('trial') ?? 0, internal: n.get('internal') ?? 0 };
+    return { plans: PLANS.map((p) => ({ id: p.id, name: p.name, price: p.price, limits: p.limits, integrations: p.integrations, clients: n.get(p.id) ?? 0 })), internal: n.get('internal') ?? 0 };
   });
 
   const platformSettings = async () => ({ platformSender: await getSetting<boolean>('platformSender', false), ...(await connectionSlots()), ...serverMemory() });
@@ -1105,7 +1104,6 @@ export function registerAdmin(app: FastifyInstance, opts: { getQr: (workspaceId:
     return {
       businesses: rows.length,
       paying: paid.length,
-      trialing: rows.filter((w) => w.planStatus === 'trialing' && accessState(w).active).length,
       lapsed: rows.filter((w) => w.plan !== 'internal' && !accessState(w).active).length,
       whatsappConnected: rows.filter((w) => waFor(w.id).status === 'ready').length,
       leads: await prisma.lead.count(),
@@ -1137,7 +1135,6 @@ export function registerAdmin(app: FastifyInstance, opts: { getQr: (workspaceId:
         plan: w.plan,
         planStatus: w.planStatus,
         planAccess: accessState(w).reason,
-        trialEndsAt: w.trialEndsAt?.toISOString() ?? null,
         currentPeriodEnd: w.currentPeriodEnd?.toISOString() ?? null,
         onboardingCompleted: w.onboardingCompleted,
         leads: w._count.leads,
@@ -1160,11 +1157,11 @@ export function registerAdmin(app: FastifyInstance, opts: { getQr: (workspaceId:
     if (password.length < MIN_PASSWORD_LENGTH) return reply.status(400).send({ error: `Password must be at least ${MIN_PASSWORD_LENGTH} characters` });
     if (await prisma.adminUser.findUnique({ where: { email } })) return reply.status(409).send({ error: 'That email already has an account' });
     const ws = await createWorkspaceWithOwner({ businessName, email, password });
-    if (b.plan && b.plan !== 'trial') {
+    if (b.plan) {
       const err = await grantPlan(ws.id, String(b.plan), b.days);
       if (err) return reply.status(400).send({ error: err });
     }
-    await audit(req, 'workspace.create', ws.id, `${businessName} (${email}) on ${b.plan || 'trial'}`);
+    await audit(req, 'workspace.create', ws.id, `${businessName} (${email}) on ${b.plan || 'no plan'}`);
     return { id: ws.id };
   });
 
@@ -1184,7 +1181,6 @@ export function registerAdmin(app: FastifyInstance, opts: { getQr: (workspaceId:
       plan: w.plan,
       planStatus: w.planStatus,
       billingProvider: w.billingProvider,
-      trialEndsAt: w.trialEndsAt?.toISOString() ?? null,
       currentPeriodEnd: w.currentPeriodEnd?.toISOString() ?? null,
       limits: { conversations: lim.conversations === Infinity ? null : lim.conversations, aiReplies: lim.aiReplies === Infinity ? null : lim.aiReplies, broadcasts: lim.broadcasts === Infinity ? null : lim.broadcasts },
       usage,
@@ -1295,7 +1291,7 @@ export function registerAdmin(app: FastifyInstance, opts: { getQr: (workspaceId:
   app.put('/admin/api/super/affiliates/settings', { preHandler: superOnly }, async (req, reply) => {
     try {
       const s = await saveAffiliateSettings((req.body ?? {}) as Record<string, unknown>);
-      await audit(req, 'affiliate.settings', null, `${s.enabled ? 'on' : 'off'} · ${s.percent}% · ${s.months} payments · +${s.bonusDays} days`);
+      await audit(req, 'affiliate.settings', null, `${s.enabled ? 'on' : 'off'} · ${s.percent}% · ${s.months} payments`);
       return s;
     } catch (err) {
       return reply.status(400).send({ error: (err as Error).message });

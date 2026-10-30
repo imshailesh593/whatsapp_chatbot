@@ -1,6 +1,6 @@
 import type { FastifyInstance, FastifyReply } from 'fastify';
 import { PRODUCT_NAME } from './brand';
-import { PLANS, TRIAL_DAYS, GRACE_DAYS } from './plans';
+import { PLANS, GRACE_DAYS } from './plans';
 import { detectRegion, type Region } from './lib/geo';
 
 /**
@@ -160,7 +160,7 @@ ${canon}
 <a class="logo" href="/"><img src="/admin/wappo-icon.png" alt="${name} logo" width="32" height="32">${name}</a>
 <nav class="main">
 <a class="h" href="${anchor('features')}">Features</a><a class="h" href="${anchor('how')}">How it works</a><a class="h" href="${anchor('pricing')}">Pricing</a><a class="h" href="${anchor('faq')}">FAQ</a>
-<a href="/admin/">Sign in</a><a class="btn p sm" href="/admin/?plan=pro">${signupOpen() ? 'Start free' : 'Open dashboard'}</a>
+<a href="/admin/">Sign in</a><a class="btn p sm" href="/admin/?plan=pro">${signupOpen() ? 'Get started' : 'Open dashboard'}</a>
 </nav></div></header>
 ${d.body}
 <footer><div class="wrap"><div class="cols">
@@ -263,7 +263,7 @@ ${price}
 <li>Free updates and email support</li>
 <li>${rupees ? 'Pay by UPI or card' : 'Pay with PayPal or card'}</li>
 </ul>
-<a class="btn p" href="/admin/?plan=pro">${signupOpen() ? `Start ${TRIAL_DAYS}-day free trial` : 'Get started'}</a>
+<a class="btn p" href="/admin/?plan=pro">Get started</a>
 </div>`;
   }).join('');
 }
@@ -278,8 +278,8 @@ function landing(region: Region): string {
     ['What does the AI do, and what does it not do?', 'It answers questions from the facts you give it (prices, hours, policies), in the language the customer writes in. If the answer is not in your notes it does not guess. It also writes the short briefing when a customer asks for a person, and helps you set up. The questions customers must answer are always the ones you wrote.'],
     ['Can customers talk to a real person?', 'Yes. If a customer asks for a human, the bot stops replying in that chat and alerts you with a summary. You reply from your phone or the dashboard, then hand the chat back to the bot when you are done.'],
     ['How does appointment booking work?', 'Connect your Google Calendar once and set your working days, hours and appointment length. The bot offers real free times from your calendar, books the one the customer chooses and reminds them before it starts.'],
-    ['How much does it cost, and can I cancel?', `One plan with everything included: ${inr(PLANS[0].price.INR)} a month in India, ${usd(PLANS[0].price.USD)} a month everywhere else. You can try it free for ${TRIAL_DAYS} days. Cancel any time from your dashboard and keep access until the end of the period you paid for. See the <a href="/refunds">refund and cancellation policy</a>.`],
-    ['What happens when my plan or trial ends?', `The bot stops replying to new messages, but your leads and settings stay safe. A paid plan whose renewal fails keeps working for a ${GRACE_DAYS}-day grace period so you can fix the payment.`],
+    ['How much does it cost, and can I cancel?', `One plan with everything included: ${inr(PLANS[0].price.INR)} a month in India, ${usd(PLANS[0].price.USD)} a month everywhere else. Cancel any time from your dashboard and keep access until the end of the period you paid for. See the <a href="/refunds">refund and cancellation policy</a>.`],
+    ['What happens when my plan ends?', `The bot stops replying to new messages, but your leads and settings stay safe. A paid plan whose renewal fails keeps working for a ${GRACE_DAYS}-day grace period so you can fix the payment.`],
     ['Who can see my customers\' chats?', `Only you and the team members you add. We process the messages to run the service and never sell them. Read the <a href="/privacy">privacy policy</a> for details, including which providers are involved.`],
     ['What do I need to start?', 'A phone with WhatsApp (a business number is best), an email address, and about ten minutes. Sign up, describe your business or choose a template, scan the QR code and go live.']
   ];
@@ -290,7 +290,7 @@ function landing(region: Region): string {
 <span class="eyebrow">WhatsApp lead capture, on your own number</span>
 <h1>Turn every WhatsApp enquiry into a qualified lead.</h1>
 <p class="lead">${name} greets new customers on your WhatsApp number, asks the right questions, answers common questions with AI, books appointments into your calendar and hands the hot ones to you. No Meta approval, no code.</p>
-<div class="cta"><a class="btn p" href="/admin/?plan=pro">${signupOpen() ? `Start your ${TRIAL_DAYS}-day free trial` : 'Open the dashboard'}</a><a class="btn s" href="#features">See everything it does</a></div>
+<div class="cta"><a class="btn p" href="/admin/?plan=pro">${signupOpen() ? 'Get started' : 'Open the dashboard'}</a><a class="btn s" href="#features">See everything it does</a></div>
 <div class="fine">${signupOpen() ? 'No card needed to start. ' : ''}Set up in about ten minutes.</div>
 <div class="chips"><span>✓ Your own number</span><span>✓ Replies in the customer's language</span><span>✓ Google Calendar booking</span><span>✓ Built-in CRM</span></div>
 </div>
@@ -312,7 +312,7 @@ function landing(region: Region): string {
 <div class="stat"><b>10 min</b><span>typical set-up</span></div>
 <div class="stat"><b>24 / 7</b><span>replies, even at night</span></div>
 <div class="stat"><b>9 × 12</b><span>services × questions each</span></div>
-<div class="stat"><b>${TRIAL_DAYS} days</b><span>to try it on your own number</span></div>
+<div class="stat"><b>1 plan</b><span>everything included</span></div>
 </div></section>
 
 <section><div class="wrap">
@@ -418,7 +418,7 @@ function landing(region: Region): string {
 <h2>Live in four steps</h2>
 <p class="sub">No developers needed.</p>
 <div class="grid g4">
-<div class="card"><div class="num">1</div><h3>Sign up</h3><p class="fine">Create your account with your email. ${signupOpen() ? `Your ${TRIAL_DAYS}-day trial starts straight away.` : ''}</p></div>
+<div class="card"><div class="num">1</div><h3>Sign up</h3><p class="fine">Create your account with your email. ${signupOpen() ? 'Then choose your plan and pay securely.' : ''}</p></div>
 <div class="card"><div class="num">2</div><h3>Describe your business</h3><p class="fine">Tell the AI assistant what you do, or pick a template. Review the menu and questions it proposes.</p></div>
 <div class="card"><div class="num">3</div><h3>Scan the QR code</h3><p class="fine">Link your WhatsApp number from Linked devices. Test everything in the simulator first.</p></div>
 <div class="card"><div class="num">4</div><h3>Go live</h3><p class="fine">Press go live. Leads arrive in your dashboard and your phone as they happen.</p></div>
@@ -439,7 +439,7 @@ function landing(region: Region): string {
 
 <section class="alt" id="pricing"><div class="wrap">
 <h2 style="text-align:center">Simple monthly pricing</h2>
-<p class="sub" style="margin-left:auto;margin-right:auto;text-align:center">${pricingLead(region)} Try it free for ${TRIAL_DAYS} days first. It renews monthly and you can cancel at any time. Taxes, if applicable, are extra.</p>
+<p class="sub" style="margin-left:auto;margin-right:auto;text-align:center">${pricingLead(region)} It renews monthly and you can cancel at any time. Taxes, if applicable, are extra.</p>
 <div class="grid" style="max-width:460px;margin:0 auto">${planCards}</div>
 <p class="fine" style="margin-top:16px">What counts: a "new conversation" is a customer who messages you for the first time in a calendar month; limits reset every month. See the <a href="/refunds">refund and cancellation policy</a> and the <a href="/terms">terms</a>.</p>
 </div></section>
@@ -460,8 +460,8 @@ ${faq.map(([q, a]) => `<details><summary>${esc(q)}</summary><p>${a}</p></details
 
 <section><div class="wrap"><div class="cta-band">
 <h2>Stop losing leads in your WhatsApp inbox.</h2>
-<p>${signupOpen() ? `Try ${name} free for ${TRIAL_DAYS} days.` : `Open the dashboard to get started.`}</p>
-<a class="btn p" href="/admin/?plan=pro">${signupOpen() ? 'Start free' : 'Open the dashboard'}</a>
+<p>${signupOpen() ? `Get ${name} running on your own WhatsApp number.` : `Open the dashboard to get started.`}</p>
+<a class="btn p" href="/admin/?plan=pro">${signupOpen() ? 'Get started' : 'Open the dashboard'}</a>
 </div></div></section>`;
   return page({ title: `${PRODUCT_NAME}: WhatsApp lead capture, CRM and appointment booking`, description: `${PRODUCT_NAME} turns WhatsApp enquiries into qualified leads: guided questions, AI answers, human hand-off, Google Calendar booking, CRM, broadcasts and analytics on your own number. ${inr(PLANS[0].price.INR)} a month in India, ${usd(PLANS[0].price.USD)} elsewhere.`, path: '/', body, landing: true });
 }
@@ -595,10 +595,10 @@ function terms(): string {
 <h2>6. AI-generated content</h2>
 <p>Answers and summaries are generated by AI from the information you provide and the customer's message. AI can be wrong or incomplete. Check important facts and do not rely on it for legal, medical, financial or other professional advice. You are responsible for how you use outputs and for reviewing your bot's behaviour in the simulator before going live.</p>
 
-<h2>7. Plans, free trial and payment</h2>
+<h2>7. Plans and payment</h2>
 <ul>
 <li>Plans, prices and limits are shown on our <a href="/#pricing">pricing section</a> and in your dashboard. Prices are in Indian rupees or US dollars; applicable taxes, if any, are extra.</li>
-<li>A new business may get a free trial of ${TRIAL_DAYS} days with the full plan. We may change or end trials and promotions.</li>
+<li>The Service starts when your first payment is confirmed. We may change plans, prices and promotions with notice.</li>
 <li>Paid plans are billed monthly in advance and renew automatically through Razorpay (rupees), or Stripe or PayPal (dollars) until you cancel. You authorise us and our payment provider to charge your chosen payment method.</li>
 <li>Monthly limits (new conversations, AI answers, team members, broadcast messages) reset each calendar month. When a limit is reached the related feature stops until the next month or an upgrade, as explained in your dashboard.</li>
 <li>If a payment fails, the plan continues for a ${GRACE_DAYS}-day grace period. If the problem is not fixed the bot stops replying.</li>
@@ -642,26 +642,23 @@ ${contactLines()}`);
 
 function refunds(): string {
   const p = esc(PRODUCT_NAME);
-  return doc('Refund & Cancellation Policy', '/refunds', `Free trial, cancellation and refund rules for ${PRODUCT_NAME}.`, `
+  return doc('Refund & Cancellation Policy', '/refunds', `Cancellation and refund rules for ${PRODUCT_NAME}.`, `
 <p>This policy applies to paid plans of ${p}, operated by <strong>${esc(operator())}</strong>. The Service is a digital subscription, delivered online as soon as your plan is active. Nothing is shipped.</p>
 
-<h2>1. Free trial</h2>
-<p>New businesses can try the Service free for ${TRIAL_DAYS} days with the full plan. No payment method is needed to start a trial, and no charge is made unless you choose a paid plan.</p>
-
-<h2>2. How billing works</h2>
+<h2>1. How billing works</h2>
 <ul>
 <li>Paid plans are billed monthly in advance, in Indian rupees (Razorpay) or US dollars (Stripe or PayPal).</li>
 <li>Plans renew automatically each month until you cancel.</li>
 <li>If a renewal payment fails you keep access for a ${GRACE_DAYS}-day grace period.</li>
 </ul>
 
-<h2>3. Cancelling</h2>
+<h2>2. Cancelling</h2>
 <ul>
 <li>You can cancel any time under <strong>Plan &amp; billing → Cancel subscription</strong> in your dashboard, or by emailing us from your account email.</li>
 <li>Cancellation stops future renewals. You keep full access until the end of the period you have already paid for. There are no cancellation fees.</li>
 </ul>
 
-<h2>4. Refunds</h2>
+<h2>3. Refunds</h2>
 <ul>
 <li><strong>First-payment refund.</strong> If you are not satisfied with a paid plan, you may ask for a full refund of your <em>first</em> payment within <strong>7 days</strong> of that payment. After a refund, your account moves off the paid plan.</li>
 <li><strong>Duplicate or wrong charges.</strong> If you were charged twice, charged the wrong amount or charged after a valid cancellation, we will refund the extra amount in full. Please tell us within 30 days of the charge.</li>
@@ -669,21 +666,21 @@ function refunds(): string {
 <li><strong>Otherwise,</strong> payments for a month already started are not refundable, and we do not give partial refunds for unused days after cancelling.</li>
 </ul>
 
-<h2>5. What is not refundable</h2>
+<h2>4. What is not refundable</h2>
 <ul>
-<li>Renewals after the 7-day first-payment window, unless covered by section 4.</li>
+<li>Renewals after the 7-day first-payment window, unless covered by section 3.</li>
 <li>Any restriction, suspension or ban of your WhatsApp number by WhatsApp or Meta. This is outside our control (see the <a href="/terms">Terms</a>).</li>
-<li>Plans or days given free of charge (trials, redeem codes, promotional offers or referral rewards).</li>
+<li>Plans or days given free of charge (redeem codes, promotional offers or referral rewards).</li>
 <li>Accounts closed for breaking the acceptable-use rules in the Terms.</li>
 </ul>
 
-<h2>6. How to ask for a refund</h2>
+<h2>5. How to ask for a refund</h2>
 <p>Email us from your account email with your business name and the payment reference or date. We review requests within 3 working days.</p>
 
-<h2>7. How refunds are paid</h2>
+<h2>6. How refunds are paid</h2>
 <p>Approved refunds are returned to the original payment method. Banks and payment providers usually take 5 to 7 working days to show the money in your account after we process it. We cannot speed up that step.</p>
 
-<h2>8. Contact</h2>
+<h2>7. Contact</h2>
 ${contactLines()}`);
 }
 
@@ -709,7 +706,7 @@ function shipping(): string {
 <p>${p} is a digital software service operated by <strong>${esc(operator())}</strong>. Nothing physical is sold or shipped, so there are no shipping charges, courier delays or delivery addresses to provide.</p>
 <h2>How the service is delivered</h2>
 <ul>
-<li><strong>Account.</strong> You create your account online. Access to the dashboard and your free trial starts immediately after sign-up, at no charge.</li>
+<li><strong>Account.</strong> You create your account online. Right after sign-up you choose the plan and pay on the payment provider's secure page.</li>
 <li><strong>Paid plan.</strong> When your payment is confirmed by the payment provider, your plan is activated automatically, usually within a few minutes. There is nothing to download or wait for.</li>
 <li><strong>WhatsApp link.</strong> You link your own WhatsApp number yourself by scanning a QR code. We do not ship SIM cards, devices or hardware.</li>
 <li><strong>Receipts.</strong> Payment confirmations and receipts are sent to you by the payment provider (Razorpay, PayPal or Stripe) and are listed in your dashboard under Plan &amp; billing.</li>
@@ -748,10 +745,10 @@ function pricing(region: Region): string {
   const p = esc(PRODUCT_NAME);
   return page({
     title: `Pricing | ${PRODUCT_NAME}`,
-    description: `${PRODUCT_NAME} pricing: ${inr(PLANS[0].price.INR)} a month in India, ${usd(PLANS[0].price.USD)} a month elsewhere, with a ${TRIAL_DAYS}-day free trial.`,
+    description: `${PRODUCT_NAME} pricing: ${inr(PLANS[0].price.INR)} a month in India, ${usd(PLANS[0].price.USD)} a month elsewhere.`,
     path: '/pricing',
     body: `<main class="doc" style="max-width:760px"><h1>Pricing</h1>
-<p>${pricingLead(region)} Customers in India pay in Indian rupees (UPI or card, through Razorpay); customers elsewhere pay in US dollars (PayPal or card). Every new business gets a ${TRIAL_DAYS}-day free trial first.</p>
+<p>${pricingLead(region)} Customers in India pay in Indian rupees (UPI or card, through Razorpay); customers elsewhere pay in US dollars (PayPal or card).</p>
 <div class="grid" style="max-width:460px;margin:24px 0">${planCardsHtml(region, '/pricing')}</div>
 <h2>Good to know</h2>
 <ul>

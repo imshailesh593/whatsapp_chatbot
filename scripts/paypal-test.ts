@@ -168,7 +168,7 @@ async function cleanup() {
   ok(subCall.body.plan_id === growthId && subCall.body.custom_id === `${wsId}:pro` && subCall.body.subscriber.email_address === `owner${DOMAIN}`, 'it uses the Pro plan and carries the business id');
   ok(subCall.body.application_context.return_url === 'https://bot.example/admin/?billing=success' && subCall.body.application_context.cancel_url === 'https://bot.example/admin/?billing=cancelled', 'and returns the owner to the dashboard');
   const subId = (await row()).providerSubscriptionId!;
-  ok(/^I-FAKESUB\d+$/.test(subId) && (await row()).billingProvider === 'paypal' && (await row()).plan === 'trial', 'the pending subscription is remembered but nothing is switched on yet');
+  ok(/^I-FAKESUB\d+$/.test(subId) && (await row()).billingProvider === 'paypal' && (await row()).planStatus === 'inactive', 'the pending subscription is remembered but nothing is switched on yet');
 
   console.log('\n[webhooks]');
   const hook = (id: string, type: string, resource: any, sig = 'good') => {
@@ -181,7 +181,7 @@ async function cleanup() {
   const end1 = new Date(Date.now() + 30 * DAY);
   const subRes = (next: Date, extra: any = {}) => ({ id: subId, plan_id: growthId, custom_id: `${wsId}:pro`, status: 'ACTIVE', billing_info: { next_billing_time: next.toISOString() }, ...extra });
   ok((await hook('ppt_bad', 'BILLING.SUBSCRIPTION.ACTIVATED', subRes(end1), 'forged')).statusCode === 400, 'an event PayPal does not vouch for is rejected');
-  ok((await row()).plan === 'trial', '...and changes nothing');
+  ok((await row()).planStatus === 'inactive', '...and changes nothing');
   ok((await app.inject({ method: 'POST', url: '/webhooks/paypal', headers: J, payload: JSON.stringify({ id: 'x' }) })).statusCode === 400, 'an event with no PayPal headers is rejected');
   ok((await hook('ppt_1', 'BILLING.SUBSCRIPTION.ACTIVATED', subRes(end1))).statusCode === 200, 'BILLING.SUBSCRIPTION.ACTIVATED is accepted');
   let w = await row();
@@ -236,15 +236,15 @@ async function cleanup() {
   await prisma.workspace.update({ where: { id: wsId }, data: { currentPeriodEnd: new Date(Date.now() - DAY) } });
   ok(!accessState(await row()).active, 'and access stops once that date has passed');
 
-  console.log('\n[a trial is not cancelled by an abandoned checkout]');
-  r = await call(J, 'POST', '/admin/api/signup', { businessName: 'Trial Co', email: `trial${DOMAIN}`, password: 'trial owner password' });
+  console.log('\n[an abandoned checkout leaves an unpaid business unpaid]');
+  r = await call(J, 'POST', '/admin/api/signup', { businessName: 'Unpaid Co', email: `unpaid${DOMAIN}`, password: 'unpaid owner password' });
   const hT = cookieOf(r);
   const tId = r.json().user.workspace.id as string;
   await call(hT, 'POST', '/admin/api/billing/checkout', { plan: 'pro', provider: 'paypal' });
   const tSub = (await prisma.workspace.findUniqueOrThrow({ where: { id: tId } })).providerSubscriptionId!;
   await hook('ppt_12', 'BILLING.SUBSCRIPTION.CANCELLED', { id: tSub, custom_id: `${tId}:pro`, plan_id: process.env.PAYPAL_PLAN_PRO });
   const t = await prisma.workspace.findUniqueOrThrow({ where: { id: tId } });
-  ok(t.plan === 'trial' && t.planStatus === 'trialing' && accessState(t).active, 'cancelling a checkout that was never paid leaves the free trial alone');
+  ok(t.planStatus === 'inactive' && !accessState(t).active, 'cancelling a checkout that was never paid changes nothing');
 
   console.log('\n[wrong credentials]');
   process.env.PAYPAL_CLIENT_SECRET = 'wrong';

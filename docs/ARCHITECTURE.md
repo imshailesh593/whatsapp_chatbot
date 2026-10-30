@@ -10,7 +10,7 @@ Contents: [1. What it is](#1-what-it-is) · [2. Big picture](#2-big-picture) · 
 
 A multi-tenant SaaS. Each customer (a **workspace**, i.e. one business) links its own WhatsApp number by scanning a QR code (the same "Linked devices" mechanism WhatsApp Web uses, via the Baileys library). The bot then greets people who message that number, runs a guided question flow that turns them into **leads**, answers side questions with Gemini AI using only facts the business wrote down, books appointments in Google Calendar, hands over to a human on request, and gives the business a CRM, inbox, broadcasts, analytics, webhooks and a REST API.
 
-It is **not** the official WhatsApp Business API and does not use Meta Cloud API. The platform operator ("Rajni" on the public site) runs one deployment; customers sign up themselves, get a 14-day trial of the one plan (Pro: ₹499/month in India, $19/month elsewhere) and pay online.
+It is **not** the official WhatsApp Business API and does not use Meta Cloud API. The platform operator ("Rajni" on the public site) runs one deployment; customers sign up themselves, subscribe to the one plan (Pro: ₹499/month in India, $19/month elsewhere) and pay online. There is no free trial: the bot stays off until the first payment.
 
 ## 2. Big picture
 
@@ -120,7 +120,7 @@ erDiagram
 
 | Model | Holds |
 |---|---|
-| `Workspace` | The business: profile, bot on/off, plan, plan status, trial end, current period end, billing provider and subscription id, hand-off settings, referral code and referrer, payout details |
+| `Workspace` | The business: profile, bot on/off, plan, plan status, current period end, billing provider and subscription id, hand-off settings, referral code and referrer, payout details |
 | `Service`, `Question` | The bot's menu (up to 9 services) and questions (up to 12 each) |
 | `Session` | One conversation per customer phone: stage, answers, pause flags, hand-off time and AI briefing, pending slot offer |
 | `Lead` | A completed qualification: answers, stage, owner, tags, notes, follow-up date, source campaign |
@@ -152,8 +152,8 @@ sequenceDiagram
   participant OW as Owner (alerts, webhooks)
   P->>WA: WhatsApp message
   WA->>EN: handleIncomingMessage(workspace, phone, text)
-  EN->>DB: load config, session, access (plan, trial, limits)
-  alt plan or trial ended
+  EN->>DB: load config, session, access (plan, status, limits)
+  alt plan unpaid or ended
     EN-->>WA: stay silent
   else wants a person
     EN->>DB: pause chat, store hand-off
@@ -180,10 +180,10 @@ Rules worth knowing: customers can type `menu` to restart and `STOP` to leave br
 ```mermaid
 flowchart TD
   A["Website: Get started<br/>/admin/?plan=pro"] --> B["Sign-up form<br/>business name, email, password, optional ?ref code"]
-  B --> C["Workspace + owner created<br/>14-day trial (extra days if referred)"]
+  B --> C["Workspace + owner created<br/>Plan status: inactive<br/>(bot off until the first payment)"]
   C --> D["Choose your plan page"]
   D -- Pay now --> P["Provider hosted page"]
-  D -- Start trial first --> E
+  D -- Set up first --> E
   P --> D2["Back at /admin/?billing=success"] --> E
   E["Onboarding: AI interview or template<br/>menu + questions + facts"] --> F["Test in simulator"]
   F --> G["Link WhatsApp: scan QR"]
@@ -248,13 +248,13 @@ Referral: each workspace has a code; a business that signs up with it records `r
 
 ## 6. Billing and access
 
-**One plan, Pro** (`src/plans.ts`): ₹499 or $19 a month, 1,500 conversations, 2,000 AI answers, 5 team members and 1,000 broadcasts a month, integrations included. A trial gets the same. Older plan ids (`starter`, `growth`, `scale`) are treated as Pro. Counters reset every calendar month; at a limit the bot stops starting new chats or AI answers but existing chats continue.
+**One plan, Pro** (`src/plans.ts`): ₹499 or $19 a month, 1,500 conversations, 2,000 AI answers, 5 team members and 1,000 broadcasts a month, integrations included. Older plan ids (`starter`, `growth`, `scale`) are treated as Pro. Counters reset every calendar month; at a limit the bot stops starting new chats or AI answers but existing chats continue.
 
 **Access** is one pure function, `accessState(workspace)`:
 
 | Plan status | Bot may reply? |
 |---|---|
-| `trialing` | until `trialEndsAt` |
+| `inactive` (new business, not paid yet) | No |
 | `active` | until `currentPeriodEnd` + 3 days' grace |
 | `past_due` | until `currentPeriodEnd` + 3 days' grace |
 | `canceled` | until `currentPeriodEnd`, then no |

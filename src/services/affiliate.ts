@@ -7,11 +7,9 @@ export interface AffiliateSettings {
   percent: number;
   /** A referred business earns the referrer commission on its first N payments */
   months: number;
-  /** Extra free-trial days for a business that signs up through a link */
-  bonusDays: number;
 }
 
-const DEFAULTS: AffiliateSettings = { enabled: false, percent: 20, months: 12, bonusDays: 7 };
+const DEFAULTS: AffiliateSettings = { enabled: false, percent: 20, months: 12 };
 
 export async function getAffiliateSettings(): Promise<AffiliateSettings> {
   return { ...DEFAULTS, ...(await getSetting<Partial<AffiliateSettings>>('affiliate', {})) };
@@ -29,8 +27,7 @@ export async function saveAffiliateSettings(body: Record<string, unknown>): Prom
   const next: AffiliateSettings = {
     enabled: typeof body.enabled === 'boolean' ? body.enabled : cur.enabled,
     percent: body.percent === undefined ? cur.percent : whole(body.percent, 1, 80, 'Commission'),
-    months: body.months === undefined ? cur.months : whole(body.months, 1, 60, 'Number of payments'),
-    bonusDays: body.bonusDays === undefined ? cur.bonusDays : whole(body.bonusDays, 0, 90, 'Bonus trial days')
+    months: body.months === undefined ? cur.months : whole(body.months, 1, 60, 'Number of payments')
   };
   await setSetting('affiliate', next);
   return next;
@@ -111,7 +108,6 @@ export async function referralOverview(workspaceId: string, publicUrl: string) {
     enabled: s.enabled,
     percent: s.percent,
     months: s.months,
-    bonusDays: s.bonusDays,
     code,
     link: `${publicUrl.replace(/\/$/, '')}/admin/?ref=${code}`,
     payoutDetails: w.payoutDetails,

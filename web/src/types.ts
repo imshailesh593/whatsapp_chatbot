@@ -171,7 +171,6 @@ export interface PlatformWorkspace {
   users: number;
   conversationsThisMonth: number;
   lastActivity: string | null;
-  trialEndsAt: string | null;
   currentPeriodEnd: string | null;
   createdAt: string;
 }
@@ -179,7 +178,6 @@ export interface PlatformWorkspace {
 export interface PlatformOverview {
   businesses: number;
   paying: number;
-  trialing: number;
   lapsed: number;
   whatsappConnected: number;
   leads: number;
@@ -192,7 +190,6 @@ export interface PlatformDetail {
   plan: string;
   planStatus: string;
   billingProvider: string | null;
-  trialEndsAt: string | null;
   currentPeriodEnd: string | null;
   limits: { conversations: number | null; aiReplies: number | null; broadcasts: number | null };
   usage: { conversations: number; aiReplies: number; broadcasts: number };
@@ -233,10 +230,9 @@ export interface PaymentsSetup {
 export interface BillingInfo {
   plan: string;
   planName: string;
-  status: 'trialing' | 'active' | 'past_due' | 'canceled';
+  status: 'inactive' | 'active' | 'past_due' | 'canceled';
   active: boolean;
-  reason: 'ok' | 'trial_expired' | 'canceled' | 'past_due';
-  trialEndsAt: string | null;
+  reason: 'ok' | 'unpaid' | 'canceled' | 'past_due';
   currentPeriodEnd: string | null;
   cancelAtPeriodEnd: boolean;
   provider: string | null;
@@ -347,7 +343,6 @@ export interface ReferralInfo {
   enabled: boolean;
   percent: number;
   months: number;
-  bonusDays: number;
   code: string;
   link: string;
   payoutDetails: string;
@@ -359,7 +354,7 @@ export interface ReferralInfo {
 }
 
 export interface AffiliateAdmin {
-  settings: { enabled: boolean; percent: number; months: number; bonusDays: number };
+  settings: { enabled: boolean; percent: number; months: number };
   affiliates: { id: string; businessName: string; code: string | null; payoutDetails: string; referred: number; totals: Totals }[];
   commissions: { id: string; affiliate: string; payoutDetails: string; referred: string; amount: number; currency: string; status: string; at: string; paidAt: string | null }[];
 }

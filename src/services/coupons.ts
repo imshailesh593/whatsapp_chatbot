@@ -4,15 +4,14 @@ import { planById } from '../plans';
 
 const day = 86_400_000;
 
-/** Plans a code may grant: the free trial (extends it) or one of the paid plans, never 'internal'. */
-export const grantablePlan = (plan: string) => plan === 'trial' || !!planById(plan);
+/** Plans a code may grant: a paid plan, never 'internal'. */
+export const grantablePlan = (plan: string) => !!planById(plan);
 
 /** Puts a business on a plan without a payment (pilots, extensions, comps). Returns an error message or null. */
 export async function grantPlan(id: string, plan: string, daysRaw: unknown, from = Date.now()): Promise<string | null> {
   const days = Math.min(Math.max(Math.floor(Number(daysRaw) || 30), 1), 3650);
   const end = new Date(from + days * day);
-  if (plan === 'trial') await prisma.workspace.update({ where: { id }, data: { plan: 'trial', planStatus: 'trialing', trialEndsAt: end } });
-  else if (plan === 'internal' || planById(plan)) await prisma.workspace.update({ where: { id }, data: { plan, planStatus: 'active', currentPeriodEnd: end, cancelAtPeriodEnd: false } });
+  if (plan === 'internal' || planById(plan)) await prisma.workspace.update({ where: { id }, data: { plan, planStatus: 'active', currentPeriodEnd: end, cancelAtPeriodEnd: false } });
   else return 'Unknown plan';
   invalidateConfig(id);
   return null;
@@ -38,7 +37,7 @@ export interface CouponInput {
 
 export async function createCoupon(input: CouponInput, createdBy: string): Promise<{ error: string } | { id: string; code: string }> {
   const plan = String(input.plan ?? '');
-  if (!grantablePlan(plan)) return { error: 'Choose a plan: trial or pro' };
+  if (!grantablePlan(plan)) return { error: 'Choose a plan: pro' };
   const days = Math.floor(Number(input.days));
   if (!Number.isFinite(days) || days < 1 || days > 3650) return { error: 'Days must be between 1 and 3650' };
   const max = input.maxRedemptions == null || (input.maxRedemptions as unknown) === '' ? null : Math.floor(Number(input.maxRedemptions));
@@ -85,9 +84,7 @@ export async function redeemCoupon(workspaceId: string, rawCode: unknown): Promi
     await prisma.coupon.update({ where: { id: c.id }, data: { redeemedCount: { decrement: 1 } } });
     return { ok: false, error: 'You have already used this code.' };
   }
-  // A trial code adds to what is left of the trial; a plan code starts a fresh period
-  const base = c.plan === 'trial' && ws.planStatus === 'trialing' && ws.trialEndsAt && ws.trialEndsAt.getTime() > Date.now() ? ws.trialEndsAt.getTime() : Date.now();
-  const err = await grantPlan(workspaceId, c.plan, c.days, base);
+  const err = await grantPlan(workspaceId, c.plan, c.days);
   if (err) return { ok: false, error: err };
   return { ok: true, plan: c.plan, days: c.days };
 }

@@ -32,7 +32,6 @@ export const PLANS: PlanDef[] = [
 /** Plans that were sold before there was a single plan. Their subscribers and old records are treated as the one plan. */
 const LEGACY_PLAN_IDS = ['starter', 'growth', 'scale'];
 
-export const TRIAL_DAYS = 14;
 export const GRACE_DAYS = 3;
 const UNLIMITED: Limits = { conversations: Infinity, aiReplies: Infinity, seats: Infinity, broadcasts: Infinity };
 
@@ -42,7 +41,7 @@ export type AccessState = {
   /** The bot may reply to customers */
   active: boolean;
   /** Short machine-readable reason when not active */
-  reason: 'ok' | 'trial_expired' | 'canceled' | 'past_due';
+  reason: 'ok' | 'unpaid' | 'canceled' | 'past_due';
   limits: Limits;
   integrations: boolean;
 };
@@ -50,16 +49,13 @@ export type AccessState = {
 const day = 86_400_000;
 
 /** Pure function of the workspace row: can this business use the product right now, and within which limits? */
-export function accessState(ws: Pick<Workspace, 'plan' | 'planStatus' | 'trialEndsAt' | 'currentPeriodEnd'>, now = Date.now()): AccessState {
+export function accessState(ws: Pick<Workspace, 'plan' | 'planStatus' | 'currentPeriodEnd'>, now = Date.now()): AccessState {
   if (ws.plan === 'internal') return { active: true, reason: 'ok', limits: UNLIMITED, integrations: true };
-  // A trial gets the full plan so owners can try the real product
-  const def = planById(ws.plan === 'trial' ? 'pro' : ws.plan) ?? PLANS[0];
+  const def = planById(ws.plan) ?? PLANS[0];
   const limits = def.limits;
   const integrations = def.integrations;
-  if (ws.planStatus === 'trialing') {
-    const ok = !!ws.trialEndsAt && ws.trialEndsAt.getTime() > now;
-    return { active: ok, reason: ok ? 'ok' : 'trial_expired', limits, integrations };
-  }
+  // A new business has not paid yet: the bot stays off until the first payment
+  if (ws.planStatus === 'inactive') return { active: false, reason: 'unpaid', limits, integrations };
   const end = ws.currentPeriodEnd?.getTime() ?? 0;
   if (ws.planStatus === 'active') return { active: end + GRACE_DAYS * day > now, reason: end + GRACE_DAYS * day > now ? 'ok' : 'past_due', limits, integrations };
   if (ws.planStatus === 'past_due') return { active: end + GRACE_DAYS * day > now, reason: 'past_due', limits, integrations };

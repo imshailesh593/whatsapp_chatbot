@@ -127,7 +127,7 @@ async function main() {
     await tick({ fast: true });
     const after = await prisma.broadcast.findUniqueOrThrow({ where: { id: be.id } });
     assert(after.status === 'paused' && after.note.includes('allowance') && to(E.id, 'e1').length === 0, 'monthly allowance used up: paused with an explanation, nothing sent');
-    await prisma.workspace.update({ where: { id: E.id }, data: { plan: 'trial', planStatus: 'trialing', trialEndsAt: new Date(Date.now() - 1000) } });
+    await prisma.workspace.update({ where: { id: E.id }, data: { plan: 'pro', planStatus: 'inactive' } });
     invalidateConfig(E.id);
     await prisma.usage.deleteMany({ where: { workspaceId: E.id } });
     await setStatus(E.id, be.id, 'resume');

@@ -197,7 +197,7 @@ function Dashboard() {
         <Kpi label="MRR" value={inr(k.mrr)} sub={`ARPU ${inr(k.arpu)}`} icon={<Banknote className="w-4 h-4" />} />
         <Kpi label="Revenue" value={inr(k.revenue)} sub={`last ${days} days`} icon={<TrendingUp className="w-4 h-4" />} />
         <Kpi label="Payments this month" value={inr(k.paymentsThisMonth)} sub={other || undefined} icon={<Receipt className="w-4 h-4" />} />
-        <Kpi label="Active subscriptions" value={k.activeSubscriptions} sub={`${k.trialing} trialing`} icon={<CreditCard className="w-4 h-4" />} />
+        <Kpi label="Active subscriptions" value={k.activeSubscriptions} sub="paying clients" icon={<CreditCard className="w-4 h-4" />} />
         <Kpi label="Total clients" value={k.totalClients} sub={`${k.whatsappConnected} WhatsApp linked`} icon={<Building2 className="w-4 h-4" />} />
         <Kpi label="New clients" value={k.newClients} delta={k.newClientsChange} icon={<UserPlus className="w-4 h-4" />} />
         <Kpi label="Total users" value={k.totalUsers} sub={`+${k.newUsers} this period`} icon={<Users className="w-4 h-4" />} />
@@ -276,7 +276,7 @@ function Plans() {
           <tr key={p.id}><td className="py-3 px-4 font-semibold text-slate-900">{p.name}</td><td className="py-3 px-4">{inr(p.price.INR)} · {money(p.price.USD, 'USD')}</td><td className="py-3 px-4">{p.limits.conversations.toLocaleString()}</td><td className="py-3 px-4">{p.limits.aiReplies.toLocaleString()}</td><td className="py-3 px-4">{p.limits.seats}</td><td className="py-3 px-4">{p.limits.broadcasts.toLocaleString()}</td><td className="py-3 px-4">{p.integrations ? 'Yes' : 'No'}</td><td className="py-3 px-4 font-semibold">{p.clients}</td></tr>
         ))}
       </Table>
-      <p className="text-xs text-slate-500">{d.trial} on free trial · {d.internal} internal. Prices and limits are set in <code>src/plans.ts</code> and the matching products in Stripe / Razorpay / PayPal.</p>
+      <p className="text-xs text-slate-500">{d.internal} internal. Prices and limits are set in <code>src/plans.ts</code> and the matching products in Stripe / Razorpay / PayPal.</p>
     </div>
   );
 }
@@ -315,10 +315,10 @@ function Coupons() {
     <div className="space-y-5">
       <div className={card + ' p-5'}>
         <h3 className="font-bold text-slate-900">New redeem code</h3>
-        <p className="text-sm text-slate-500 mt-1">Gives a business a plan, or extra trial days, with no payment. A business enters it under Plan &amp; billing. Use it for pilots, partners and goodwill.</p>
+        <p className="text-sm text-slate-500 mt-1">Gives a business a plan with no payment. A business enters it under Plan &amp; billing. Use it for pilots, partners and goodwill.</p>
         <div className="mt-3 flex flex-wrap items-end gap-3">
           <label className="text-xs text-slate-600">Plan<select value={plan} onChange={(e) => setPlan(e.target.value)} className={field + ' block mt-1'}>
-            <option value="trial">Extend free trial</option><option value="pro">Pro</option></select></label>
+            <option value="pro">Pro</option></select></label>
           <label className="text-xs text-slate-600">Days<input type="number" min={1} max={3650} value={days} onChange={(e) => setDays(e.target.value)} className={field + ' block mt-1 w-24'} /></label>
           <label className="text-xs text-slate-600">Uses (empty = unlimited)<input type="number" min={1} value={uses} onChange={(e) => setUses(e.target.value)} className={field + ' block mt-1 w-32'} /></label>
           <label className="text-xs text-slate-600">Code (empty = random)<input value={code} onChange={(e) => setCode(e.target.value)} maxLength={32} className={field + ' block mt-1 w-40 uppercase'} /></label>
@@ -332,7 +332,7 @@ function Coupons() {
         {rows.map((c) => (
           <tr key={c.id} className={c.active ? '' : 'opacity-50'}>
             <td className="py-3 px-4 font-mono font-semibold text-slate-900">{c.code}</td>
-            <td className="py-3 px-4">{c.plan === 'trial' ? '+' + c.days + ' trial days' : c.plan + ' · ' + c.days + ' days'}</td>
+            <td className="py-3 px-4">{c.plan + ' · ' + c.days + ' days'}</td>
             <td className="py-3 px-4">{c.redeemed}{c.maxRedemptions ? ' / ' + c.maxRedemptions : ''}</td>
             <td className="py-3 px-4 text-slate-600">{c.note}</td>
             <td className="py-3 px-4 text-right whitespace-nowrap">
@@ -348,12 +348,12 @@ function Coupons() {
 
 function Affiliates() {
   const [d, setD] = useState<AffiliateAdmin | null>(null);
-  const [form, setForm] = useState({ percent: '20', months: '12', bonusDays: '7' });
+  const [form, setForm] = useState({ percent: '20', months: '12' });
   const [error, setError] = useState('');
   const [msg, setMsg] = useState('');
   const load = useCallback(() => api.platformAffiliates().then((x) => {
     setD(x);
-    setForm({ percent: String(x.settings.percent), months: String(x.settings.months), bonusDays: String(x.settings.bonusDays) });
+    setForm({ percent: String(x.settings.percent), months: String(x.settings.months) });
   }).catch((e) => setError((e as Error).message)), []);
   useEffect(() => { load(); }, [load]);
 
@@ -373,15 +373,14 @@ function Affiliates() {
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
             <h3 className="font-bold text-slate-900">Referral programme</h3>
-            <p className="text-sm text-slate-500 mt-1">Every business gets a sign-up link. Businesses that join through it get bonus trial days, and the referrer earns a share of the referred business&apos;s first payments. You approve each commission and pay it out yourself.</p>
+            <p className="text-sm text-slate-500 mt-1">Every business gets a sign-up link. The referrer earns a share of the referred business&apos;s first payments. You approve each commission and pay it out yourself.</p>
           </div>
           <button onClick={() => run(() => api.platformAffiliateSettings({ enabled: !d.settings.enabled }))} className={`px-4 py-2 rounded-lg text-sm font-semibold ${d.settings.enabled ? 'bg-[#4b7f2c] text-white' : 'bg-slate-200 text-slate-700'}`}>{d.settings.enabled ? 'On' : 'Off'}</button>
         </div>
         <div className="mt-3 flex flex-wrap items-end gap-3">
           <label className="text-xs text-slate-600">Commission %<input type="number" min={1} max={80} value={form.percent} onChange={(e) => setForm({ ...form, percent: e.target.value })} className={field} /></label>
           <label className="text-xs text-slate-600">For the first N payments<input type="number" min={1} max={60} value={form.months} onChange={(e) => setForm({ ...form, months: e.target.value })} className={field} /></label>
-          <label className="text-xs text-slate-600">Bonus trial days<input type="number" min={0} max={90} value={form.bonusDays} onChange={(e) => setForm({ ...form, bonusDays: e.target.value })} className={field} /></label>
-          <button onClick={() => run(() => api.platformAffiliateSettings({ percent: Number(form.percent), months: Number(form.months), bonusDays: Number(form.bonusDays) }), 'Saved')} className="px-4 py-2 bg-[#4b7f2c] hover:bg-green-800 text-white text-sm font-semibold rounded-lg">Save</button>
+          <button onClick={() => run(() => api.platformAffiliateSettings({ percent: Number(form.percent), months: Number(form.months) }), 'Saved')} className="px-4 py-2 bg-[#4b7f2c] hover:bg-green-800 text-white text-sm font-semibold rounded-lg">Save</button>
         </div>
         {msg && <p className="text-sm text-green-700 mt-2">{msg}</p>}
         {error && <p className="text-sm text-rose-600 mt-2" role="alert">{error}</p>}
