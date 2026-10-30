@@ -57,7 +57,7 @@ a.btn{display:inline-block;margin-top:14px;padding:9px 16px;border-radius:10px;b
 <div class="card">
   <header>
     <div class="logo"><svg viewBox="0 0 24 24" fill="none" stroke="#020617" stroke-width="2.2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c3 3 3 15 0 18M12 3c-3 3-3 15 0 18"/></svg></div>
-    <div class="brand"><b>${esc(businessName)}</b><span>WhatsApp Lead Console</span></div>
+    <div class="brand"><b>${esc(businessName)}</b><span>Wappo</span></div>
     <div class="pill" id="pill"><span class="dot"></span><span id="pilltext">Checking…</span></div>
   </header>
   <main>

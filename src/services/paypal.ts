@@ -1,4 +1,5 @@
 import { PLANS, planById } from '../plans';
+import { PRODUCT_NAME } from '../brand';
 
 const env = (k: string) => (process.env[k] ?? '').trim();
 
@@ -41,7 +42,7 @@ async function accessToken(): Promise<string> {
   return cached.token;
 }
 
-export async function pp<T = any>(method: 'GET' | 'POST', path: string, body?: unknown, headers: Record<string, string> = {}): Promise<T> {
+export async function pp<T = any>(method: 'GET' | 'POST' | 'PATCH', path: string, body?: unknown, headers: Record<string, string> = {}): Promise<T> {
   const res = await fetch(`${apiBase()}${path}`, {
     method,
     headers: { Authorization: `Bearer ${await accessToken()}`, 'Content-Type': 'application/json', ...headers },
@@ -122,7 +123,7 @@ export async function createPaypalPlans(): Promise<{ plan: string; paypalPlanId:
       continue;
     }
     if (!productId) {
-      const prod = await pp<{ id: string }>('POST', '/v1/catalogs/products', { name: env('PRODUCT_NAME') || 'Lead Console', type: 'SERVICE', category: 'SOFTWARE' }, { 'PayPal-Request-Id': 'lead-console-product-v1' });
+      const prod = await pp<{ id: string }>('POST', '/v1/catalogs/products', { name: PRODUCT_NAME, type: 'SERVICE', category: 'SOFTWARE' }, { 'PayPal-Request-Id': 'lead-console-product-v1' });
       productId = prod.id;
     }
     const made = await pp<{ id: string }>(

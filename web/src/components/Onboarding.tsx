@@ -1,5 +1,6 @@
 import { FormEvent, useEffect, useRef, useState } from 'react';
-import { Check, Globe, Loader2, Send, Sparkles } from 'lucide-react';
+import Logo from './Logo';
+import { Check, Loader2, Send, Sparkles } from 'lucide-react';
 import { api } from '../api';
 import type { AdminUser, ChatTurn, Draft, TemplateInfo } from '../types';
 import WhatsAppLink from './WhatsAppLink';
@@ -103,7 +104,7 @@ export default function Onboarding({ user, onDone, onSignOut }: { user: AdminUse
       <header className="bg-slate-950 border-b border-slate-800">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
           <div className="flex items-center space-x-3">
-            <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-emerald-500 to-teal-400 flex items-center justify-center"><Globe className="w-5 h-5 text-slate-950" /></div>
+            <Logo size={36} />
             <div>
               <div className="font-extrabold text-white text-sm">Set up your chatbot</div>
               <div className="text-[11px] text-slate-400">{user.workspace?.businessName}</div>

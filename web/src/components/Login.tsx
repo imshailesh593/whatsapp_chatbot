@@ -1,8 +1,8 @@
 import { FormEvent, useState } from 'react';
-import { Globe } from 'lucide-react';
 import { api } from '../api';
 import type { AdminUser } from '../types';
 import { useProduct } from '../brand';
+import Logo from './Logo';
 
 export default function Login({ onDone }: { onDone: (user: AdminUser) => void }) {
   const product = useProduct();
@@ -56,12 +56,10 @@ export default function Login({ onDone }: { onDone: (user: AdminUser) => void })
     <div className="min-h-screen flex items-center justify-center bg-slate-900 p-4">
       <form onSubmit={submit} className="w-full max-w-sm bg-slate-950 border border-slate-800 rounded-2xl p-6 shadow-2xl">
         <div className="flex items-center space-x-3 mb-6">
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-emerald-500 to-teal-400 flex items-center justify-center">
-            <Globe className="w-5 h-5 text-slate-950" />
-          </div>
+          <Logo size={44} />
           <div>
             <div className="font-extrabold text-white">{product.productName}</div>
-            <div className="text-[11px] text-slate-400">{signup ? 'Create your account and set up your WhatsApp bot' : 'WhatsApp lead console'}</div>
+            <div className="text-[11px] text-slate-400">{signup ? 'Create your account and set up your WhatsApp bot' : 'WhatsApp lead capture and CRM'}</div>
           </div>
         </div>
 

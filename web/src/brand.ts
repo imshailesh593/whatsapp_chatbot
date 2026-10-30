@@ -16,7 +16,7 @@ export interface Product {
 
 /** Product-level info for the sign-in screen (before anyone belongs to a workspace). */
 export function useProduct(): Product {
-  const [p, setP] = useState<Product>({ productName: 'Lead Console', signupEnabled: false });
+  const [p, setP] = useState<Product>({ productName: 'Wappo', signupEnabled: false });
   useEffect(() => {
     fetch('/admin/api/brand')
       .then((r) => r.json())

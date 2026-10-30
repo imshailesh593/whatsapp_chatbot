@@ -36,7 +36,7 @@ a{color:var(--brand)}a:hover{color:var(--brand2)}
 header.top{position:sticky;top:0;z-index:10;background:color-mix(in srgb,var(--bg) 92%,transparent);backdrop-filter:blur(8px);border-bottom:1px solid var(--line)}
 header.top .wrap{display:flex;align-items:center;gap:20px;height:60px}
 .logo{font-weight:800;font-size:18px;color:var(--ink);text-decoration:none;display:flex;align-items:center;gap:8px}
-.logo i{width:26px;height:26px;border-radius:8px;background:linear-gradient(135deg,var(--accent),var(--brand));display:inline-block}
+.logo img{width:32px;height:32px;border-radius:9px;display:block}
 nav.main{display:flex;gap:18px;margin-left:auto;align-items:center}
 nav.main a{color:var(--mute);text-decoration:none;font-size:14px;font-weight:600}
 nav.main a:hover{color:var(--ink)}
@@ -148,20 +148,22 @@ function page(d: Doc): string {
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>${esc(d.title)}</title>
 <meta name="description" content="${esc(d.description)}">
-<meta property="og:title" content="${esc(d.title)}"><meta property="og:description" content="${esc(d.description)}"><meta property="og:type" content="website">
+<meta property="og:title" content="${esc(d.title)}"><meta property="og:description" content="${esc(d.description)}"><meta property="og:type" content="website">${base() ? `<meta property="og:image" content="${esc(base())}/admin/wappo-logo.jpg">` : ''}
 <meta name="theme-color" content="#2f6b3a">
+<link rel="icon" type="image/png" href="/admin/wappo-icon-64.png">
+<link rel="apple-touch-icon" href="/admin/wappo-icon.png">
 ${canon}
 <style>${CSS}</style>
 </head><body>
 <header class="top"><div class="wrap">
-<a class="logo" href="/"><i></i>${name}</a>
+<a class="logo" href="/"><img src="/admin/wappo-icon.png" alt="${name} logo" width="32" height="32">${name}</a>
 <nav class="main">
 <a class="h" href="${anchor('features')}">Features</a><a class="h" href="${anchor('how')}">How it works</a><a class="h" href="${anchor('pricing')}">Pricing</a><a class="h" href="${anchor('faq')}">FAQ</a>
 <a href="/admin/">Sign in</a><a class="btn p sm" href="/admin/?plan=pro">${signupOpen() ? 'Start free' : 'Open dashboard'}</a>
 </nav></div></header>
 ${d.body}
 <footer><div class="wrap"><div class="cols">
-<div><strong>${name}</strong><br>A WhatsApp lead-capture and follow-up service operated by <strong>${who}</strong>.<br>© ${year} ${who}. All rights reserved.</div>
+<div><img src="/admin/wappo-icon.png" alt="" width="36" height="36" style="border-radius:10px;display:block;margin-bottom:8px"><strong>${name}</strong><br>A WhatsApp lead-capture and follow-up service operated by <strong>${who}</strong>.<br>© ${year} ${who}. All rights reserved.</div>
 <div><a href="/about">About</a><a href="/pricing">Pricing</a><a href="/privacy">Privacy Policy</a><a href="/terms">Terms &amp; Conditions</a><a href="/refunds">Refund &amp; Cancellation</a><a href="/shipping">Shipping &amp; Delivery</a><a href="/contact">Contact</a></div>
 </div>
 <p class="fine" style="margin-top:18px">${name} is an independent service. It is not affiliated with, endorsed by or sponsored by WhatsApp or Meta Platforms, Inc. WhatsApp is a trademark of its owner.</p>
@@ -761,7 +763,7 @@ export function registerSite(app: FastifyInstance): void {
       .status(status)
       .header('Content-Type', 'text/html; charset=utf-8')
       .header('Cache-Control', 'public, max-age=300')
-      .header('Content-Security-Policy', "default-src 'none'; style-src 'unsafe-inline'; img-src data:; base-uri 'none'; form-action 'self'; frame-ancestors 'none'")
+      .header('Content-Security-Policy', "default-src 'none'; style-src 'unsafe-inline'; img-src 'self' data:; base-uri 'none'; form-action 'self'; frame-ancestors 'none'")
       .header('X-Content-Type-Options', 'nosniff')
       .header('Referrer-Policy', 'strict-origin-when-cross-origin')
       .send(html);

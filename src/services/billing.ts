@@ -5,6 +5,7 @@ import type { Workspace } from '@prisma/client';
 import { prisma } from '../lib/prisma';
 import { invalidateConfig } from './botConfig';
 import { PLANS, planById, TRIAL_DAYS } from '../plans';
+import { PRODUCT_NAME } from '../brand';
 import { cancelPaypalSubscription, createSubscription, getSubscription, paypalKeys, paypalPlanEnv, planFromPaypal, verifyPaypalWebhook } from './paypal';
 
 export type Provider = 'stripe' | 'razorpay' | 'paypal';
@@ -84,7 +85,7 @@ export async function startCheckout(ws: Workspace, planId: string, provider: Pro
       ourPlanId: plan.id,
       workspaceId: ws.id,
       email,
-      brand: env('PRODUCT_NAME') || 'Lead Console',
+      brand: PRODUCT_NAME,
       returnUrl: `${back}?billing=success`,
       cancelUrl: `${back}?billing=cancelled`
     });

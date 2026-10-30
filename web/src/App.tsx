@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { BarChart3, Building2, Megaphone, Calendar, CheckCircle2, Clock, ExternalLink, Globe, MessageSquare, ShieldCheck, Smartphone, Users } from 'lucide-react';
+import { BarChart3, Building2, Megaphone, Calendar, CheckCircle2, Clock, ExternalLink, MessageSquare, ShieldCheck, Smartphone, Users } from 'lucide-react';
 import { api, UnauthorizedError } from './api';
 import type { AdminRow, AdminUser, BillingInfo, Contact, Overview } from './types';
 import AccountMenu from './components/AccountMenu';
@@ -11,6 +11,7 @@ import Settings from './components/Settings';
 import Dossier from './components/Dossier';
 import Onboarding from './components/Onboarding';
 import Billing from './components/Billing';
+import Logo from './components/Logo';
 import PlatformShell from './components/PlatformShell';
 import Broadcasts from './components/Broadcasts';
 import Analytics from './components/Analytics';
@@ -74,9 +75,12 @@ function CheckoutPage({ user, onSkip, onSignOut }: { user: AdminUser; onSkip: ()
     <div className="min-h-screen bg-slate-900 text-slate-200 p-4 sm:p-8">
       <div className="max-w-3xl mx-auto">
         <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-3">
+          <Logo size={36} />
           <div>
             <h1 className="text-xl font-extrabold text-white">Choose your plan</h1>
             <p className="text-xs text-slate-400 mt-1">Pay now to switch on your plan, or start your free trial and pay later from Plan &amp; billing.</p>
+          </div>
           </div>
           <button onClick={onSignOut} className="text-xs text-slate-400 hover:text-slate-200">Sign out</button>
         </div>
@@ -171,9 +175,7 @@ function Console({ user, onSignedOut, onPlatform }: { user: AdminUser; onSignedO
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
             <div className="flex items-center space-x-3">
-              <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-emerald-500 to-teal-400 flex items-center justify-center shadow-lg shadow-emerald-500/20">
-                <Globe className="w-5 h-5 text-slate-950" />
-              </div>
+              <Logo size={40} className="shadow-lg shadow-emerald-500/20" />
               <div>
                 <div className="flex items-center space-x-2">
                   <span className="font-extrabold text-base tracking-tight text-white">{brand.businessName}</span>
