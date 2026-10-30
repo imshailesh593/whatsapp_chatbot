@@ -12,6 +12,7 @@ import { startWebhookWorker } from './services/integrations';
 import { startFollowUpWorker } from './services/crm';
 import { startAppointmentWorker } from './services/calendar';
 import { startRenewalWorker } from './services/billing';
+import { startCustomerFollowUps } from './services/followups';
 import { registerPublicApi } from './publicApi';
 import { registerSite } from './site';
 
@@ -60,6 +61,7 @@ const webhooks = startWebhookWorker();
 const followUps = startFollowUpWorker();
 const appointments = startAppointmentWorker();
 const renewals = startRenewalWorker();
+const customerFollowUps = startCustomerFollowUps();
 let client: { stop(): Promise<void> } | null = null;
 startWhatsApp()
   .then((c) => (client = c))
@@ -70,6 +72,7 @@ const shutdown = async () => {
   webhooks.stop();
   followUps.stop();
   appointments.stop();
+  customerFollowUps.stop();
   renewals.stop();
   await app.close();
   await client?.stop();

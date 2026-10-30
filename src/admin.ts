@@ -122,7 +122,8 @@ const WS_FIELDS = [
   'timezone',
   'notifyEmail',
   'notifyPhone',
-  'handoffMessage'
+  'handoffMessage',
+  'languageWelcome'
 ] as const;
 const WS_MAX: Record<(typeof WS_FIELDS)[number], number> = {
   industry: 60,
@@ -140,7 +141,8 @@ const WS_MAX: Record<(typeof WS_FIELDS)[number], number> = {
   timezone: 60,
   notifyEmail: 254,
   notifyPhone: 40,
-  handoffMessage: 300
+  handoffMessage: 300,
+  languageWelcome: 500
 };
 const URL_FIELDS = new Set(['formUrl', 'bookingUrl']);
 
@@ -190,6 +192,9 @@ const publicWorkspace = (w: Workspace) => ({
   notifyPhone: w.notifyPhone,
   handoffEnabled: w.handoffEnabled,
   handoffMessage: w.handoffMessage,
+  languageStep: w.languageStep,
+  languageWelcome: w.languageWelcome,
+  followUpsEnabled: w.followUpsEnabled,
   onboardingCompleted: w.onboardingCompleted,
   botEnabled: w.botEnabled
 });
@@ -566,15 +571,17 @@ export function registerAdmin(app: FastifyInstance, opts: { getQr: (workspaceId:
       whatsapp: waFor(wsId(req)).status,
       workspace: publicWorkspace(cfg.ws),
       stages: await getStages(wsId(req)),
-      services: cfg.services.map((s) => ({ id: s.key, title: s.title, keywords: s.keywords, questions: s.questions.map((q) => ({ key: q.key, prompt: q.prompt })) }))
+      services: cfg.services.map((s) => ({ id: s.key, title: s.title, keywords: s.keywords, closingMessage: s.closingMessage, questions: s.questions.map((q) => ({ key: q.key, prompt: q.prompt })) }))
     };
   });
 
   app.put('/admin/api/workspace', { preHandler: manager }, async (req, reply) => {
     const picked = pickWorkspaceFields((req.body ?? {}) as Record<string, unknown>);
     if ('error' in picked) return reply.status(400).send({ error: picked.error });
-    const flag = (req.body as any)?.handoffEnabled;
-    const w = await prisma.workspace.update({ where: { id: wsId(req) }, data: { ...picked.data, ...(typeof flag === 'boolean' ? { handoffEnabled: flag } : {}) } });
+    const b = (req.body ?? {}) as Record<string, unknown>;
+    const flags: Record<string, boolean> = {};
+    for (const f of ['handoffEnabled', 'languageStep', 'followUpsEnabled']) if (typeof b[f] === 'boolean') flags[f] = b[f] as boolean;
+    const w = await prisma.workspace.update({ where: { id: wsId(req) }, data: { ...picked.data, ...flags } });
     invalidateConfig(w.id);
     return { workspace: publicWorkspace(w) };
   });
@@ -586,7 +593,7 @@ export function registerAdmin(app: FastifyInstance, opts: { getQr: (workspaceId:
       return reply.status(400).send({ error: (err as Error).message });
     }
     const cfg = await loadConfig(wsId(req));
-    return { services: cfg.services.map((s) => ({ id: s.key, title: s.title, keywords: s.keywords, questions: s.questions })) };
+    return { services: cfg.services.map((s) => ({ id: s.key, title: s.title, keywords: s.keywords, closingMessage: s.closingMessage, questions: s.questions })) };
   });
 
   app.get('/admin/api/templates', { preHandler: guard }, async () => ({

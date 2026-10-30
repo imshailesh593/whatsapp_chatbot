@@ -5,13 +5,13 @@ import type { Workspace } from '../types';
 
 type Fields = Pick<
   Workspace,
-  'timezone' | 'businessName' | 'tagline' | 'description' | 'welcomeIntro' | 'tone' | 'languages' | 'bookingLabel' | 'bookingUrl' | 'bookingNote' | 'formUrl' | 'knowledge' | 'notifyEmail' | 'notifyPhone' | 'handoffEnabled' | 'handoffMessage'
+  'timezone' | 'businessName' | 'tagline' | 'description' | 'welcomeIntro' | 'tone' | 'languages' | 'bookingLabel' | 'bookingUrl' | 'bookingNote' | 'formUrl' | 'knowledge' | 'notifyEmail' | 'notifyPhone' | 'handoffEnabled' | 'handoffMessage' | 'languageStep' | 'languageWelcome' | 'followUpsEnabled'
 >;
 
 const pick = (w: Workspace): Fields => ({
   timezone: w.timezone, businessName: w.businessName, tagline: w.tagline, description: w.description, welcomeIntro: w.welcomeIntro, tone: w.tone,
   languages: w.languages, bookingLabel: w.bookingLabel, bookingUrl: w.bookingUrl, bookingNote: w.bookingNote, formUrl: w.formUrl,
-  knowledge: w.knowledge, notifyEmail: w.notifyEmail, notifyPhone: w.notifyPhone, handoffEnabled: w.handoffEnabled, handoffMessage: w.handoffMessage
+  knowledge: w.knowledge, notifyEmail: w.notifyEmail, notifyPhone: w.notifyPhone, handoffEnabled: w.handoffEnabled, handoffMessage: w.handoffMessage, languageStep: w.languageStep, languageWelcome: w.languageWelcome, followUpsEnabled: w.followUpsEnabled
 });
 
 export default function BusinessProfile({ workspace, onSaved }: { workspace: Workspace; onSaved: () => void }) {
@@ -130,6 +130,21 @@ export default function BusinessProfile({ workspace, onSaved }: { workspace: Wor
         {f.handoffEnabled && (
           <div className="sm:col-span-2"><label className={label}>What the customer is told (optional)</label><input value={f.handoffMessage} maxLength={300} onChange={set('handoffMessage')} className={input} placeholder="Of course. I have asked our team to take over, and a person will reply here shortly." /></div>
         )}
+        <div className="sm:col-span-2 border-t border-slate-800 pt-4">
+          <h4 className="text-sm font-bold text-white">Language and follow-ups</h4>
+          <p className="text-[11px] text-slate-500 mt-1">Ask which language the customer prefers before showing the menu, and nudge people who go quiet.</p>
+        </div>
+        <label className="sm:col-span-2 flex items-center gap-2 text-xs text-slate-300">
+          <input type="checkbox" checked={f.languageStep} onChange={(e) => setF((x) => ({ ...x, languageStep: e.target.checked }))} />
+          <span>Ask the customer's preferred language first. The menu, questions and replies are then translated by AI (this uses your monthly AI answers)</span>
+        </label>
+        {f.languageStep && (
+          <div className="sm:col-span-2"><label className={label}>First message (asks for the language; empty uses the standard one)</label><textarea value={f.languageWelcome} rows={3} maxLength={500} onChange={set('languageWelcome')} className={`${input} resize-y`} placeholder="Hello! Welcome... Which language would you prefer for our conversation?" /></div>
+        )}
+        <label className="sm:col-span-2 flex items-center gap-2 text-xs text-slate-300">
+          <input type="checkbox" checked={f.followUpsEnabled} onChange={(e) => setF((x) => ({ ...x, followUpsEnabled: e.target.checked }))} />
+          <span>Follow up automatically 1, 3, 6 and 48 hours after a customer's last message, in daytime hours only, until they reply, book, say STOP, or the lead is Won or Lost</span>
+        </label>
         <div className="sm:col-span-2 flex flex-wrap items-center gap-3">
           <button type="button" onClick={testAlert} disabled={busy || (!f.notifyEmail && !f.notifyPhone)} className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs rounded-lg border border-slate-700 disabled:opacity-40">Save &amp; send a test alert</button>
           {testResult && (

@@ -8,11 +8,14 @@ import { notifyBooked, notifyNewLead } from './alerts';
 import { dispatchEvent } from './integrations';
 import { logLeadEvent } from './crm';
 import { startHandoff, wantsHuman } from './handoff';
+import { localize, parseLanguage } from './language';
 import { calendarConnected, handleBookingMessage, markLeadBooked } from './calendar';
 import {
   loadConfig,
   resolveService,
   welcomeMessage,
+  menuOnlyMessage,
+  languagePromptMessage,
   menuPrompt,
   invalidSelectionMessage,
   completionMessage,
@@ -26,7 +29,9 @@ const RESET_COMMANDS = ['reset', 'menu', 'restart', 'start'];
 const OPT_OUT_COMMANDS = ['stop', 'unsubscribe', 'stop all'];
 const BOOKED_RE = /already\s+booked|i\s+(have\s+)?booked|booking\s+done|booked\s+(a\s+)?(slot|consultation|appointment|call)/i;
 
-const looksLikeQuestion = (t: string) => t.includes('?') && t.length > 3;
+// A question mark, or a plain price question typed without one ("DHA fees", "ielts price", "kitna charge")
+const PRICE_RE = /\b(fees?|prices?|pricing|cost|costs|charges?|how much|kitna|kitne)\b/i;
+export const looksLikeQuestion = (t: string) => t.length > 3 && (t.includes('?') || PRICE_RE.test(t));
 
 /** True when the most recent message we sent to this chat was exactly `text` (avoids repeating ourselves). */
 async function lastReplyWas(workspaceId: string, phone: string, text: string): Promise<boolean> {
@@ -58,7 +63,7 @@ export async function handleIncomingMessage(
   const tryAnswer = async (question: string): Promise<boolean> => {
     // Over the plan's AI allowance the bot keeps to its fixed replies
     if (!isCapturing() && !(await admitAiReply(cfg.ws))) return false;
-    const answer = await answerFreeform(cfg, question);
+    const answer = await answerFreeform(cfg, question, session?.language);
     if (!answer) return false;
     await send(phoneNumber, answer);
     return true;
@@ -73,7 +78,7 @@ export async function handleIncomingMessage(
     const source = /\(ref:\s*([A-Za-z0-9_-]{1,30})\)/i.exec(text)?.[1]?.toLowerCase() ?? null;
     session = await prisma.session.create({ data: { workspaceId, phoneNumber, contactName: contactName || null, source } });
   } else {
-    await prisma.session.update({ where: key, data: { lastInteractionAt: new Date() } });
+    await prisma.session.update({ where: key, data: { lastInteractionAt: new Date(), followUpCount: 0 } });
   }
 
   // A human agent has taken over, or the workspace has not gone live yet: suppress automated replies
@@ -81,6 +86,20 @@ export async function handleIncomingMessage(
   if (!cfg.ws.botEnabled && !isCapturing()) return;
   if (!isCapturing() && !accessState(cfg.ws).active) return;
   if (cfg.services.length === 0) return;
+
+  /** Bot copy in the language the customer chose (businesses that ask for it); plain English otherwise */
+  const speak = async (body: string) => send(phoneNumber, await localize(cfg, body, session!.language, isCapturing()));
+  /** The first thing a customer sees: the language question (when the business asks it and they have not answered yet), else the menu */
+  const entry = async () => {
+    if (cfg.ws.languageStep && !session!.language) {
+      await prisma.session.update({ where: key, data: { stage: SessionStage.AWAITING_LANGUAGE } });
+      await send(phoneNumber, languagePromptMessage(cfg));
+    } else if (cfg.ws.languageStep) {
+      await speak(menuOnlyMessage(cfg));
+    } else {
+      await send(phoneNumber, welcomeMessage(cfg));
+    }
+  };
 
   // Customers can leave broadcast lists at any time; they can come back with START / MENU
   if (OPT_OUT_COMMANDS.includes(lower)) {
@@ -91,7 +110,7 @@ export async function handleIncomingMessage(
 
   // The customer asks for a person: step back, tell them, and brief the team
   if (cfg.ws.handoffEnabled && wantsHuman(text)) {
-    await send(phoneNumber, await startHandoff(cfg, workspaceId, phoneNumber, session.id, { capturing: isCapturing() }));
+    await speak(await startHandoff(cfg, workspaceId, phoneNumber, session.id, { capturing: isCapturing() }));
     return;
   }
 
@@ -101,7 +120,7 @@ export async function handleIncomingMessage(
       where: key,
       data: { stage: SessionStage.AWAITING_SERVICE_SELECTION, selectedService: null, currentStep: 0, answers: {}, optedOut: false }
     });
-    await send(phoneNumber, welcomeMessage(cfg));
+    await entry();
     return;
   }
 
@@ -109,7 +128,19 @@ export async function handleIncomingMessage(
   switch (session.stage) {
     case SessionStage.WELCOME: {
       await prisma.session.update({ where: key, data: { stage: SessionStage.AWAITING_SERVICE_SELECTION } });
-      await send(phoneNumber, welcomeMessage(cfg));
+      await entry();
+      break;
+    }
+
+    case SessionStage.AWAITING_LANGUAGE: {
+      const language = parseLanguage(text);
+      if (!language) {
+        await send(phoneNumber, languagePromptMessage(cfg));
+        return;
+      }
+      await prisma.session.update({ where: key, data: { stage: SessionStage.AWAITING_SERVICE_SELECTION, language } });
+      session.language = language;
+      await speak(menuOnlyMessage(cfg));
       break;
     }
 
@@ -117,9 +148,9 @@ export async function handleIncomingMessage(
       const serviceKey = resolveService(cfg, text);
       if (!serviceKey) {
         if (looksLikeQuestion(text) && (await tryAnswer(text))) {
-          await send(phoneNumber, menuPrompt(cfg));
+          await speak(menuPrompt(cfg));
         } else {
-          await send(phoneNumber, invalidSelectionMessage(cfg));
+          await speak(invalidSelectionMessage(cfg));
         }
         return;
       }
@@ -128,7 +159,7 @@ export async function handleIncomingMessage(
         where: key,
         data: { stage: SessionStage.IN_QUESTIONNAIRE, selectedService: serviceKey, currentStep: 0, answers: {} }
       });
-      await send(phoneNumber, cfg.services.find((s) => s.key === serviceKey)!.questions[0].prompt);
+      await speak(cfg.services.find((s) => s.key === serviceKey)!.questions[0].prompt);
       break;
     }
 
@@ -141,7 +172,7 @@ export async function handleIncomingMessage(
           where: key,
           data: { stage: SessionStage.AWAITING_SERVICE_SELECTION, selectedService: null, currentStep: 0, answers: {} }
         });
-        await send(phoneNumber, welcomeMessage(cfg));
+        await entry();
         return;
       }
 
@@ -149,7 +180,7 @@ export async function handleIncomingMessage(
 
       // A side question mid-flow: answer it, then repeat the pending question (answer not consumed)
       if (looksLikeQuestion(text) && (await tryAnswer(text))) {
-        await send(phoneNumber, questions[step].prompt);
+        await speak(questions[step].prompt);
         return;
       }
 
@@ -158,7 +189,7 @@ export async function handleIncomingMessage(
 
       if (nextStep < questions.length) {
         await prisma.session.update({ where: key, data: { currentStep: nextStep, answers: updatedAnswers } });
-        await send(phoneNumber, questions[nextStep].prompt);
+        await speak(questions[nextStep].prompt);
       } else {
         const [, newLead] = await prisma.$transaction([
           prisma.session.update({
@@ -178,7 +209,7 @@ export async function handleIncomingMessage(
           })
         ]);
         if (!isCapturing()) void logLeadEvent(newLead.id, workspaceId, 'created', service.title, 'bot');
-        await send(phoneNumber, completionMessage(cfg));
+        await speak(completionMessage(cfg, service.key));
         if (!isCapturing()) {
           void notifyNewLead(workspaceId, session.id);
           void dispatchEvent(workspaceId, 'lead.created', session.id);
@@ -194,20 +225,21 @@ export async function handleIncomingMessage(
       if (hasBooking && BOOKED_RE.test(text)) {
         // Move the lead to "Booked" unless it is already there or has been closed (won / lost) by the team
         const moved = await markLeadBooked(workspaceId, phoneNumber, session.id, 'customer confirmed', !isCapturing());
-        await send(phoneNumber, bookedConfirmationMessage());
+        await speak(bookedConfirmationMessage());
         if (!isCapturing() && moved) void notifyBooked(workspaceId, phoneNumber);
       } else if (hasBooking && /consultation|appointment|book|fee/.test(lower)) {
-        await send(phoneNumber, bookingReminderMessage(cfg));
+        await speak(bookingReminderMessage(cfg));
       } else if (looksLikeQuestion(text) && (await tryAnswer(text))) {
         // answered a genuine question
-      } else if (!(await lastReplyWas(workspaceId, phoneNumber, postCompletionMessage()))) {
-        await send(phoneNumber, postCompletionMessage());
+      } else {
+        const ack = await localize(cfg, postCompletionMessage(), session.language, isCapturing());
+        if (!(await lastReplyWas(workspaceId, phoneNumber, ack))) await send(phoneNumber, ack);
       }
       // otherwise stay quiet: the same acknowledgement was already the last thing we sent
       break;
     }
 
     default:
-      await send(phoneNumber, welcomeMessage(cfg));
+      await entry();
   }
 }

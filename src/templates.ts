@@ -11,6 +11,8 @@ export interface TemplateService {
   title: string;
   keywords: string[];
   questions: TemplateQuestion[];
+  /** What the customer is sent when they finish this service's questions (links, next step). Empty: the generic thank-you */
+  closingMessage?: string;
 }
 export interface Template {
   id: string;

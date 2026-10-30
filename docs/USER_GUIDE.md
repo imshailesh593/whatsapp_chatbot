@@ -267,6 +267,11 @@ There is one plan, **Pro**: ₹499 a month in India or $19 a month elsewhere. It
 
 Pro includes 1 WhatsApp number. The free trial (14 days) has the same limits.
 
+**Language and follow-ups** (Bot & Settings → Business profile, section "Language and follow-ups"):
+- *Ask the customer's preferred language first*: the first message asks for a language, and the menu, questions and replies are then written in it. Translation uses your monthly AI answers.
+- *Follow up automatically*: customers who go quiet get a polite nudge 1, 3, 6 and 48 hours after their last message (daytime only). It stops when they reply, send STOP, you take over, or the lead is Won, Lost or Booked.
+- Each menu option can have its own *closing message* (Menu & questions), for example with the right website link.
+
 What happens at a limit:
 - **Conversations used up:** customers already chatting are still served, but new chats are not started until next month or an upgrade.
 - **AI answers used up:** the bot keeps working with its fixed replies, without AI answers.

@@ -9,6 +9,8 @@ generator client {
 
 enum SessionStage {
   WELCOME
+  /// Only for workspaces that ask for the customer's language first
+  AWAITING_LANGUAGE
   AWAITING_SERVICE_SELECTION
   IN_QUESTIONNAIRE
   COMPLETED
@@ -42,6 +44,12 @@ model Workspace {
   botEnabled             Boolean   @default(true) @map("bot_enabled")
   handoffEnabled         Boolean   @default(true) @map("handoff_enabled")
   handoffMessage         String    @default("") @map("handoff_message")
+  /// Ask the customer's preferred language before showing the menu; later bot messages are translated into it
+  languageStep           Boolean   @default(false) @map("language_step")
+  /// The first message when languageStep is on (it asks which language the customer prefers)
+  languageWelcome        String    @default("") @map("language_welcome")
+  /// Automatic nudges to customers who go quiet (1, 3, 6 and 48 hours after their last message)
+  followUpsEnabled       Boolean   @default(false) @map("follow_ups_enabled")
   /// Short code in this business referral link
   referralCode           String?   @unique @map("referral_code")
   /// Workspace that referred this one (plain text so deleting a referrer does not touch the referred)
@@ -81,14 +89,16 @@ model Workspace {
 
 /// A menu option ("Coaching", "Book a viewing", ...) with its own question list.
 model Service {
-  id          String     @id @default(uuid())
-  workspaceId String     @map("workspace_id")
-  workspace   Workspace  @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  key         String
-  title       String
-  keywords    String[]   @default([])
-  position    Int
-  questions   Question[]
+  id             String     @id @default(uuid())
+  workspaceId    String     @map("workspace_id")
+  workspace      Workspace  @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  key            String
+  title          String
+  keywords       String[]   @default([])
+  position       Int
+  /// Shown instead of the generic thank-you when a customer finishes this service's questions (links, next step)
+  closingMessage String     @default("") @map("closing_message")
+  questions      Question[]
 
   @@unique([workspaceId, key])
   @@index([workspaceId, position])
@@ -122,6 +132,11 @@ model Session {
   /// Set when the customer asked for a person: the bot stepped back and the team was alerted
   handoffAt         DateTime?    @map("handoff_at")
   handoffSummary    String       @default("") @map("handoff_summary")
+  /// Language the customer chose (workspaces with languageStep)
+  language          String?
+  /// Follow-up nudges sent since the customer's last message; reset when they reply
+  followUpCount     Int          @default(0) @map("follow_up_count")
+  lastFollowUpAt    DateTime?    @map("last_follow_up_at")
   /// Appointment times currently offered to the customer (ISO strings) while they choose one
   slotOffer         Json?        @map("slot_offer")
   /// Customer replied STOP: never include in broadcasts

@@ -40,8 +40,11 @@ export interface QuestionDef {
 }
 
 export interface ServiceDef {
+  /** Stable id of an existing service (kept so saving does not rename it); empty for new ones */
+  key?: string;
   title: string;
   keywords: string[];
+  closingMessage?: string;
   questions: QuestionDef[];
 }
 
@@ -65,6 +68,9 @@ export interface Workspace {
   notifyPhone: string;
   handoffEnabled: boolean;
   handoffMessage: string;
+  languageStep: boolean;
+  languageWelcome: string;
+  followUpsEnabled: boolean;
   onboardingCompleted: boolean;
   botEnabled: boolean;
 }

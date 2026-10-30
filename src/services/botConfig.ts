@@ -11,6 +11,7 @@ export interface BotService {
   title: string;
   keywords: string[];
   questions: BotQuestion[];
+  closingMessage: string;
 }
 export interface BotConfig {
   ws: Workspace;
@@ -41,6 +42,7 @@ export async function loadConfig(workspaceId: string): Promise<BotConfig> {
       key: s.key,
       title: s.title,
       keywords: s.keywords,
+      closingMessage: s.closingMessage,
       questions: s.questions.map((q) => ({ key: q.key, prompt: q.prompt }))
     }))
   };
@@ -83,7 +85,8 @@ export function sanitizeServices(input: unknown): TemplateService[] {
       .map((k: unknown) => clean(k, 40).toLowerCase())
       .filter(Boolean)
       .slice(0, 12);
-    return { key, title, keywords, questions };
+    const closingMessage = String(raw?.closingMessage ?? '').replace(/\r/g, '').trim().slice(0, 1200);
+    return { key, title, keywords, questions, closingMessage };
   });
 }
 
@@ -99,6 +102,7 @@ export async function saveServices(workspaceId: string, input: unknown): Promise
           key: s.key!,
           title: s.title,
           keywords: s.keywords,
+          closingMessage: s.closingMessage ?? '',
           position,
           questions: { create: s.questions.map((q, p) => ({ key: q.key, prompt: q.prompt, position: p })) }
         }
@@ -156,6 +160,17 @@ export function welcomeMessage(cfg: BotConfig): string {
   return parts.join('\n\n');
 }
 
+/** The menu on its own (the language question has already been asked and answered). */
+export function menuOnlyMessage(cfg: BotConfig): string {
+  return ['To assist you better, please select the service you are looking for:', menuLines(cfg), `Please reply with the option number (1-${cfg.services.length}). 😊`].join('\n\n');
+}
+
+export const DEFAULT_LANGUAGE_WELCOME =
+  'Hello! Welcome, and thank you for contacting us. I am here to help you find the right solution for your needs. Which language would you prefer for our conversation?';
+
+/** The first message of a workspace that asks the customer's language before showing the menu. */
+export const languagePromptMessage = (cfg: BotConfig) => cfg.ws.languageWelcome.trim() || DEFAULT_LANGUAGE_WELCOME;
+
 export const menuPrompt = (cfg: BotConfig) => `To get started, please reply with the option number (1-${cfg.services.length}) for the service you need. 😊`;
 
 export function invalidSelectionMessage(cfg: BotConfig): string {
@@ -169,8 +184,10 @@ function bookingBlock(cfg: BotConfig, lead: string): string[] {
   return out;
 }
 
-export function completionMessage(cfg: BotConfig): string {
+export function completionMessage(cfg: BotConfig, serviceKey?: string | null): string {
   const { ws } = cfg;
+  const own = cfg.services.find((s) => s.key === serviceKey)?.closingMessage.trim();
+  if (own) return own;
   const parts = [
     'Thank you for sharing your details! 🙌',
     'Our team will review your requirements and guide you regarding the relevant process and next steps.'
