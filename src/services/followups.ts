@@ -5,6 +5,7 @@ import { loadConfig, type BotConfig } from './botConfig';
 import { inSendWindow } from './broadcast';
 import { getStages } from './pipeline';
 import { localize } from './language';
+import { outsideLinkQuiet } from '../lib/quiet';
 import { sendTextMessage, transportReady } from './transport';
 
 /** Hours after the customer's last message at which a nudge may go out. */
@@ -50,6 +51,7 @@ async function followUpWorkspace(cfg: BotConfig, now: number): Promise<number> {
   const candidates = await prisma.session.findMany({
     where: {
       workspaceId: id,
+      ...outsideLinkQuiet(now),
       optedOut: false,
       isAgentPaused: false,
       handoffAt: null,

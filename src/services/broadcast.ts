@@ -1,3 +1,4 @@
+import { LINK_QUIET_DAYS, outsideLinkQuiet } from '../lib/quiet';
 import { Prisma } from '@prisma/client';
 import { prisma } from '../lib/prisma';
 import { loadConfig } from './botConfig';
@@ -39,6 +40,7 @@ function audienceWhere(workspaceId: string, f: Required<AudienceFilters>): Prism
     workspaceId,
     phoneNumber: { not: { startsWith: 'SIM-' } },
     optedOut: false,
+    ...outsideLinkQuiet(),
     lastInteractionAt: { gte: new Date(Date.now() - f.activeWithinDays * 86_400_000) },
     ...(f.services.length ? { selectedService: { in: f.services } } : {}),
     ...(f.stages.length ? { lead: { is: { stageKey: { in: f.stages } } } } : f.includeAnswering ? {} : { lead: { isNot: null } })
@@ -174,9 +176,10 @@ async function sendOne(b: { id: string; workspaceId: string; text: string }, opt
     return;
   }
   // Re-check consent right before sending: they may have replied STOP since the list was built
-  const session = await prisma.session.findUnique({ where: { workspaceId_phoneNumber: { workspaceId: b.workspaceId, phoneNumber: r.phone } }, select: { optedOut: true } });
-  if (!session || session.optedOut) {
-    await prisma.broadcastRecipient.update({ where: { id: r.id }, data: { status: 'skipped', error: 'opted out' } });
+  const session = await prisma.session.findUnique({ where: { workspaceId_phoneNumber: { workspaceId: b.workspaceId, phoneNumber: r.phone } }, select: { optedOut: true, consultLinkSentAt: true } });
+  const quiet = !!session?.consultLinkSentAt && session.consultLinkSentAt.getTime() > Date.now() - LINK_QUIET_DAYS * 86_400_000;
+  if (!session || session.optedOut || quiet) {
+    await prisma.broadcastRecipient.update({ where: { id: r.id }, data: { status: 'skipped', error: quiet ? 'consultation link sent this week' : 'opted out' } });
     await finishIfEmpty(b.id);
     return;
   }

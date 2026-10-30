@@ -136,6 +136,8 @@ model Session {
   /// Follow-up nudges sent since the customer's last message; reset when they reply
   followUpCount     Int          @default(0) @map("follow_up_count")
   lastFollowUpAt    DateTime?    @map("last_follow_up_at")
+  /// When the consultation link was last sent to this customer: no follow-ups or broadcasts for a week after
+  consultLinkSentAt DateTime?    @map("consult_link_sent_at")
   /// Appointment times currently offered to the customer (ISO strings) while they choose one
   slotOffer         Json?        @map("slot_offer")
   /// Customer replied STOP: never include in broadcasts

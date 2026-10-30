@@ -58,7 +58,12 @@ export async function handleIncomingMessage(
   const lower = text.toLowerCase();
 
   const cfg: BotConfig = await loadConfig(workspaceId);
-  const send = (to: string, body: string) => sendTextMessage(workspaceId, to, body);
+  const bookingUrl = cfg.ws.bookingUrl.trim();
+  const send = async (to: string, body: string) => {
+    await sendTextMessage(workspaceId, to, body);
+    // The consultation link went out: leave this customer alone (no follow-ups, no broadcasts) for a week
+    if (bookingUrl && body.includes(bookingUrl) && !isCapturing()) await prisma.session.updateMany({ where: { workspaceId, phoneNumber: to }, data: { consultLinkSentAt: new Date() } });
+  };
   const key = { workspaceId_phoneNumber: { workspaceId, phoneNumber } };
 
   /** Answer a side question via Gemini. Returns false if Gemini had nothing (not configured / failed). */

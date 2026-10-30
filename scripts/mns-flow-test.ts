@@ -145,6 +145,7 @@ setTranslatorForTests(async (text, language) => { translations++; return `[${lan
     ok(!to(hi).at(-1)!.includes('topmate'), 'asking about fees afterwards does not send the consultation link');
     await say(hi, 'I need more information');
     ok(to(hi).at(-1)!.startsWith('[Hindi]') && to(hi).at(-1)!.includes(TOPMATE), 'asking for more information sends the consultation link, in the customer\'s language');
+    ok(!!(await prisma.session.findFirst({ where: { workspaceId: W.id, phoneNumber: hi } }))!.consultLinkSentAt, 'sending the link is remembered on the chat');
     const lead = await prisma.lead.findFirst({ where: { workspaceId: W.id, phoneNumber: hi } });
     ok(lead?.serviceCategory === 'LICENSING' && Object.keys(lead.collectedData as object).sort().join() === 'profession,qualification,experience,gap,location,existing_license,exam_status'.split(',').sort().join(), 'the lead is saved with all seven answers');
     await say(hi, 'menu');
@@ -208,7 +209,7 @@ setTranslatorForTests(async (text, language) => { translations++; return `[${lan
     const q2 = await mk('b', 75, { language: 'Hindi' });
     const skipped = [
       await mk('c', 26, { optedOut: true }), await mk('d', 26, { isAgentPaused: true }), await mk('e', 26, { handoffAt: new Date(t0 - H) }),
-      await mk('f', 26, {}, 'won'), await mk('g', 26, {}, 'lost'), await mk('h', 26, {}, 'booked'), await mk('i', 200), await mk('j', 10), await mk('k', 26, { followUpCount: 2 })
+      await mk('f', 26, {}, 'won'), await mk('g', 26, {}, 'lost'), await mk('h', 26, {}, 'booked'), await mk('i', 200), await mk('j', 10), await mk('k', 26, { followUpCount: 2 }), await mk('n', 26, { consultLinkSentAt: new Date(t0 - 2 * 24 * H) })
     ];
     const open = await mk('l', 26, {}, 'new');
     invalidateConfig(W.id);
@@ -224,6 +225,7 @@ setTranslatorForTests(async (text, language) => { translations++; return `[${lan
     ok(n === 3 && to(q1).length === 1 && to(q2).length === 1 && to(open).length === 1, 'three eligible customers are nudged, one message each');
     ok(to(q1)[0].startsWith('Hello! Just checking in about International Job Assistance'), 'the first nudge names the service they were asking about');
     ok(to(q2)[0].startsWith('[Hindi] Hello! Are you still interested in'), 'a customer silent for three days gets the last nudge, once, in their language');
+    ok(to(skipped.at(-1)!).length === 0, 'a customer who was sent the consultation link two days ago is left alone');
     ok(skipped.every((p) => to(p).length === 0), 'opted out, taken over, handed off, won, lost, booked, too old, too recent and finished sequences are all left alone');
     ok((await followUpTick(t0)) === 0, 'running again straight away sends nothing more');
     const later = await followUpTick(t0 + 48 * H);
