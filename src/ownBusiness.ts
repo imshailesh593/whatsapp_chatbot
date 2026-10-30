@@ -202,10 +202,12 @@ export const OWN_PROFILE = {
   description:
     'a group of four services: MNS Institute (coaching, exam preparation, healthcare licensing, study-abroad guidance), MNS Institute Jobs (international job assistance), WAPPO (WhatsApp chatbot automation) and ZEXY AI (AI video editing and managed social media marketing)',
   tone: 'professional and friendly',
-  languages: 'English, Hindi and other languages the customer prefers',
+  // English is the primary and only language: the bot always answers in English, even if a customer writes in another language
+  languages: 'English only',
   bookingLabel: 'one-to-one consultation with our team',
   formUrl: FORM,
-  languageStep: true,
+  languageStep: false,
+  welcomeIntro: 'Thank you for contacting us. I am here to help you find the right solution for your needs.',
   languageWelcome:
     'Hello! Welcome, and thank you for contacting us. I am here to help you find the right solution for your needs. Which language would you prefer for our conversation?',
   followUpsEnabled: true,

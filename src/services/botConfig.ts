@@ -166,7 +166,7 @@ export function menuOnlyMessage(cfg: BotConfig): string {
   const lead = form
     ? [`📝 Please fill out this short form so our team can understand your profile:\n👉 ${form}`, 'Then, to assist you better, please select the service you are looking for:']
     : ['To assist you better, please select the service you are looking for:'];
-  return [...lead, menuLines(cfg), `Please reply with the option number (1-${cfg.services.length}). 😊`].join('\n\n');
+  return [...lead, menuLines(cfg), `Please reply with the option number (1-${cfg.services.length}). 😊\nTo change the language, type *LANGUAGE*.`].join('\n\n');
 }
 
 export const DEFAULT_LANGUAGE_WELCOME =

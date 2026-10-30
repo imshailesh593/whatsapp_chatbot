@@ -33,7 +33,7 @@ setTranslatorForTests(async (text, language) => { translations++; return `[${lan
     console.log('[the setup itself]');
     ok(cfg.services.length === 9 && cfg.services.every((s) => s.questions.length >= 2 && s.questions.length <= 12), 'nine menu options, each with its own questions');
     ok(cfg.services.map((s) => s.key).join() === 'COACHING,PROMETRIC_MATERIAL,LICENSING,JOBS,GERMAN,VISA_PR,WAPPO,ZEXY_AI,GENERAL', 'in the agreed order');
-    ok(cfg.ws.languageStep && cfg.ws.followUpsEnabled && cfg.ws.handoffEnabled && cfg.ws.formUrl === 'https://tally.so/r/7Rrl70', 'language question, follow-ups and hand-off are on; the profile form link is kept');
+    ok(!cfg.ws.languageStep && cfg.ws.languages === 'English only' && cfg.ws.followUpsEnabled && cfg.ws.handoffEnabled && cfg.ws.formUrl === 'https://tally.so/r/7Rrl70', 'English only: no language question; follow-ups and hand-off are on; the profile form link is kept');
     ok(OWN_KNOWLEDGE.length < 8000 && cfg.ws.knowledge === OWN_KNOWLEDGE, 'the AI notes fit the limit and are saved');
     for (const [needle, why] of [
       ['Rs 14,500 for two months, or Rs 12,000', 'coaching prices'], ['Never offer one-month DHA', 'DHA is two months only'], ['Rs 8,000', 'study material price'],
@@ -57,9 +57,28 @@ setTranslatorForTests(async (text, language) => { translations++; return `[${lan
       ['jobs', 'JOBS'], ['German', 'GERMAN'], ['I need a visa', 'VISA_PR'], ['Malta', 'VISA_PR'], ['wappo', 'WAPPO'], ['video editing', 'ZEXY_AI'], ['9', 'GENERAL']
     ] as const) ok(resolveService(cfg, input) === want, `"${input}" selects ${want}`);
 
+    console.log('\n[as shipped: English only, no language question]');
+    const solo = `9190${run}9`;
+    await say(solo, 'Hy');
+    ok(to(solo)[0].includes('Welcome to') && to(solo)[0].includes('https://tally.so/r/7Rrl70') && /1️⃣/.test(to(solo)[0]) && /9️⃣/.test(to(solo)[0]) && !/which language|LANGUAGE/.test(to(solo)[0]), 'a first message (even "Hy") gets the welcome, the profile form and the nine-option menu, with no language question');
+    await say(solo, '4');
+    ok(to(solo)[1] === 'What is your current profession?', 'the chosen service starts straight away, in English');
+    await say(solo, 'language');
+    ok((await prisma.session.findFirst({ where: { workspaceId: W.id, phoneNumber: solo } }))!.stage === 'IN_QUESTIONNAIRE', 'the LANGUAGE command does nothing when the business is English only');
+    ok(translations === 0, 'nothing is ever sent to the translator');
+    const stuck = `9190${run}8`;
+    await prisma.session.create({ data: { workspaceId: W.id, phoneNumber: stuck, stage: 'AWAITING_LANGUAGE', language: 'Hy' } });
+    await say(stuck, 'hello');
+    ok(to(stuck)[0].includes('Welcome to') && (await prisma.session.findFirst({ where: { workspaceId: W.id, phoneNumber: stuck } }))!.stage === 'AWAITING_SERVICE_SELECTION', 'a chat left on the language question carries on with the menu');
+    // the language feature itself (for businesses that use it) is checked from here on
+    await prisma.workspace.update({ where: { id: W.id }, data: { languageStep: true, languageWelcome: OWN_PROFILE.languageWelcome } });
+    invalidateConfig(W.id);
+
     console.log('\n[language answers]');
     for (const [input, want] of [['1', 'English'], ['english', 'English'], ['2', 'Hindi'], ['हिन्दी', 'Hindi'], ['hindi', 'Hindi'], ['tamil', 'Tamil'], ['Telugu', 'Telugu']] as const) ok(parseLanguage(input) === want, `"${input}" is ${want}`);
     ok(parseLanguage('what is the fee?') === null && parseLanguage('') === null && parseLanguage('a'.repeat(40)) === null, 'a question or nonsense is not taken as a language');
+    ok(['Hy', 'hy', 'hey', 'Hello', 'hi', 'hii', 'ok', 'yes', 'Nursing'].every((w) => parseLanguage(w) === null), 'greetings and ordinary words are not languages ("Hy" is the code for Armenian, but a customer typing it means hi)');
+    ok(parseLanguage('Armenian') === 'Armenian' && parseLanguage('in tamil') === 'Tamil' && parseLanguage('தமிழ்') === 'Tamil', 'real languages are still recognised, by name or in their own script');
 
     console.log('\n[a Hindi-speaking customer, licensing]');
     const hi = `9190${run}1`;
@@ -67,7 +86,7 @@ setTranslatorForTests(async (text, language) => { translations++; return `[${lan
     ok(to(hi)[0] === OWN_PROFILE.languageWelcome && !/₹|Rs/.test(to(hi)[0]), 'the first reply is the welcome that asks for the language, with no prices');
     ok((await prisma.session.findFirst({ where: { workspaceId: W.id, phoneNumber: hi } }))!.stage === 'AWAITING_LANGUAGE', 'the chat waits for the language');
     await say(hi, 'what is the price?');
-    ok(to(hi).length === 2 && to(hi)[1] === OWN_PROFILE.languageWelcome, 'a question instead of a language gets the language question again');
+    ok(to(hi).length === 2 && to(hi)[1].startsWith('Sorry, I did not catch that') && to(hi)[1].includes('English, Hindi'), 'a question instead of a language gets a hint with examples');
     await say(hi, 'Hindi');
     ok((await prisma.session.findFirst({ where: { workspaceId: W.id, phoneNumber: hi } }))!.language === 'Hindi', 'the language is remembered');
     const menu = to(hi)[2];
@@ -82,6 +101,21 @@ setTranslatorForTests(async (text, language) => { translations++; return `[${lan
     ok(lead?.serviceCategory === 'LICENSING' && Object.keys(lead.collectedData as object).sort().join() === 'profession,qualification,experience,gap,location,existing_license,exam_status'.split(',').sort().join(), 'the lead is saved with all seven answers');
     await say(hi, 'menu');
     ok(to(hi).at(-1)!.startsWith('[Hindi] 📝') && to(hi).at(-1)!.includes('to assist you better'), 'MENU shows the menu again without asking the language again');
+
+    console.log('\n[a customer who types a greeting as the language]');
+    const hy = `9190${run}7`;
+    await say(hy, 'Hi');
+    await say(hy, 'Hy');
+    ok(to(hy)[1].startsWith('Sorry, I did not catch that'), '"Hy" is not taken as Armenian: the customer gets a hint');
+    ok((await prisma.session.findFirst({ where: { workspaceId: W.id, phoneNumber: hy } }))!.language === null, '...and no language is stored');
+    await say(hy, 'hello');
+    ok(to(hy)[2] === 'No problem, we will continue in English. Type *LANGUAGE* at any time to change it.' && to(hy)[3].includes('to assist you better') && !to(hy)[3].startsWith('['), 'a second miss carries on in English, with the menu');
+    ok((await prisma.session.findFirst({ where: { workspaceId: W.id, phoneNumber: hy } }))!.language === 'English', '...and English is stored');
+    await say(hy, 'language');
+    ok(to(hy).at(-1) === OWN_PROFILE.languageWelcome, 'LANGUAGE asks the language question again');
+    await say(hy, 'Armenian');
+    ok((await prisma.session.findFirst({ where: { workspaceId: W.id, phoneNumber: hy } }))!.language === 'Armenian' && to(hy).at(-1)!.startsWith('[Armenian]'), 'a real language such as Armenian still works when asked for by name');
+    ok(to(hy).at(-1)!.includes('type *LANGUAGE*'), 'the menu tells customers how to change the language');
 
     console.log('\n[an English-speaking customer, WAPPO and jobs]');
     const en = `9190${run}2`;

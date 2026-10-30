@@ -12,7 +12,7 @@ dotenv.config();
 (async () => {
   await applyOwnBusiness(DEFAULT_WORKSPACE_ID);
   console.log(`Set up ${OWN_SERVICES.length} menu options and ${OWN_KNOWLEDGE.length} characters of AI notes on the default workspace.`);
-  console.log('Language question: on. Customer follow-ups: on (they start sending once WhatsApp is linked).');
+  console.log('English only: no language question, the AI always answers in English. Customer follow-ups: on (they send once WhatsApp is linked).');
   await prisma.$disconnect();
 })().catch((err) => {
   console.error('Setup failed:', (err as Error).message);

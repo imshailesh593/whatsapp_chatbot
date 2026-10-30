@@ -8,7 +8,7 @@ import { notifyBooked, notifyNewLead } from './alerts';
 import { dispatchEvent } from './integrations';
 import { logLeadEvent } from './crm';
 import { startHandoff, wantsHuman } from './handoff';
-import { localize, parseLanguage } from './language';
+import { languageFallbackMessage, languageHintMessage, localize, parseLanguage } from './language';
 import { calendarConnected, handleBookingMessage, markLeadBooked } from './calendar';
 import {
   loadConfig,
@@ -27,6 +27,7 @@ import {
 
 const RESET_COMMANDS = ['reset', 'menu', 'restart', 'start'];
 const OPT_OUT_COMMANDS = ['stop', 'unsubscribe', 'stop all'];
+const LANGUAGE_COMMANDS = ['language', 'change language', 'lang', 'भाषा'];
 const BOOKED_RE = /already\s+booked|i\s+(have\s+)?booked|booking\s+done|booked\s+(a\s+)?(slot|consultation|appointment|call)/i;
 
 // A question mark, or a plain price question typed without one ("DHA fees", "ielts price", "kitna charge")
@@ -63,7 +64,7 @@ export async function handleIncomingMessage(
   const tryAnswer = async (question: string): Promise<boolean> => {
     // Over the plan's AI allowance the bot keeps to its fixed replies
     if (!isCapturing() && !(await admitAiReply(cfg.ws))) return false;
-    const answer = await answerFreeform(cfg, question, session?.language);
+    const answer = await answerFreeform(cfg, question, cfg.ws.languageStep ? session?.language : null);
     if (!answer) return false;
     await send(phoneNumber, answer);
     return true;
@@ -114,6 +115,14 @@ export async function handleIncomingMessage(
     return;
   }
 
+  // Customers can change the language at any time (workspaces that ask for it)
+  if (cfg.ws.languageStep && LANGUAGE_COMMANDS.includes(lower)) {
+    await prisma.session.update({ where: key, data: { stage: SessionStage.AWAITING_LANGUAGE, language: null, selectedService: null, currentStep: 0, answers: {} } });
+    session.language = null;
+    await send(phoneNumber, languagePromptMessage(cfg));
+    return;
+  }
+
   // 2. Global reset commands
   if (RESET_COMMANDS.includes(lower)) {
     await prisma.session.update({
@@ -133,13 +142,24 @@ export async function handleIncomingMessage(
     }
 
     case SessionStage.AWAITING_LANGUAGE: {
-      const language = parseLanguage(text);
-      if (!language) {
-        await send(phoneNumber, languagePromptMessage(cfg));
+      // The business stopped asking for a language: carry on with the menu
+      if (!cfg.ws.languageStep) {
+        await prisma.session.update({ where: key, data: { stage: SessionStage.AWAITING_SERVICE_SELECTION, language: null, answers: {} } });
+        await send(phoneNumber, welcomeMessage(cfg));
+        break;
+      }
+      const parsed = parseLanguage(text);
+      // A reply that is not a language ("Hy", "hello", a question) gets one hint; a second miss carries on in English
+      const misses = Number((session.answers as Record<string, unknown> | null)?._lang_misses ?? 0);
+      if (!parsed && misses < 1) {
+        await prisma.session.update({ where: key, data: { answers: { _lang_misses: misses + 1 } } });
+        await send(phoneNumber, languageHintMessage());
         return;
       }
-      await prisma.session.update({ where: key, data: { stage: SessionStage.AWAITING_SERVICE_SELECTION, language } });
+      const language = parsed ?? 'English';
+      await prisma.session.update({ where: key, data: { stage: SessionStage.AWAITING_SERVICE_SELECTION, language, answers: {} } });
       session.language = language;
+      if (!parsed) await send(phoneNumber, languageFallbackMessage());
       await speak(menuOnlyMessage(cfg));
       break;
     }
