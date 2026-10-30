@@ -19,7 +19,7 @@ const ok = (c: any, m: string) => { if (!c) throw new Error('FAIL: ' + m); conso
   const get = (url: string, accept = 'text/html') => app.inject({ method: 'GET', url, headers: { accept } });
 
   console.log('[pages exist]');
-  const paths = ['/', '/privacy', '/terms', '/refunds', '/contact'];
+  const paths = ['/', '/about', '/pricing', '/privacy', '/terms', '/refunds', '/shipping', '/contact'];
   const html: Record<string, string> = {};
   for (const p of paths) {
     const r = await get(p);
@@ -31,7 +31,7 @@ const ok = (c: any, m: string) => { if (!c) throw new Error('FAIL: ' + m); conso
   for (const p of paths) {
     const b = html[p];
     ok(b.includes('© ' + new Date().getFullYear() + ' Rajni'), `${p}: the footer names the operator, Rajni`);
-    ok(['/privacy', '/terms', '/refunds', '/contact'].every((l) => b.includes(`href="${l}"`)), `${p}: the footer links all four policy pages`);
+    ok(['/about', '/pricing', '/privacy', '/terms', '/refunds', '/shipping', '/contact'].every((l) => b.includes(`href="${l}"`)), `${p}: the footer links every policy and company page`);
     ok(!/<script/i.test(b), `${p}: no scripts`);
     ok(/<title>[^<]{10,}<\/title>/.test(b) && /<meta name="description" content="[^"]{30,}">/.test(b) && b.includes('width=device-width'), `${p}: has a title, description and is mobile-ready`);
     ok(b.includes(`<link rel="canonical" href="https://site.example${p}">`), `${p}: canonical address uses PUBLIC_URL`);
@@ -62,6 +62,16 @@ const ok = (c: any, m: string) => { if (!c) throw new Error('FAIL: ' + m); conso
   ok(['7 days', '5 to 7 working days', 'Cancel subscription', 'Duplicate or wrong charges', 'not refundable', 'Free trial'].every((k) => rf.includes(k)), 'refund policy states the window, timeline, cancellation steps and exclusions');
   ok(pv.includes('Operator:') && html['/contact'].includes('Operator:') && rf.includes('Operator:'), 'contact details block (operator name) appears on the policies');
   ok(!html['/contact'].includes('mailto:'), 'with no email configured, no empty mailto link is shown');
+
+  console.log('\n[shipping, about and pricing: the pages payment providers ask for]');
+  const sh = html['/shipping'];
+  ok(sh.includes('digital software service') && sh.includes('no shipping charges') && sh.includes('activated automatically') && sh.includes('24 hours'), 'the shipping page explains it is a digital service with nothing shipped, and when a paid plan switches on');
+  ok(sh.includes('Operator:') && sh.includes('href="/refunds"'), '...with the operator details and a link to the refund policy');
+  const ab = html['/about'];
+  ok(ab.includes('operated by <strong>Rajni</strong>') && ab.includes('not affiliated with WhatsApp or Meta') && ab.includes('Operator:'), 'the about page says what the service is and who runs it');
+  const pr = html['/pricing'];
+  ok(PLANS.every((p) => pr.includes('₹' + (p.price.INR / 100).toLocaleString('en-IN')) && pr.includes('$' + p.price.USD / 100)), 'the pricing page shows the plan in rupees and in dollars');
+  ok(pr.includes('Taxes') && pr.includes('renews every month') && pr.includes(`${TRIAL_DAYS}-day free trial`) && pr.includes('href="/refunds"') && pr.includes('href="/shipping"'), '...with billing terms, the free trial and links to refunds and delivery');
 
   console.log('\n[contact details come from settings, and are escaped]');
   process.env.SUPPORT_EMAIL = 'help@site.example';

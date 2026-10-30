@@ -162,7 +162,7 @@ ${canon}
 ${d.body}
 <footer><div class="wrap"><div class="cols">
 <div><strong>${name}</strong><br>A WhatsApp lead-capture and follow-up service operated by <strong>${who}</strong>.<br>© ${year} ${who}. All rights reserved.</div>
-<div><a href="/privacy">Privacy Policy</a><a href="/terms">Terms &amp; Conditions</a><a href="/refunds">Refund &amp; Cancellation</a><a href="/contact">Contact</a></div>
+<div><a href="/about">About</a><a href="/pricing">Pricing</a><a href="/privacy">Privacy Policy</a><a href="/terms">Terms &amp; Conditions</a><a href="/refunds">Refund &amp; Cancellation</a><a href="/shipping">Shipping &amp; Delivery</a><a href="/contact">Contact</a></div>
 </div>
 <p class="fine" style="margin-top:18px">${name} is an independent service. It is not affiliated with, endorsed by or sponsored by WhatsApp or Meta Platforms, Inc. WhatsApp is a trademark of its owner.</p>
 </div></footer>
@@ -230,9 +230,8 @@ const FEATURES: { title: string; items: string[] }[] = [
   }
 ];
 
-function landing(): string {
-  const name = esc(PRODUCT_NAME);
-  const planCards = PLANS.map((p) => {
+function planCardsHtml(): string {
+  return PLANS.map((p) => {
     const l = p.limits;
     return `<div class="card plan pop">
 <h3>${esc(p.name)}</h3><p class="fine" style="margin:0 0 8px">${esc(p.blurb)}</p>
@@ -251,6 +250,11 @@ function landing(): string {
 <a class="btn p" href="/admin/?plan=pro">${signupOpen() ? `Start ${TRIAL_DAYS}-day free trial` : 'Get started'}</a>
 </div>`;
   }).join('');
+}
+
+function landing(): string {
+  const name = esc(PRODUCT_NAME);
+  const planCards = planCardsHtml();
 
   const faq: [string, string][] = [
     ['Do I need the official WhatsApp Business API?', `No. ${PRODUCT_NAME} links to your existing WhatsApp number through WhatsApp's "Linked devices" feature, the same way WhatsApp Web works. There is no Meta approval process and no per-message fee from us.`],
@@ -678,7 +682,69 @@ ${contactLines()}
 <h2>What to include</h2>
 <p>Your business name, the email you sign in with and a short description of the problem. For billing, add the payment date or reference. For privacy requests, say what you want us to do with your data.</p>
 <h2>Policies</h2>
-<ul><li><a href="/privacy">Privacy Policy</a></li><li><a href="/terms">Terms &amp; Conditions</a></li><li><a href="/refunds">Refund &amp; Cancellation Policy</a></li></ul></main>`
+<ul><li><a href="/privacy">Privacy Policy</a></li><li><a href="/terms">Terms &amp; Conditions</a></li><li><a href="/refunds">Refund &amp; Cancellation Policy</a></li><li><a href="/shipping">Shipping &amp; Delivery Policy</a></li><li><a href="/pricing">Pricing</a></li></ul></main>`
+  });
+}
+
+function shipping(): string {
+  const p = esc(PRODUCT_NAME);
+  return doc('Shipping & Delivery Policy', '/shipping', `How ${PRODUCT_NAME} is delivered: it is a digital subscription service with no physical shipping.`, `
+<p>${p} is a digital software service operated by <strong>${esc(operator())}</strong>. Nothing physical is sold or shipped, so there are no shipping charges, courier delays or delivery addresses to provide.</p>
+<h2>How the service is delivered</h2>
+<ul>
+<li><strong>Account.</strong> You create your account online. Access to the dashboard and your free trial starts immediately after sign-up, at no charge.</li>
+<li><strong>Paid plan.</strong> When your payment is confirmed by the payment provider, your plan is activated automatically, usually within a few minutes. There is nothing to download or wait for.</li>
+<li><strong>WhatsApp link.</strong> You link your own WhatsApp number yourself by scanning a QR code. We do not ship SIM cards, devices or hardware.</li>
+<li><strong>Receipts.</strong> Payment confirmations and receipts are sent to you by the payment provider (Razorpay, PayPal or Stripe) and are listed in your dashboard under Plan &amp; billing.</li>
+</ul>
+<h2>If your plan does not switch on</h2>
+<p>If you have paid and your plan is not active within 24 hours, or if you were charged twice, contact us with your account email and the payment reference. We will activate the plan or refund the extra charge as set out in our <a href="/refunds">Refund &amp; Cancellation Policy</a>.</p>
+<h2>Availability</h2>
+<p>The service is available online worldwide, subject to our <a href="/terms">Terms &amp; Conditions</a>. Prices are shown in rupees for customers in India and in US dollars elsewhere.</p>
+<h2>Contact</h2>
+${contactLines()}`);
+}
+
+function about(): string {
+  const p = esc(PRODUCT_NAME);
+  return page({
+    title: `About | ${PRODUCT_NAME}`,
+    description: `${PRODUCT_NAME} helps businesses turn WhatsApp enquiries into qualified leads, bookings and follow-ups.`,
+    path: '/about',
+    body: `<main class="doc"><h1>About ${p}</h1>
+<p>${p} is a WhatsApp lead-capture and follow-up service. A business links its own WhatsApp number, and the service greets new customers, asks the right questions, answers common questions with AI using only the facts the business provides, books appointments into Google Calendar and hands conversations to a person when asked.</p>
+<h2>What you can do with it</h2>
+<ul>
+<li>Capture and qualify enquiries automatically, in the customer's own language.</li>
+<li>Manage leads in a built-in CRM with stages, owners, notes and follow-up dates.</li>
+<li>Send paced broadcasts to people who already chatted with you, and measure results.</li>
+<li>Connect other tools with webhooks and a REST API.</li>
+</ul>
+<h2>Who runs it</h2>
+<p>${p} is operated by <strong>${esc(operator())}</strong>. It is an independent service and is not affiliated with WhatsApp or Meta.</p>
+${contactLines()}
+<p><a href="/pricing">See pricing</a> or <a href="/contact">contact us</a>.</p></main>`
+  });
+}
+
+function pricing(): string {
+  const p = esc(PRODUCT_NAME);
+  return page({
+    title: `Pricing | ${PRODUCT_NAME}`,
+    description: `${PRODUCT_NAME} pricing: ${inr(PLANS[0].price.INR)} a month in India, ${usd(PLANS[0].price.USD)} a month elsewhere, with a ${TRIAL_DAYS}-day free trial.`,
+    path: '/pricing',
+    body: `<main class="doc" style="max-width:760px"><h1>Pricing</h1>
+<p>One plan with everything included. Customers in India pay in Indian rupees (UPI or card, through Razorpay); customers elsewhere pay in US dollars (PayPal or card). Every new business gets a ${TRIAL_DAYS}-day free trial first.</p>
+<div class="grid" style="max-width:460px;margin:24px 0">${planCardsHtml()}</div>
+<h2>Good to know</h2>
+<ul>
+<li>The plan renews every month until you cancel. You keep access until the end of the period you have paid for.</li>
+<li>Prices are per business, per month. Taxes such as GST, where they apply, are added at checkout.</li>
+<li>A "new conversation" is a customer who messages you for the first time in a calendar month. Limits reset every month.</li>
+<li>Refunds and cancellation are explained in the <a href="/refunds">Refund &amp; Cancellation Policy</a>. The service is digital: see <a href="/shipping">Shipping &amp; Delivery</a>.</li>
+</ul>
+<h2>Questions about ${p} pricing</h2>
+${contactLines()}</main>`
   });
 }
 
@@ -687,7 +753,7 @@ const notFound = () =>
 
 // ---------- routes ----------
 
-export const SITE_PATHS = ['/', '/privacy', '/terms', '/refunds', '/contact'] as const;
+export const SITE_PATHS = ['/', '/about', '/pricing', '/privacy', '/terms', '/refunds', '/shipping', '/contact'] as const;
 
 export function registerSite(app: FastifyInstance): void {
   const send = (reply: FastifyReply, html: string, status = 200) =>
@@ -705,6 +771,9 @@ export function registerSite(app: FastifyInstance): void {
   app.get('/terms', async (_req, reply) => send(reply, terms()));
   app.get('/refunds', async (_req, reply) => send(reply, refunds()));
   app.get('/contact', async (_req, reply) => send(reply, contact()));
+  app.get('/about', async (_req, reply) => send(reply, about()));
+  app.get('/pricing', async (_req, reply) => send(reply, pricing()));
+  app.get('/shipping', async (_req, reply) => send(reply, shipping()));
 
   app.get('/robots.txt', async (_req, reply) =>
     reply.type('text/plain').send(`User-agent: *\nAllow: /\nDisallow: /admin/\nDisallow: /qr\nDisallow: /api/\n${base() ? `Sitemap: ${base()}/sitemap.xml\n` : ''}`)

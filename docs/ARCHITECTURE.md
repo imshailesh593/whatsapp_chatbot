@@ -64,7 +64,7 @@ One Node process hosts everything: HTTP server, the WhatsApp sessions, the conve
 | **Server** | `src/server.ts` | Starts Fastify, registers routes, starts WhatsApp and workers, `/health`, `/qr` operator page |
 | **Admin API** | `src/admin.ts` | Everything the dashboard and operator tools call: login/sign-up, bot config, leads/CRM, inbox, broadcasts, billing, calendar, platform admin (`/admin/api/...`) and the payment webhooks (`/webhooks/stripe|razorpay|paypal`) |
 | **Public API** | `src/publicApi.ts` | REST API for customers' own systems (`/api/v1/...`, secret API keys, needs an active plan) |
-| **Website** | `src/site.ts` | Landing page, privacy, terms, refunds, contact, robots, sitemap, friendly 404. No scripts, strict CSP |
+| **Website** | `src/site.ts` | Landing page, about, pricing, privacy, terms, refunds, shipping and delivery, contact, robots, sitemap, friendly 404. No scripts, strict CSP |
 | **Admin console** | `web/` (React 18, Vite, Tailwind), served at `/admin/` | Owner dashboard (CRM, inbox, simulator, analytics, broadcasts, settings, billing) and the operator "Platform" screens |
 | **WhatsApp layer** | `src/services/whatsapp.ts`, `transport.ts` | One Baileys connection per workspace, QR linking, reconnect on boot, slot cap (default 20 linked numbers), send/receive. `transport.ts` lets tests swap the sender |
 | **Engine** | `src/services/engine.ts` | The conversation state machine (see 5.1) |
