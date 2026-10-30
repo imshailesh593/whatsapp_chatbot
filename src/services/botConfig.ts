@@ -164,9 +164,9 @@ export function welcomeMessage(cfg: BotConfig): string {
 export function menuOnlyMessage(cfg: BotConfig): string {
   const form = cfg.ws.formUrl.trim();
   const lead = form
-    ? [`📝 Please fill out this short form so our team can understand your profile:\n👉 ${form}\n---\nTo assist you better, please select the service you are looking for:`]
+    ? [`📝 Please fill this short form first:\n👉 ${form}\n---\nWhich service do you need?`]
     : ['To assist you better, please select the service you are looking for:'];
-  return [...lead, menuLines(cfg), `Please reply with the option number (1-${cfg.services.length}). 😊\nTo change the language, type *LANGUAGE*.`].join('\n\n');
+  return [...lead, menuLines(cfg), `Reply with a number (1-${cfg.services.length}). To change language, type *LANGUAGE*.`].join('\n\n');
 }
 
 export const DEFAULT_LANGUAGE_WELCOME =

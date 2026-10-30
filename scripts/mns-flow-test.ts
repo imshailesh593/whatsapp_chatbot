@@ -53,16 +53,16 @@ setTranslatorForTests(async (text, language) => { translations++; return `[${lan
     ok(cfg.services.every((s) => s.closingMessage.includes('*MORE INFO*') && s.closingMessage.length < 3000), 'each one tells the customer to reply MORE INFO for a consultation, and fits a WhatsApp message');
     const all = (key: string, answers: Record<string, string> = {}) => renderClosing(closingOf(key), answers);
     const has = (key: string, words: string[], answers: Record<string, string> = {}) => words.every((w) => all(key, answers).includes(w));
-    ok(has('COACHING', ['₹14,500', '₹12,000', 'DHA', 'two months']), 'coaching: both prices and the DHA rule');
+    ok(has('COACHING', ['₹14,500', '₹12,000', 'DHA', '2 months']), 'coaching: both prices and the DHA rule');
     ok(has('PROMETRIC_MATERIAL', ['₹8,000', '50 test series', '50 mock tests', '30+ practice resources'], { profession: 'Pharmacist' }), 'study material: the price and what it includes');
     ok(all('PROMETRIC_MATERIAL', { profession: 'Staff nurse' }).includes('Recorded lectures') && all('PROMETRIC_MATERIAL', { profession: 'GNM nursing' }).includes('Recorded lectures'), 'recorded lectures are mentioned to nursing candidates');
     ok(['Pharmacist', 'Lab technologist', 'Radiologist', 'Doctor', ''].every((p) => !/lecture/i.test(all('PROMETRIC_MATERIAL', { profession: p }))), 'and never to anyone else');
-    ok(has('LICENSING', ['₹1,75,000', 'BAMS', '₹2,000 to ₹4,000', '₹40,000', 'positive result', 'DataFlow', 'Letter of Qualification']), 'licensing: the packages, BAMS range and the post-result fee');
-    ok(has('JOBS', ['₹50,000', '₹6,500', '₹43,500', 'Professional CV', 'Candidate portal', 'Gmail', 'https://www.mnsinstitutejobs.com', 'three weeks']), 'jobs: the full fee split, inclusions, timeline and the website');
-    ok(has('GERMAN', ['₹70,000', 'four months', 'One-to-one', 'six days a week']), 'German: price, duration and schedule');
+    ok(has('LICENSING', ['₹1,75,000', 'BAMS', '₹2,000-4,000', '₹40,000', 'positive result', 'DataFlow', 'Letter of Qualification']), 'licensing: the packages, BAMS range and the post-result fee');
+    ok(has('JOBS', ['₹50,000', '₹6,500', '₹43,500', 'CV preparation', 'candidate portal', 'Gmail', 'https://www.mnsinstitutejobs.com', '3+ weeks']), 'jobs: the full fee split, inclusions, timeline and the website');
+    ok(has('GERMAN', ['₹70,000', '4 months', 'One-to-one', '6 days a week']), 'German: price, duration and schedule');
     ok(has('VISA_PR', ['no fixed fee']) && !/₹/.test(all('VISA_PR')), 'study abroad and visa: no invented price, and it says why');
-    ok(has('WAPPO', ['₹499 per month', 'Unlimited messaging', 'no per-message charge', 'CRM portal', 'https://www.wappoai.com']), 'WAPPO: price, inclusions and its website');
-    ok(has('ZEXY_AI', ['₹499', '₹14,500', 'two months', 'AI avatar', 'https://zexyai.com']), 'ZEXY AI: both prices, inclusions and its website');
+    ok(has('WAPPO', ['₹499 per month', 'Unlimited messages', 'no per-message charge', 'CRM portal', 'https://www.wappoai.com']), 'WAPPO: price, inclusions and its website');
+    ok(has('ZEXY_AI', ['₹499', '₹14,500', '2 months', 'AI avatar', 'https://zexyai.com']), 'ZEXY AI: both prices, inclusions and its website');
     ok(!/₹|Rs/.test(all('GENERAL')), 'something else: no price');
 
     console.log('\n[service words]');
@@ -93,7 +93,7 @@ setTranslatorForTests(async (text, language) => { translations++; return `[${lan
     const hinglishChat = `9190${run}Hl`;
     await say(hinglishChat, 'hi');
     await say(hinglishChat, '3');
-    ok(to(hinglishChat).at(-2)!.startsWith('[Hinglish] 📝') && to(hinglishChat).at(-1)!.startsWith('[Hinglish] To assist you better'), 'Hinglish is passed to the translator as its own language, and the form and the menu are two messages');
+    ok(to(hinglishChat).at(-2)!.startsWith('[Hinglish] 📝') && to(hinglishChat).at(-1)!.startsWith('[Hinglish] Which service do you need?'), 'Hinglish is passed to the translator as its own language, and the form and the menu are two messages');
     const stuck = `9190${run}8`;
     await prisma.workspace.update({ where: { id: W.id }, data: { languageStep: false } });
     invalidateConfig(W.id);
@@ -133,14 +133,14 @@ setTranslatorForTests(async (text, language) => { translations++; return `[${lan
     ok((await prisma.session.findFirst({ where: { workspaceId: W.id, phoneNumber: hi } }))!.language === 'Hindi', 'the language is remembered');
     const form = to(hi)[2];
     const menu = to(hi)[3];
-    ok(form.startsWith('[Hindi] 📝 Please fill out this short form') && form.includes('https://tally.so/r/7Rrl70') && menu.startsWith('[Hindi] To assist you better') && (menu.match(/\n/g) ?? []).length >= 10 && /9️⃣/.test(menu) && !/Welcome to/.test(menu), 'the form link and the nine-option menu come next as two shorter messages, translated');
+    ok(form.startsWith('[Hindi] 📝 Please fill this short form') && form.includes('https://tally.so/r/7Rrl70') && menu.startsWith('[Hindi] Which service do you need?') && (menu.match(/\n/g) ?? []).length >= 10 && /9️⃣/.test(menu) && !/Welcome to/.test(menu), 'the form link and the nine-option menu come next as two shorter messages, translated');
     await say(hi, '3');
     ok(to(hi)[4] === '[Hindi] What is your current profession?', 'the first licensing question is translated');
     const answers = ['Staff nurse', 'B.Sc Nursing, 2018', '5 years', 'No gap', 'India, wants to work in the UAE', 'No', 'Not yet'];
     for (const a of answers) await say(hi, a);
     const [licMsg1, licMsg2] = to(hi).slice(-2);
-    ok(licMsg1.startsWith('[Hindi] Thank you for sharing your details') && licMsg1.includes('₹1,75,000') && licMsg2.startsWith('[Hindi] *After you pass DHA') && licMsg2.includes('₹40,000') && licMsg2.includes('*MORE INFO*') && !(licMsg1 + licMsg2).includes('topmate'), 'the licensing closing arrives as two translated messages (packages, then the post-result fee), with the fees and no link');
-    ok(licMsg1.length < 900 && licMsg2.length < 900 && !licMsg1.includes('---') && !licMsg2.includes('---'), '...each short enough to read at a glance, and the split marker never reaches the customer');
+    ok(licMsg1.startsWith('[Hindi] Thanks for sharing your details') && licMsg1.includes('₹1,75,000') && licMsg2.startsWith('[Hindi] *After you pass DHA') && licMsg2.includes('₹40,000') && licMsg2.includes('*MORE INFO*') && !(licMsg1 + licMsg2).includes('topmate'), 'the licensing closing arrives as two translated messages (packages, then the post-result fee), with the fees and no link');
+    ok(licMsg1.length < 500 && licMsg2.length < 600 && !licMsg1.includes('---') && !licMsg2.includes('---'), '...each short enough to read at a glance, and the split marker never reaches the customer');
     await say(hi, 'DHA fees');
     ok(!to(hi).at(-1)!.includes('topmate'), 'asking about fees afterwards does not send the consultation link');
     await say(hi, 'I need more information');
@@ -148,7 +148,7 @@ setTranslatorForTests(async (text, language) => { translations++; return `[${lan
     const lead = await prisma.lead.findFirst({ where: { workspaceId: W.id, phoneNumber: hi } });
     ok(lead?.serviceCategory === 'LICENSING' && Object.keys(lead.collectedData as object).sort().join() === 'profession,qualification,experience,gap,location,existing_license,exam_status'.split(',').sort().join(), 'the lead is saved with all seven answers');
     await say(hi, 'menu');
-    ok(to(hi).at(-2)!.startsWith('[Hindi] 📝') && to(hi).at(-1)!.startsWith('[Hindi] To assist you better'), 'MENU shows the menu again without asking the language again');
+    ok(to(hi).at(-2)!.startsWith('[Hindi] 📝') && to(hi).at(-1)!.startsWith('[Hindi] Which service do you need?'), 'MENU shows the menu again without asking the language again');
 
     console.log('\n[a customer who types a greeting as the language]');
     const hy = `9190${run}7`;
@@ -157,7 +157,7 @@ setTranslatorForTests(async (text, language) => { translations++; return `[${lan
     ok(to(hy)[1].startsWith('Sorry, I did not catch that'), '"Hy" is not taken as Armenian: the customer gets a hint');
     ok((await prisma.session.findFirst({ where: { workspaceId: W.id, phoneNumber: hy } }))!.language === null, '...and no language is stored');
     await say(hy, 'hello');
-    ok(to(hy)[2] === 'No problem, we will continue in English. Type *LANGUAGE* at any time to change it.' && to(hy)[3].includes('short form') && to(hy)[4].startsWith('To assist you better') && !to(hy)[3].startsWith('['), 'a second miss carries on in English, with the menu');
+    ok(to(hy)[2] === 'No problem, we will continue in English. Type *LANGUAGE* at any time to change it.' && to(hy)[3].includes('short form') && to(hy)[4].startsWith('Which service do you need?') && !to(hy)[3].startsWith('['), 'a second miss carries on in English, with the menu');
     ok((await prisma.session.findFirst({ where: { workspaceId: W.id, phoneNumber: hy } }))!.language === 'English', '...and English is stored');
     await say(hy, 'language');
     ok(to(hy).at(-1)!.startsWith(OWN_PROFILE.languageWelcome) && to(hy).at(-1)!.includes('5️⃣'), 'LANGUAGE asks the language question again');
@@ -170,7 +170,7 @@ setTranslatorForTests(async (text, language) => { translations++; return `[${lan
     const before = translations;
     await say(en, 'hello');
     await say(en, '1');
-    ok(to(en)[1].startsWith('📝 Please fill out this short form') && to(en)[1].includes('https://tally.so/r/7Rrl70') && !to(en)[1].startsWith('[') && to(en)[2].startsWith('To assist you better'), 'English customers get the form link and the menu as written');
+    ok(to(en)[1].startsWith('📝 Please fill this short form') && to(en)[1].includes('https://tally.so/r/7Rrl70') && !to(en)[1].startsWith('[') && to(en)[2].startsWith('Which service do you need?'), 'English customers get the form link and the menu as written');
     await say(en, 'wappo');
     ok(to(en)[3].startsWith('What type of business'), 'WAPPO asks about the business, not healthcare questions');
     for (const a of ['A dental clinic', 'Answer enquiries', 'CRM', 'Need help preparing']) await say(en, a);
@@ -222,17 +222,17 @@ setTranslatorForTests(async (text, language) => { translations++; return `[${lan
     invalidateConfig(W.id);
     const n = await followUpTick(t0);
     ok(n === 3 && to(q1).length === 1 && to(q2).length === 1 && to(open).length === 1, 'three eligible customers are nudged, one message each');
-    ok(to(q1)[0].startsWith('Hello! I am following up on our previous discussion about International Job Assistance'), 'the first nudge names the service they were asking about');
-    ok(to(q2)[0].startsWith('[Hindi] Hello! Do you have any update regarding'), 'a customer silent for three days gets the last nudge, once, in their language');
+    ok(to(q1)[0].startsWith('Hello! Just checking in about International Job Assistance'), 'the first nudge names the service they were asking about');
+    ok(to(q2)[0].startsWith('[Hindi] Hello! Are you still interested in'), 'a customer silent for three days gets the last nudge, once, in their language');
     ok(skipped.every((p) => to(p).length === 0), 'opted out, taken over, handed off, won, lost, booked, too old, too recent and finished sequences are all left alone');
     ok((await followUpTick(t0)) === 0, 'running again straight away sends nothing more');
     const later = await followUpTick(t0 + 48 * H);
-    ok(later >= 1 && to(q1).length === 2 && to(q1)[1].startsWith('Hello! Do you have any update regarding'), 'two days later the second nudge goes out to the first customer');
+    ok(later >= 1 && to(q1).length === 2 && to(q1)[1].startsWith('Hello! Are you still interested in'), 'two days later the second nudge goes out to the first customer');
     await say(q1, 'Sorry, I was busy. Yes interested');
     ok((await prisma.session.findFirst({ where: { workspaceId: W.id, phoneNumber: q1 } }))!.followUpCount === 0, 'a reply from the customer resets the sequence');
     const stopper = await mk('m', 26);
     await say(stopper, 'STOP');
-    ok((await followUpTick(t0 + 48 * H)) >= 0 && to(stopper).every((t) => !/following up/i.test(t)), 'a customer who sends STOP is never nudged');
+    ok((await followUpTick(t0 + 48 * H)) >= 0 && to(stopper).every((t) => !/checking in|still interested/i.test(t)), 'a customer who sends STOP is never nudged');
 
     console.log('\nMNS FLOW TESTS OK');
   } finally {

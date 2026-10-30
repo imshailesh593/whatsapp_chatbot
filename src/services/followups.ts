@@ -16,16 +16,9 @@ const PER_TICK = 3;
 
 export function followUpText(step: number, service: string): string {
   const what = service || 'your enquiry';
-  switch (step) {
-    case 0:
-      return `Hello! I am following up on our previous discussion about ${what}. Were you able to review the information or contact our team? Please share an update when convenient.`;
-    case 1:
-      return `Hello! Do you have any update regarding ${what}? If you need clarification, please let us know.`;
-    case 2:
-      return `Hello! I wanted to check whether you have decided how you would like to proceed with ${what}. Please let us know if you need further assistance.`;
-    default:
-      return `Hello! Following up on our previous discussion about ${what}. Are you still interested in proceeding, or would you like any further information? Please share an update.`;
-  }
+  return step === 0
+    ? `Hello! Just checking in about ${what}. Do you have any questions, or would you like to speak to our team?`
+    : `Hello! Are you still interested in ${what}? Reply here any time and we will help.`;
 }
 
 /** The step to send now: the latest one whose time has come (never several at once after a night or an outage), or null. */

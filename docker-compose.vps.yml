@@ -13,12 +13,12 @@ services:
       - traefik.http.services.mnsbot.loadbalancer.server.port=3000
       - traefik.http.middlewares.mnsbot-https.redirectscheme.scheme=https
       # primary domain
-      - traefik.http.routers.mnsbot.rule=Host(`${BOT_DOMAIN}`) || Host(`${BOT_DOMAIN_WWW:-no-www.invalid}`) || Host(`${BOT_DOMAIN_OLD:-no-old.invalid}`)
+      - traefik.http.routers.mnsbot.rule=Host(`${BOT_DOMAIN}`)
       - traefik.http.routers.mnsbot.entrypoints=https
       - traefik.http.routers.mnsbot.tls=true
       - traefik.http.routers.mnsbot.tls.certresolver=letsencrypt
       - traefik.http.routers.mnsbot.service=mnsbot
-      - traefik.http.routers.mnsbot-http.rule=Host(`${BOT_DOMAIN}`) || Host(`${BOT_DOMAIN_WWW:-no-www.invalid}`) || Host(`${BOT_DOMAIN_OLD:-no-old.invalid}`)
+      - traefik.http.routers.mnsbot-http.rule=Host(`${BOT_DOMAIN}`)
       - traefik.http.routers.mnsbot-http.entrypoints=http
       - traefik.http.routers.mnsbot-http.middlewares=mnsbot-https
       - traefik.http.routers.mnsbot-http.service=mnsbot
@@ -32,6 +32,25 @@ services:
       - traefik.http.routers.mnsbot-alt-http.entrypoints=http
       - traefik.http.routers.mnsbot-alt-http.middlewares=mnsbot-https
       - traefik.http.routers.mnsbot-alt-http.service=mnsbot
+      # www and previous domain: one router each, so one unresolvable name cannot block another's certificate
+      - traefik.http.routers.mnsbot-www.rule=Host(`${BOT_DOMAIN_WWW:-no-www.invalid}`)
+      - traefik.http.routers.mnsbot-www.entrypoints=https
+      - traefik.http.routers.mnsbot-www.tls=true
+      - traefik.http.routers.mnsbot-www.tls.certresolver=letsencrypt
+      - traefik.http.routers.mnsbot-www.service=mnsbot
+      - traefik.http.routers.mnsbot-www-http.rule=Host(`${BOT_DOMAIN_WWW:-no-www.invalid}`)
+      - traefik.http.routers.mnsbot-www-http.entrypoints=http
+      - traefik.http.routers.mnsbot-www-http.middlewares=mnsbot-https
+      - traefik.http.routers.mnsbot-www-http.service=mnsbot
+      - traefik.http.routers.mnsbot-old.rule=Host(`${BOT_DOMAIN_OLD:-no-old.invalid}`)
+      - traefik.http.routers.mnsbot-old.entrypoints=https
+      - traefik.http.routers.mnsbot-old.tls=true
+      - traefik.http.routers.mnsbot-old.tls.certresolver=letsencrypt
+      - traefik.http.routers.mnsbot-old.service=mnsbot
+      - traefik.http.routers.mnsbot-old-http.rule=Host(`${BOT_DOMAIN_OLD:-no-old.invalid}`)
+      - traefik.http.routers.mnsbot-old-http.entrypoints=http
+      - traefik.http.routers.mnsbot-old-http.middlewares=mnsbot-https
+      - traefik.http.routers.mnsbot-old-http.service=mnsbot
 
 networks:
   coolify:
