@@ -31,7 +31,7 @@ Contents
 ### Create your account
 Open your sign-in page and choose **Create an account**. Enter your business name, your email and a password (at least 10 characters). You become the **owner** of the account. Your bot starts **paused**, so it will not message anyone until you switch it on.
 
-You get a free trial (14 days, plus any bonus days a referral link gave you) with everything in the Pro plan.
+There is no free trial: after signing up you choose the Pro plan and pay on a secure page. You can set everything up first, but your bot stays off until you subscribe.
 
 ### Set up with the guided steps
 After signing up, a short set-up walks you through five steps:
@@ -96,7 +96,7 @@ Sign in at your dashboard address. The tabs across the top:
 | **Broadcasts** | Send a message to many contacts, safely |
 | **Bot & Settings** | Everything you configure |
 
-The coloured strip under the header shows totals, and a banner tells you if the bot is paused, your trial is ending or WhatsApp is disconnected.
+The coloured strip under the header shows totals, and a banner tells you if the bot is paused, you have not subscribed yet, or WhatsApp is disconnected.
 
 Agents (see [section 15](#15-your-team-and-roles)) only see the CRM, Inbox and Simulator.
 
@@ -265,7 +265,7 @@ There is one plan, **Pro**: ₹499 a month in India or $19 a month elsewhere. Th
 |---|---|---|---|---|
 | 1,500 | 2,000 | 5 | 1,000 | Yes |
 
-Pro includes 1 WhatsApp number. The free trial (14 days) has the same limits.
+Pro includes 1 WhatsApp number.
 
 **Language and follow-ups** (Bot & Settings → Business profile, section "Language and follow-ups"):
 - *Ask the customer's preferred language first*: the first message asks for a language, and the menu, questions and replies are then written in it. Translation uses your monthly AI answers.
@@ -278,9 +278,9 @@ Pro includes 1 WhatsApp number. The free trial (14 days) has the same limits.
 What happens at a limit:
 - **Conversations used up:** customers already chatting are still served, but new chats are not started until next month or an upgrade.
 - **AI answers used up:** the bot keeps working with its fixed replies, without AI answers.
-- **Trial or subscription ended:** the bot stops replying to customers. A paid subscription gets a 3-day grace period.
+- **Not subscribed yet, or subscription ended:** the bot stops replying to customers. A paid subscription gets a 3-day grace period.
 
-**Have a code?** If you were given a redeem code (a pilot, partnership or goodwill offer), type it under Plan & billing and press **Apply code**. It switches the plan on, or adds trial days, without a payment. Only the owner can do this, and each code works once per business.
+**Have a code?** If you were given a redeem code (a pilot, partnership or goodwill offer), type it under Plan & billing and press **Apply code**. It switches the plan on without a payment. Only the owner can do this, and each code works once per business.
 
 **Paying online** (when your service has it switched on): owners choose a plan and pay in rupees (UPI AutoPay or card, through Razorpay) or dollars (PayPal, or card through Stripe).
 - You pay on the payment provider's secure page, then come back to the dashboard. Your plan switches on as soon as the payment is confirmed, usually within a minute. Refresh the page if it still shows the trial.
@@ -296,7 +296,6 @@ What happens at a limit:
 If your service runs a referral programme you will see **Refer & earn** in Bot & Settings.
 
 - Copy your personal link and share it.
-- A business that signs up through your link gets bonus trial days.
 - You earn a percentage of what it pays for its first payments. The percentage and number of payments are shown on the card.
 - Your earnings move from **waiting for approval** to **paid out** as the service approves and pays them.
 - Add your payout details (UPI id, bank details, PayPal) so you can be paid. Only the owner can edit them.
@@ -335,7 +334,7 @@ Your plan limits the number of team members.
 
 | Problem | What to check |
 |---|---|
-| The bot does not reply | Is it paused (banner at the top)? Is WhatsApp **Connected**? Has your trial or plan ended? Did you use all conversations this month? |
+| The bot does not reply | Is it paused (banner at the top)? Is WhatsApp **Connected**? Have you subscribed, and has your plan not ended? Did you use all conversations this month? |
 | QR code will not scan | Refresh and press Connect again. Scan within 5 minutes. Update WhatsApp on the phone |
 | "Connections are full right now" | The service has no free WhatsApp slot. Try later or contact your provider |
 | WhatsApp shows Disconnected after working | The device was logged out from the phone. Connect and scan again |

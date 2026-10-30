@@ -8,7 +8,7 @@ Contents
 2. [Your platform admin account](#2-your-platform-admin-account)
 3. [The platform admin pages](#3-the-platform-admin-pages)
 4. [Adding and managing businesses](#4-adding-and-managing-businesses)
-5. [Plans, trials and redeem codes](#5-plans-trials-and-redeem-codes)
+5. [Plans and redeem codes](#5-plans-and-redeem-codes)
 6. [Opening sign-ups](#6-opening-sign-ups)
 7. [Capacity: how many WhatsApp numbers fit](#7-capacity-how-many-whatsapp-numbers-fit)
 8. [Referral programme](#8-referral-programme)
@@ -60,8 +60,8 @@ A platform admin sees every business and gets the extra **Platform admin** area.
 | **Client Management** | Every business: filter, add, open details, set plan, pause the bot, reset passwords, continue as the owner, delete |
 | **Subscriptions** | Businesses on paid plans and when each period ends |
 | **Payments** | The last 100 payments across all businesses |
-| **Plans** | The plans, prices and limits, read-only (see [section 5](#5-plans-trials-and-redeem-codes)) |
-| **Redeem codes** | Create codes that give a business a plan or extra trial days without a payment |
+| **Plans** | The plans, prices and limits, read-only (see [section 5](#5-plans-and-redeem-codes)) |
+| **Redeem codes** | Create codes that give a business a plan without a payment |
 | **Affiliates** | The referral programme: rules, who is owed what, approving and recording payouts |
 | **Audit log** | Everything you and other platform admins did: adding or deleting businesses, plan changes, impersonation, settings, codes and payouts |
 | **Settings** | The platform-number switch and the WhatsApp slot limit |
@@ -73,14 +73,14 @@ A platform admin sees every business and gets the extra **Platform admin** area.
 ## 4. Adding and managing businesses
 
 ### A business signs itself up
-When sign-ups are open ([section 6](#6-opening-sign-ups)) they use **Create an account**. The new business starts on a free trial with its bot paused and walks through onboarding.
+When sign-ups are open ([section 6](#6-opening-sign-ups)) they use **Create an account**. The new business is taken to the payment page; its bot stays off until the first payment (there is no free trial). It can set everything up in the meantime.
 
 ### You add one yourself
 **Client Management → Add a business → Create business.** Enter the business name, the owner's email and a starting password (10+ characters). Give the owner the password privately and ask them to change it. They then link their own WhatsApp number from the dashboard.
 
 ### What you can do to a business
 Open a business to see its plan, limits, people and WhatsApp status, then:
-- **Set plan (no payment needed):** pick a plan and a number of days, then **Apply** ([section 5](#5-plans-trials-and-redeem-codes)).
+- **Set plan (no payment needed):** pick a plan and a number of days, then **Apply** ([section 5](#5-plans-and-redeem-codes)).
 - **Pause or resume the bot:** the switch on the business's row in the list stops all automated replies for that business.
 - **Reset a person's password** or **remove a person** from the People list.
 - **Continue as this business owner** lets you see exactly what they see. This is written to the audit log. Your own session is replaced, so sign out and back in to return to your account. Use it to help, not to browse.
@@ -88,19 +88,19 @@ Open a business to see its plan, limits, people and WhatsApp status, then:
 
 ---
 
-## 5. Plans, trials and redeem codes
+## 5. Plans and redeem codes
 
 There is **one plan, Pro**: **₹499 a month for customers in India** (paid in rupees through Razorpay) and **$19 a month for everyone else** (paid in dollars through PayPal or Stripe).
 
 | Plan | Price per month | New conversations | AI answers | Team members | Broadcast messages | Integrations |
 |---|---|---|---|---|---|---|
-| Free trial (14 days) | free | 1,500 | 2,000 | 5 | 1,000 | Yes |
+| Pro | ₹499 / $19 | 1,500 | 2,000 | 5 | 1,000 | Yes |
 | Pro | ₹499 in India, $19 elsewhere | 1,500 | 2,000 | 5 | 1,000 | Yes |
 
 Businesses that were on the older Starter, Growth or Scale plans are treated as Pro.
 
 - Counters reset each calendar month. At a limit, existing chats continue but new chats (or AI answers, or broadcasts) stop, as described in the User Guide.
-- A lapsed trial or subscription stops the bot from replying. A paid subscription gets a **3-day grace period**.
+- An unpaid or lapsed subscription stops the bot from replying. A paid subscription gets a **3-day grace period**.
 - **Prices and limits live in `src/plans.ts`.** Changing them means editing that file and redeploying. The Plans page only displays them. Payment-provider plans (Stripe prices, Razorpay plans) must be changed to match.
 - The `internal` plan is unlimited and not billed. Use it only for your own business.
 
@@ -108,7 +108,6 @@ Businesses that were on the older Starter, Growth or Scale plans are treated as 
 Two tools, both audited:
 1. **Change plan** on a business (immediate, you choose the days).
 2. **Redeem codes** (Redeem codes page): choose a plan, a number of days and how many times the code can be used (or unlimited), optionally a custom code and a note. Hand the code to the customer; they enter it under **Plan & billing → Have a code?**.
-   - "Extend free trial" adds days on top of whatever trial remains.
    - A paid plan code starts that plan for the days you set.
    - Each business can use a code once. A business that already pays by card or UPI cannot redeem a code (you can still change its plan manually).
    - Disable a code to stop it being used, or delete it. Existing grants stay.
@@ -123,7 +122,7 @@ Sign-up is controlled by `SIGNUP_ENABLED` in the server `.env`:
 
 Before opening it:
 1. Run a full test business end to end: sign up, onboard, link a spare WhatsApp number, finish a chat, receive the alert.
-2. Decide how you will take payment ([section 10](#10-setting-up-the-optional-services)). Until payments are on, trials will expire with no way to pay except you granting plans or codes.
+2. Decide how you will take payment ([section 10](#10-setting-up-the-optional-services)). Until payments are on, new businesses have no way to pay except you granting plans or codes.
 3. Check capacity ([section 7](#7-capacity-how-many-whatsapp-numbers-fit)).
 4. Read [section 15](#15-risks-you-should-understand).
 
@@ -146,7 +145,7 @@ Each linked number holds a live session. The Dashboard strip **WhatsApp slots** 
 
 **Affiliates** page. It is **off** until you switch it on.
 
-- **Rules:** commission % (default 20), the number of payments it applies to (default the first 12) and bonus trial days for the new business (default 7). Save changes with **Save**.
+- **Rules:** commission % (default 20), the number of payments it applies to (default the first 12). Save changes with **Save**.
 - Every business has a personal link ending `/admin/?ref=CODE`. A visitor who opens it sees the sign-up form; a business created that way is recorded as referred and gets the bonus days. Unknown or switched-off codes are ignored and never block sign-up.
 - When a referred business **pays**, its referrer earns a commission, status **pending**. Nothing is earned from trials, codes or manual plan changes, and a business never earns from its own payments.
 - Your job: **Approve** a commission, send the money yourself using the payout details shown (UPI, bank, PayPal), then **Mark paid**. A paid commission is final. **Void** cancels one (for example after a refund).
@@ -159,7 +158,7 @@ Each linked number holds a live session. The Dashboard strip **WhatsApp slots** 
 The server also serves a public website on the same domain: a **landing page** at `/` (features, how it works, pricing, FAQ), and the pages **Privacy Policy** (`/privacy`), **Terms & Conditions** (`/terms`), **Refund & Cancellation Policy** (`/refunds`) and **Contact** (`/contact`). The footer on every page reads "© <year> Rajni" and says the service is operated by Rajni (change with `OPERATOR_NAME`). The dashboard stays at `/admin/`. The sign-in screen links the same policies.
 
 - Set these in `.env` and restart: `SUPPORT_EMAIL`, `SUPPORT_PHONE`, `BUSINESS_ADDRESS`, optionally `SUPPORT_HOURS` and `LEGAL_JURISDICTION` (for example "Pune, Maharashtra"). They appear on the Contact page and at the end of each policy. Fields you leave empty are simply not shown, so **fill in at least the email and an address before applying for payment-provider approval**, which checks that these are visible.
-- Prices on the landing page come from `src/plans.ts`, so they always match the dashboard. The sign-up buttons say "Start your 14-day free trial" while sign-up is open and "Open the dashboard" when `SIGNUP_ENABLED=0`.
+- Prices on the landing page come from `src/plans.ts`, so they always match the dashboard. The sign-up buttons say "Get started" while sign-up is open and "Open the dashboard" when `SIGNUP_ENABLED=0`.
 - The policies are **drafts written for this service, not legal advice**. Read them, change any rule you do not want to keep (especially the 7-day first-payment refund window, the 90-day backup retention and the jurisdiction), and have a lawyer check them before relying on them. The text lives in `src/site.ts`; edit and redeploy.
 - Search engines are told to skip the dashboard. A sitemap is at `/sitemap.xml`.
 
@@ -334,7 +333,7 @@ Weekly: check free memory and slots, glance at the audit log, confirm backups ex
 | "The bot is not replying" | Open the business: is the bot paused, WhatsApp connected, plan active, limits reached? Then continue as the owner and check the Simulator |
 | "WhatsApp keeps disconnecting" | The phone was logged out of linked devices, or the account was restricted. Ask them to reconnect and scan again |
 | "Connections are full" | Check the slots strip and audit log. Raise the limit if memory allows |
-| "My trial ended" | Give a redeem code or change plan, or point them to payment when it is on |
+| "My bot is off" (new or lapsed business) | Point them to Plan & billing to pay, or give a redeem code or change their plan |
 | "Email alerts do not arrive" | Check Resend is set up and the domain verified, then run a test alert for them |
 | "Calendar will not connect" | Check Google keys, the redirect URI and consent screen status ([section 10](#10-setting-up-the-optional-services)) |
 | "Delete my data" | Client Management → Delete, after a backup if required by your policy |
