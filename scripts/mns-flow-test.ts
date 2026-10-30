@@ -33,7 +33,7 @@ setTranslatorForTests(async (text, language) => { translations++; return `[${lan
     console.log('[the setup itself]');
     ok(cfg.services.length === 9 && cfg.services.every((s) => s.questions.length >= 2 && s.questions.length <= 12), 'nine menu options, each with its own questions');
     ok(cfg.services.map((s) => s.key).join() === 'COACHING,PROMETRIC_MATERIAL,LICENSING,JOBS,GERMAN,VISA_PR,WAPPO,ZEXY_AI,GENERAL', 'in the agreed order');
-    ok(cfg.ws.languageStep && cfg.ws.followUpsEnabled && cfg.ws.handoffEnabled && cfg.ws.formUrl === '', 'language question, follow-ups and hand-off are on; the old form link is gone');
+    ok(cfg.ws.languageStep && cfg.ws.followUpsEnabled && cfg.ws.handoffEnabled && cfg.ws.formUrl === 'https://tally.so/r/7Rrl70', 'language question, follow-ups and hand-off are on; the profile form link is kept');
     ok(OWN_KNOWLEDGE.length < 8000 && cfg.ws.knowledge === OWN_KNOWLEDGE, 'the AI notes fit the limit and are saved');
     for (const [needle, why] of [
       ['Rs 14,500 for two months, or Rs 12,000', 'coaching prices'], ['Never offer one-month DHA', 'DHA is two months only'], ['Rs 8,000', 'study material price'],
@@ -43,7 +43,9 @@ setTranslatorForTests(async (text, language) => { translations++; return `[${lan
       ['https://zexyai.com', 'ZEXY AI address'], ['https://topmate.io/mnsinstitute/', 'consultation link'], ['https://www.mnsinstitutejobs.com', 'jobs website']
     ] as const) ok(OWN_KNOWLEDGE.includes(needle), `the notes carry ${why}`);
     ok(!/wappoai\.(in|co|app)\b|wappo\.ai/i.test(OWN_KNOWLEDGE + JSON.stringify(OWN_SERVICES)), 'no outdated WAPPO address anywhere');
-    ok(!/\b\d{10,}\b|\+\d{2}/.test(OWN_KNOWLEDGE + OWN_PROFILE.handoffMessage), 'no invented phone number');
+    const numbers = (OWN_KNOWLEDGE + OWN_PROFILE.handoffMessage + JSON.stringify(OWN_SERVICES)).match(/\d{10,}/g) ?? [];
+    ok(numbers.length > 0 && numbers.every((n) => n === '8700825077'), 'the only phone number anywhere is the team number 8700825077');
+    ok(OWN_PROFILE.handoffMessage.includes('+91 8700825077') && OWN_KNOWLEDGE.includes('on +91 8700825077'), 'the hand-off message and the "call our team" answer carry it');
     const closingOf = (key: string) => cfg.services.find((s) => s.key === key)!.closingMessage;
     ok(closingOf('JOBS').includes('https://www.mnsinstitutejobs.com') && closingOf('WAPPO').includes('https://www.wappoai.com') && closingOf('ZEXY_AI').includes('https://zexyai.com'), 'each service closes with its own link');
     ok(['COACHING', 'LICENSING', 'VISA_PR'].every((k) => closingOf(k).includes('https://topmate.io/mnsinstitute/')), 'coaching, licensing and visa close with the consultation link');
@@ -69,7 +71,7 @@ setTranslatorForTests(async (text, language) => { translations++; return `[${lan
     await say(hi, 'Hindi');
     ok((await prisma.session.findFirst({ where: { workspaceId: W.id, phoneNumber: hi } }))!.language === 'Hindi', 'the language is remembered');
     const menu = to(hi)[2];
-    ok(menu.startsWith('[Hindi] To assist you better') && (menu.match(/\n/g) ?? []).length >= 10 && /9️⃣/.test(menu) && !/Welcome to/.test(menu), 'the nine-option menu comes next, translated');
+    ok(menu.startsWith('[Hindi] 📝 Please fill out this short form') && menu.includes('https://tally.so/r/7Rrl70') && menu.includes('Then, to assist you better') && (menu.match(/\n/g) ?? []).length >= 10 && /9️⃣/.test(menu) && !/Welcome to/.test(menu), 'the form link and the nine-option menu come next, translated');
     await say(hi, '3');
     ok(to(hi)[3] === '[Hindi] What is your current profession?', 'the first licensing question is translated');
     const answers = ['Staff nurse', 'B.Sc Nursing, 2018', '5 years', 'No gap', 'India, wants to work in the UAE', 'No', 'Not yet'];
@@ -79,14 +81,14 @@ setTranslatorForTests(async (text, language) => { translations++; return `[${lan
     const lead = await prisma.lead.findFirst({ where: { workspaceId: W.id, phoneNumber: hi } });
     ok(lead?.serviceCategory === 'LICENSING' && Object.keys(lead.collectedData as object).sort().join() === 'profession,qualification,experience,gap,location,existing_license,exam_status'.split(',').sort().join(), 'the lead is saved with all seven answers');
     await say(hi, 'menu');
-    ok(to(hi).at(-1)!.startsWith('[Hindi] To assist you better'), 'MENU shows the menu again without asking the language again');
+    ok(to(hi).at(-1)!.startsWith('[Hindi] 📝') && to(hi).at(-1)!.includes('to assist you better'), 'MENU shows the menu again without asking the language again');
 
     console.log('\n[an English-speaking customer, WAPPO and jobs]');
     const en = `9190${run}2`;
     const before = translations;
     await say(en, 'hello');
     await say(en, '1');
-    ok(to(en)[1].startsWith('To assist you better') && !to(en)[1].startsWith('['), 'English customers get the menu as written');
+    ok(to(en)[1].startsWith('📝 Please fill out this short form') && to(en)[1].includes('https://tally.so/r/7Rrl70') && !to(en)[1].startsWith('['), 'English customers get the form link and the menu as written');
     await say(en, 'wappo');
     ok(to(en)[2].startsWith('What type of business'), 'WAPPO asks about the business, not healthcare questions');
     for (const a of ['A dental clinic', 'Answer enquiries', 'CRM', 'Need help preparing']) await say(en, a);

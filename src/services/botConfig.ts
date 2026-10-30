@@ -162,7 +162,11 @@ export function welcomeMessage(cfg: BotConfig): string {
 
 /** The menu on its own (the language question has already been asked and answered). */
 export function menuOnlyMessage(cfg: BotConfig): string {
-  return ['To assist you better, please select the service you are looking for:', menuLines(cfg), `Please reply with the option number (1-${cfg.services.length}). 😊`].join('\n\n');
+  const form = cfg.ws.formUrl.trim();
+  const lead = form
+    ? [`📝 Please fill out this short form so our team can understand your profile:\n👉 ${form}`, 'Then, to assist you better, please select the service you are looking for:']
+    : ['To assist you better, please select the service you are looking for:'];
+  return [...lead, menuLines(cfg), `Please reply with the option number (1-${cfg.services.length}). 😊`].join('\n\n');
 }
 
 export const DEFAULT_LANGUAGE_WELCOME =

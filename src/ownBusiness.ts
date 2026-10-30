@@ -8,6 +8,9 @@ import type { TemplateService } from './templates';
 const TOPMATE = 'https://topmate.io/mnsinstitute/';
 const JOBS = 'https://www.mnsinstitutejobs.com';
 const WAPPO = 'https://www.wappoai.com';
+const FORM = 'https://tally.so/r/7Rrl70';
+/** The team's number for "call us" (WhatsApp call or normal call) */
+const TEAM_PHONE = '+91 8700825077';
 const ZEXY = 'https://zexyai.com';
 
 const closing = (lines: string[]) => ['Thank you for sharing your details! 🙌', ...lines, 'You can ask me any question here. To see the menu again, type *MENU*.'].join('\n\n');
@@ -149,13 +152,14 @@ export const OWN_KNOWLEDGE = `GENERAL RULES
 - Never invent prices, links, phone numbers, inclusions, timelines, discounts or payment options. Never guarantee exam results or scores, jobs, licence approval, visas, PR, SEO rankings, views or business growth.
 - Quote a price only when the customer asks about fees, price or cost; give the exact figure below with its inclusions. Otherwise explain the value of the service first.
 - Keep coaching, study material, licensing and job assistance clearly separate.
-- If you cannot answer confidently from these notes, say: "I want to make sure you receive accurate information. Please contact our team directly through a WhatsApp call or a normal phone call so we can understand your situation and guide you correctly." For complex or individual cases also offer the consultation link. Never invent a phone number and never claim a call, booking, payment or enrollment has happened.
+- If you cannot answer confidently from these notes, say: "I want to make sure you receive accurate information. Please contact our team directly through a WhatsApp call or a normal phone call on ${TEAM_PHONE} so we can understand your situation and guide you correctly." For complex or individual cases also offer the consultation link. The team's number is ${TEAM_PHONE}; never give any other number and never claim a call, booking, payment or enrollment has happened.
 - Share only the link for the service the customer asks about.
 
 OFFICIAL LINKS
 MNS Institute Jobs: ${JOBS}
 WAPPO: ${WAPPO} (always this address)
 ZEXY AI: ${ZEXY}
+Profile form for new enquiries: ${FORM}
 One-to-one consultation (Topmate): ${TOPMATE}
 MNS Institute coaching has no enrollment link: send the customer to the consultation or the team.
 
@@ -200,14 +204,14 @@ export const OWN_PROFILE = {
   tone: 'professional and friendly',
   languages: 'English, Hindi and other languages the customer prefers',
   bookingLabel: 'one-to-one consultation with our team',
-  formUrl: '',
+  formUrl: FORM,
   languageStep: true,
   languageWelcome:
     'Hello! Welcome, and thank you for contacting us. I am here to help you find the right solution for your needs. Which language would you prefer for our conversation?',
   followUpsEnabled: true,
   handoffEnabled: true,
   handoffMessage:
-    'Of course. I have asked our team to take over this chat, and a person will reply here shortly. You can also reach the team directly through a WhatsApp call or a normal phone call.',
+    `Of course. I have asked our team to take over this chat, and a person will reply here shortly. You can also reach the team directly through a WhatsApp call or a normal phone call on ${TEAM_PHONE}.`,
   industry: 'overseas-careers',
   knowledge: OWN_KNOWLEDGE
 };
