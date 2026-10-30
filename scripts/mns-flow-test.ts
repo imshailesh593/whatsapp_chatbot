@@ -89,6 +89,15 @@ setTranslatorForTests(async (text, language) => { translations++; return `[${lan
     await prisma.workspace.update({ where: { id: W.id }, data: { languageStep: true } });
     invalidateConfig(W.id);
 
+    console.log('\n[a chat left on a language the business does not offer]');
+    for (const [tag, wrong] of [['Hy', 'Hy'], ['Te', 'Telugu']] as const) {
+      const p = `9190${run}W${tag}`;
+      await prisma.session.create({ data: { workspaceId: W.id, phoneNumber: p, stage: 'AWAITING_SERVICE_SELECTION', language: wrong } });
+      await say(p, 'hello');
+      const row = await prisma.session.findFirst({ where: { workspaceId: W.id, phoneNumber: p } });
+      ok(to(p)[0].startsWith(OWN_PROFILE.languageWelcome) && row!.language === null && row!.stage === 'AWAITING_LANGUAGE', `a chat stuck on "${wrong}" is asked for its language again, in English`);
+    }
+
     console.log('\n[language answers]');
     for (const [input, want] of [['1', 'English'], ['english', 'English'], ['2', 'Hindi'], ['हिन्दी', 'Hindi'], ['hindi', 'Hindi'], ['tamil', 'Tamil'], ['Telugu', 'Telugu']] as const) ok(parseLanguage(input) === want, `"${input}" is ${want}`);
     ok(parseLanguage('what is the fee?') === null && parseLanguage('') === null && parseLanguage('a'.repeat(40)) === null, 'a question or nonsense is not taken as a language');

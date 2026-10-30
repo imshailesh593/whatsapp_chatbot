@@ -101,6 +101,13 @@ export async function handleIncomingMessage(
     }
   };
 
+  // A language this business does not offer (an old wrong answer, or the list changed): ask again instead of translating into it
+  if (cfg.ws.languageStep && session.language && !offeredLanguages(cfg.ws.languages).includes(session.language) && !OPT_OUT_COMMANDS.includes(lower)) {
+    session = await prisma.session.update({ where: key, data: { language: null, stage: SessionStage.AWAITING_LANGUAGE, selectedService: null, currentStep: 0, answers: {} } });
+    await send(phoneNumber, languagePrompt(cfg));
+    return;
+  }
+
   // Customers can leave broadcast lists at any time; they can come back with START / MENU
   if (OPT_OUT_COMMANDS.includes(lower)) {
     await prisma.session.update({ where: key, data: { optedOut: true } });
