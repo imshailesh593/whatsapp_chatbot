@@ -272,6 +272,7 @@ Pro includes 1 WhatsApp number. The free trial (14 days) has the same limits.
 - *Follow up automatically*: customers who go quiet get a polite nudge 1, 3, 6 and 48 hours after their last message (daytime only). It stops when they reply, send STOP, you take over, or the lead is Won, Lost or Booked.
 - Each menu option can have its own *closing message* (Menu & questions), for example with the right website link.
   Put the fees and what is included in it, so customers see them straight away. Add a line such as `[if profession ~ nurs]Recorded lectures are included.[/if]` to show a part only to some customers (it is kept when their answer to the question named `profession` contains "nurs"; separate several words with `|`).
+- A long closing message can be sent as several WhatsApp messages: put a line with just `---` between the parts.
 - The consultation link is sent only when a customer asks for more information (for example "more info", "book a consultation", "let's discuss"). A question about fees is answered, not redirected to the link.
 
 What happens at a limit:

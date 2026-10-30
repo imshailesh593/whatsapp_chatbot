@@ -137,8 +137,9 @@ setTranslatorForTests(async (text, language) => { translations++; return `[${lan
     ok(to(hi)[3] === '[Hindi] What is your current profession?', 'the first licensing question is translated');
     const answers = ['Staff nurse', 'B.Sc Nursing, 2018', '5 years', 'No gap', 'India, wants to work in the UAE', 'No', 'Not yet'];
     for (const a of answers) await say(hi, a);
-    const last = to(hi).at(-1)!;
-    ok(last.startsWith('[Hindi] Thank you for sharing your details') && last.includes('₹1,75,000') && last.includes('₹40,000') && !last.includes('topmate'), 'the licensing closing message arrives translated, with the fees and no link');
+    const [licMsg1, licMsg2] = to(hi).slice(-2);
+    ok(licMsg1.startsWith('[Hindi] Thank you for sharing your details') && licMsg1.includes('₹1,75,000') && licMsg2.startsWith('[Hindi] *After you pass DHA') && licMsg2.includes('₹40,000') && licMsg2.includes('*MORE INFO*') && !(licMsg1 + licMsg2).includes('topmate'), 'the licensing closing arrives as two translated messages (packages, then the post-result fee), with the fees and no link');
+    ok(licMsg1.length < 900 && licMsg2.length < 900 && !licMsg1.includes('---') && !licMsg2.includes('---'), '...each short enough to read at a glance, and the split marker never reaches the customer');
     await say(hi, 'DHA fees');
     ok(!to(hi).at(-1)!.includes('topmate'), 'asking about fees afterwards does not send the consultation link');
     await say(hi, 'I need more information');
@@ -178,7 +179,8 @@ setTranslatorForTests(async (text, language) => { translations++; return `[${lan
     await say(en2, 'hi'); await say(en2, 'english'); await say(en2, '4');
     ok(to(en2).at(-1) === 'What is your current profession?', 'jobs starts with the profile questions');
     for (const a of ['Nurse', 'GNM 2015', '8 years', 'None', 'India', 'Canada', 'No']) await say(en2, a);
-    ok(to(en2).at(-1)!.includes('https://www.mnsinstitutejobs.com') && to(en2).at(-1)!.includes('₹50,000') && !to(en2).at(-1)!.includes('topmate'), 'jobs closes with the fees and the website, and no consultation link');
+    const jobsMsgs = to(en2).slice(-2);
+    ok(jobsMsgs[0].includes('₹50,000') && jobsMsgs[0].includes('₹43,500') && jobsMsgs[1].includes('https://www.mnsinstitutejobs.com') && jobsMsgs[1].includes('*MORE INFO*') && !jobsMsgs.join(' ').includes('topmate'), 'jobs closes as two messages: the fees and inclusions, then the timeline and the website, with no consultation link');
     for (const [ask, wantsLink] of [['MORE INFO', true], ['more', true], ['Can I book a consultation?', true], ['tell me more', true], ['I want to discuss my profile', true], ['what is the fee?', false], ['ok thanks', false]] as const) {
       await say(en2, ask);
       ok(to(en2).at(-1)!.includes(TOPMATE) === wantsLink, `"${ask}" ${wantsLink ? 'sends' : 'does not send'} the consultation link`);

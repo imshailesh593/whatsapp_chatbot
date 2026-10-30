@@ -82,6 +82,7 @@ For DHA, HAAD and other Prometric exams. Includes:
 • Nursing / Registered Nurse, Pharmacist, Medical Laboratory Technologist or Technician, and Radiologist: ₹1,75,000
 • BAMS: approximately ₹1,75,000 (it can vary by about ₹2,000 to ₹4,000 with individual requirements)
 • Other doctors and healthcare professionals: indicative minimum ₹1,75,000. The final quotation depends on qualification, specialization, experience, target country, existing licence, documents and eligibility.`,
+      '---',
       `*After you pass DHA or another Prometric exam*
 Licensing service fee: ₹40,000, payable only after a positive result (no processing fee before it). It covers DataFlow processing, eligibility processing, Letter of Qualification where applicable, and guidance through the further licensing formalities.`,
       `Examination, government, visa and other third-party charges are confirmed separately by our team. Final licensing decisions rest with the regulator, so approval cannot be guaranteed.`
@@ -104,6 +105,7 @@ Licensing service fee: ₹40,000, payable only after a positive result (no proce
 • Professional CV preparation
 • Interview preparation, with relevant interview questions from previous candidate and employer experiences
 • Candidate portal: track your applications, interview scheduling status, offer-letter status and available organization details, with Gmail notifications`,
+      '---',
       `*How long does it take?* It depends on your profile and the employer. Some employers respond within about three days, others take three weeks or longer. A job offer or joining date cannot be guaranteed. One-to-one interview training is optional and has a separate fee that our team will confirm.`,
       `To enroll, please use our official website only:\n👉 ${JOBS}`
     ])

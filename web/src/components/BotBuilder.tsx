@@ -105,7 +105,7 @@ export default function BotBuilder({ overview, onSaved }: { overview: Overview; 
             <label className="text-[11px] text-slate-500 block mt-3 mb-1">Keywords that also select this service (comma separated)</label>
             <input value={s.keywords.join(', ')} onChange={(e) => patchService(i, { keywords: e.target.value.split(',').map((k) => k.trim()).filter(Boolean) })} placeholder="e.g. price, quote, buy" className={input} />
 
-            <label className="text-[11px] text-slate-500 block mt-3 mb-1">Message sent when the customer finishes the questions (optional: add the right link or next step; empty uses the general thank-you)</label>
+            <label className="text-[11px] text-slate-500 block mt-3 mb-1">Message sent when the customer finishes the questions (optional: add the right link or next step; empty uses the general thank-you. A line with just --- sends the parts as separate messages)</label>
             <textarea value={s.closingMessage ?? ''} rows={6} maxLength={3000} onChange={(e) => patchService(i, { closingMessage: e.target.value })} placeholder="Thank you! Our team will contact you shortly. Book a call: https://..." className={`${input} resize-y`} />
 
             <div className="mt-3 space-y-2">

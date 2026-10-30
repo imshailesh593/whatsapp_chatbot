@@ -237,7 +237,10 @@ export async function handleIncomingMessage(
           })
         ]);
         if (!isCapturing()) void logLeadEvent(newLead.id, workspaceId, 'created', service.title, 'bot');
-        await speak(completionMessage(cfg, service.key, updatedAnswers));
+        // A long closing message can be split into separate WhatsApp messages with a line of --- (easier to read than one huge block)
+        for (const part of completionMessage(cfg, service.key, updatedAnswers).split(/\n\s*-{3,}\s*\n/)) {
+          if (part.trim()) await speak(part.trim());
+        }
         if (!isCapturing()) {
           void notifyNewLead(workspaceId, session.id);
           void dispatchEvent(workspaceId, 'lead.created', session.id);
