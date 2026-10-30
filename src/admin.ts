@@ -41,6 +41,7 @@ import { authUrl, cancelAppointment, cleanRules, completeConnection, disconnect 
 import { getUsage } from './services/usage';
 import { checkRazorpay } from './services/razorpaySetup';
 import { checkPaypal } from './services/paypal';
+import { currencyOf, detectRegion } from './lib/geo';
 import { cancelSubscription, handlePaypalWebhook, handleRazorpayWebhook, handleStripeWebhook, openPortal, providersAvailable, startCheckout } from './services/billing';
 
 const SIM_PREFIX = 'SIM-';
@@ -502,6 +503,8 @@ export function registerAdmin(app: FastifyInstance, opts: { getQr: (workspaceId:
       limits: { conversations: num(access.limits.conversations), aiReplies: num(access.limits.aiReplies), seats: num(access.limits.seats), broadcasts: num(access.limits.broadcasts) },
       usage: { ...usage, seats },
       providers: providersAvailable(),
+      // Which currency to lead with, from the owner's IP address (they can switch it on the page)
+      currency: currencyOf(detectRegion(req.headers, req.ip).region),
       plans: PLANS.map((p) => ({ id: p.id, name: p.name, blurb: p.blurb, price: p.price, limits: p.limits })),
       payments: payments.map((p) => ({ id: p.id, amount: p.amount, currency: p.currency, status: p.status, plan: p.plan, at: p.createdAt.toISOString() }))
     };

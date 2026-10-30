@@ -198,6 +198,9 @@ async function cleanup() {
   r = await call(hA, 'GET', '/admin/api/billing');
   ok(r.json().plan === 'trial' && r.json().status === 'trialing' && r.json().active && r.json().limits.conversations === 1500 && r.json().providers.stripe === false, 'billing: new workspace is on a 14-day trial with Growth limits, no providers configured');
   ok(r.json().plans.length === 1 && !!r.json().trialEndsAt, 'billing: plans and trial end listed');
+  ok(r.json().currency === 'USD', 'billing: an owner whose country is unknown is shown dollars');
+  ok((await call({ ...hA, 'x-real-ip': '49.36.1.1' }, 'GET', '/admin/api/billing')).json().currency === 'INR', 'billing: an owner in India is shown rupees');
+  ok((await call({ ...hA, 'x-real-ip': '8.8.8.8' }, 'GET', '/admin/api/billing')).json().currency === 'USD', 'billing: an owner abroad is shown dollars');
   ok((await call(hA, 'POST', '/admin/api/billing/checkout', { plan: 'growth', provider: 'stripe' })).statusCode === 400, 'checkout refused while the provider is not configured');
   await call(hA, 'POST', '/admin/api/admins', { email: `agent2${DOMAIN}`, password: 'agent password 2', role: 'agent' });
   const hAg2 = cookieOf(await login(`agent2${DOMAIN}`, 'agent password 2'));

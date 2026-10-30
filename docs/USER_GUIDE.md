@@ -259,7 +259,7 @@ Under **Bot & Settings**. Included with your plan.
 
 **Plan & billing** shows your plan, your usage this month and the status of your account.
 
-There is one plan, **Pro**: ₹499 a month in India or $19 a month elsewhere. It includes:
+There is one plan, **Pro**: ₹499 a month in India or $19 a month elsewhere. The dashboard shows the price in the currency for your country (worked out from your IP address); use the link under the price if it guessed wrong. It includes:
 
 | New conversations / month | AI answers / month | Team members | Broadcast messages / month | Integrations |
 |---|---|---|---|---|

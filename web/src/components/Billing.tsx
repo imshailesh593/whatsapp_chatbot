@@ -26,6 +26,8 @@ function Bar({ label, used, limit }: { label: string; used: number; limit: numbe
 export default function Billing({ me }: { me: AdminUser }) {
   const [b, setB] = useState<BillingInfo | null>(null);
   const [busy, setBusy] = useState('');
+  // The owner can switch currency if the guess from their IP address is wrong
+  const [chosen, setChosen] = useState<'INR' | 'USD' | null>(null);
   const [error, setError] = useState('');
   const owner = me.role === 'owner';
   const [code, setCode] = useState('');
@@ -77,6 +79,7 @@ export default function Billing({ me }: { me: AdminUser }) {
   if (!b) return <div className="bg-slate-950 border border-slate-800 rounded-2xl p-5 text-xs text-slate-500">{error || 'Loading billing…'}</div>;
 
   const internal = b.plan === 'internal';
+  const currency: 'INR' | 'USD' = chosen ?? b.currency ?? 'USD';
   const anyProvider = b.providers.stripe || b.providers.razorpay || b.providers.paypal;
   // Paid by a one-off link: it does not renew by itself, so the owner can pay again at any time
   const linkPaid = b.provider === 'razorpay_link';
@@ -131,8 +134,10 @@ export default function Billing({ me }: { me: AdminUser }) {
                     {current && <span className="text-[10px] text-emerald-300">Current plan</span>}
                   </div>
                   <div className="mt-1 text-xs text-slate-400">{p.blurb}</div>
-                  <div className="mt-3 text-lg font-extrabold text-white">{money(p.price.INR, 'INR')}<span className="text-xs font-medium text-slate-400"> /month in India</span></div>
-                  <div className="text-[11px] text-slate-500">{money(p.price.USD, 'USD')} /month everywhere else</div>
+                  <div className="mt-3 text-lg font-extrabold text-white">{money(p.price[currency], currency)}<span className="text-xs font-medium text-slate-400"> /month</span></div>
+                  <button type="button" onClick={() => setChosen(currency === 'INR' ? 'USD' : 'INR')} className="text-[11px] text-slate-500 hover:text-slate-300 underline">
+                    {currency === 'INR' ? `Not in India? Show ${money(p.price.USD, 'USD')}` : `Paying from India? Show ${money(p.price.INR, 'INR')}`}
+                  </button>
                   <ul className="mt-3 space-y-1 text-xs text-slate-300">
                     <li>{p.limits.conversations.toLocaleString()} new conversations / month</li>
                     <li>{p.limits.aiReplies.toLocaleString()} AI answers / month</li>
@@ -142,19 +147,22 @@ export default function Billing({ me }: { me: AdminUser }) {
                   </ul>
                   {owner && (!current || linkPaid) && (
                     <div className="mt-4 flex flex-col gap-2">
-                      <button disabled={!b.providers.razorpay || !!busy} onClick={() => go(`rz-${p.id}`, () => api.checkout(p.id, 'razorpay'))}
+                      {currency === 'INR' && <button disabled={!b.providers.razorpay || !!busy} onClick={() => go(`rz-${p.id}`, () => api.checkout(p.id, 'razorpay'))}
                         className="py-2 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs rounded-lg disabled:opacity-40 flex items-center justify-center space-x-1.5">
                         {busy === `rz-${p.id}` && <Loader2 className="w-3.5 h-3.5 animate-spin" />}<span>{current ? 'Renew for 30 days (₹)' : 'Pay in ₹ (UPI, cards)'}</span>
-                      </button>
-                      {!current && b.providers.paypal && <button disabled={!!busy} onClick={() => go(`pp-${p.id}`, () => api.checkout(p.id, 'paypal'))}
+                      </button>}
+                      {!current && currency === 'USD' && b.providers.paypal && <button disabled={!!busy} onClick={() => go(`pp-${p.id}`, () => api.checkout(p.id, 'paypal'))}
                         className="py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs rounded-lg border border-slate-700 disabled:opacity-40 flex items-center justify-center space-x-1.5">
                         {busy === `pp-${p.id}` && <Loader2 className="w-3.5 h-3.5 animate-spin" />}<span>Pay in $ (PayPal)</span>
                       </button>}
-                      {!current && (b.providers.stripe || !b.providers.paypal) && <button disabled={!b.providers.stripe || !!busy} onClick={() => go(`st-${p.id}`, () => api.checkout(p.id, 'stripe'))}
+                      {!current && currency === 'USD' && (b.providers.stripe || !b.providers.paypal) && <button disabled={!b.providers.stripe || !!busy} onClick={() => go(`st-${p.id}`, () => api.checkout(p.id, 'stripe'))}
                         className="py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs rounded-lg border border-slate-700 disabled:opacity-40 flex items-center justify-center space-x-1.5">
                         {busy === `st-${p.id}` && <Loader2 className="w-3.5 h-3.5 animate-spin" />}<span>Pay in $ (card)</span>
                       </button>}
                     </div>
+                  )}
+                  {owner && !current && currency === 'INR' && !b.providers.razorpay && (
+                    <p className="mt-2 text-[11px] text-amber-300">Payment in rupees is being set up. <button type="button" onClick={() => setChosen('USD')} className="underline">Pay in dollars instead</button></p>
                   )}
                 </div>
               );

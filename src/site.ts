@@ -1,6 +1,7 @@
 import type { FastifyInstance, FastifyReply } from 'fastify';
 import { PRODUCT_NAME } from './brand';
 import { PLANS, TRIAL_DAYS, GRACE_DAYS } from './plans';
+import { detectRegion, type Region } from './lib/geo';
 
 /**
  * The public website: landing page, privacy policy, terms, refund policy and contact page.
@@ -232,12 +233,24 @@ const FEATURES: { title: string; items: string[] }[] = [
   }
 ];
 
-function planCardsHtml(): string {
+/** The sentence above the price: which currency is shown and why. */
+const pricingLead = (region: Region) =>
+  region === 'IN'
+    ? 'One plan with everything included, shown in Indian rupees with UPI and card payment. The price is for your country, found from your IP address.'
+    : 'One plan with everything included, shown in US dollars with PayPal and card payment. The price is for your country, found from your IP address.';
+
+/** The plan card in the visitor's currency, with a link to see the other one (a wrong guess is one click to fix). */
+function planCardsHtml(region: Region, path: string): string {
+  const rupees = region === 'IN';
+  const anchor = path === '/' ? '#pricing' : '';
   return PLANS.map((p) => {
     const l = p.limits;
+    const price = rupees
+      ? `<div class="price">${inr(p.price.INR)}<small> / month</small></div><div class="fine" style="margin-top:4px">Shown in Indian rupees. <a href="${path}?region=world${anchor}">Show US dollars (${usd(p.price.USD)})</a></div>`
+      : `<div class="price">${usd(p.price.USD)}<small> / month</small></div><div class="fine" style="margin-top:4px">Shown in US dollars. <a href="${path}?region=in${anchor}">Paying from India? Show rupees (${inr(p.price.INR)})</a></div>`;
     return `<div class="card plan pop">
 <h3>${esc(p.name)}</h3><p class="fine" style="margin:0 0 8px">${esc(p.blurb)}</p>
-<div class="price">${inr(p.price.INR)}<small> / month in India</small></div><div class="price" style="font-size:26px;margin-top:2px">${usd(p.price.USD)}<small> / month everywhere else</small></div>
+${price}
 <ul>
 <li>${n(l.conversations)} new conversations a month</li>
 <li>${n(l.aiReplies)} AI answers a month</li>
@@ -248,15 +261,16 @@ function planCardsHtml(): string {
 <li>Google Calendar booking and human hand-off</li>
 <li class="${p.integrations ? '' : 'no'}">Webhooks and REST API${p.integrations ? '' : ' (not included)'}</li>
 <li>Free updates and email support</li>
+<li>${rupees ? 'Pay by UPI or card' : 'Pay with PayPal or card'}</li>
 </ul>
 <a class="btn p" href="/admin/?plan=pro">${signupOpen() ? `Start ${TRIAL_DAYS}-day free trial` : 'Get started'}</a>
 </div>`;
   }).join('');
 }
 
-function landing(): string {
+function landing(region: Region): string {
   const name = esc(PRODUCT_NAME);
-  const planCards = planCardsHtml();
+  const planCards = planCardsHtml(region, '/');
 
   const faq: [string, string][] = [
     ['Do I need the official WhatsApp Business API?', `No. ${PRODUCT_NAME} links to your existing WhatsApp number through WhatsApp's "Linked devices" feature, the same way WhatsApp Web works. There is no Meta approval process and no per-message fee from us.`],
@@ -425,7 +439,7 @@ function landing(): string {
 
 <section class="alt" id="pricing"><div class="wrap">
 <h2 style="text-align:center">Simple monthly pricing</h2>
-<p class="sub" style="margin-left:auto;margin-right:auto;text-align:center">One plan with everything included. Customers in India pay in rupees (UPI or card); everyone else pays in dollars (card or PayPal). Try it free for ${TRIAL_DAYS} days first. It renews monthly and you can cancel at any time. Taxes, if applicable, are extra.</p>
+<p class="sub" style="margin-left:auto;margin-right:auto;text-align:center">${pricingLead(region)} Try it free for ${TRIAL_DAYS} days first. It renews monthly and you can cancel at any time. Taxes, if applicable, are extra.</p>
 <div class="grid" style="max-width:460px;margin:0 auto">${planCards}</div>
 <p class="fine" style="margin-top:16px">What counts: a "new conversation" is a customer who messages you for the first time in a calendar month; limits reset every month. See the <a href="/refunds">refund and cancellation policy</a> and the <a href="/terms">terms</a>.</p>
 </div></section>
@@ -487,6 +501,7 @@ function privacy(): string {
 <li>The WhatsApp link: a session credential created when you scan the QR code, stored on our server so the bot stays connected.</li>
 <li>If you connect Google Calendar: your Google account email and an access (refresh) token, stored encrypted, plus the calendar events we create for bookings and the free/busy times we read to offer slots.</li>
 <li>Technical data: sign-in times, IP address in security logs, an audit log of administrative actions.</li>
+<li>Approximate location: when you visit our website or billing page we use your IP address to work out your country, only to show prices in the right currency (rupees in India, dollars elsewhere). The lookup runs on our own server with an offline database; your address is not sent to anyone for this and is not stored for this purpose.</li>
 </ul>
 <p><strong>About end customers (on behalf of the business):</strong></p>
 <ul>
@@ -729,15 +744,15 @@ ${contactLines()}
   });
 }
 
-function pricing(): string {
+function pricing(region: Region): string {
   const p = esc(PRODUCT_NAME);
   return page({
     title: `Pricing | ${PRODUCT_NAME}`,
     description: `${PRODUCT_NAME} pricing: ${inr(PLANS[0].price.INR)} a month in India, ${usd(PLANS[0].price.USD)} a month elsewhere, with a ${TRIAL_DAYS}-day free trial.`,
     path: '/pricing',
     body: `<main class="doc" style="max-width:760px"><h1>Pricing</h1>
-<p>One plan with everything included. Customers in India pay in Indian rupees (UPI or card, through Razorpay); customers elsewhere pay in US dollars (PayPal or card). Every new business gets a ${TRIAL_DAYS}-day free trial first.</p>
-<div class="grid" style="max-width:460px;margin:24px 0">${planCardsHtml()}</div>
+<p>${pricingLead(region)} Customers in India pay in Indian rupees (UPI or card, through Razorpay); customers elsewhere pay in US dollars (PayPal or card). Every new business gets a ${TRIAL_DAYS}-day free trial first.</p>
+<div class="grid" style="max-width:460px;margin:24px 0">${planCardsHtml(region, '/pricing')}</div>
 <h2>Good to know</h2>
 <ul>
 <li>The plan renews every month until you cancel. You keep access until the end of the period you have paid for.</li>
@@ -758,23 +773,31 @@ const notFound = () =>
 export const SITE_PATHS = ['/', '/about', '/pricing', '/privacy', '/terms', '/refunds', '/shipping', '/contact'] as const;
 
 export function registerSite(app: FastifyInstance): void {
-  const send = (reply: FastifyReply, html: string, status = 200) =>
+  // Pages that show a price depend on who is looking, so they must never be stored and handed to someone in another country
+  const send = (reply: FastifyReply, html: string, status = 200, perVisitor = false) =>
     reply
       .status(status)
       .header('Content-Type', 'text/html; charset=utf-8')
-      .header('Cache-Control', 'public, max-age=300')
+      .header('Cache-Control', perVisitor ? 'private, no-cache' : 'public, max-age=300')
+      .header('Vary', perVisitor ? 'Cookie, X-Real-Ip, X-Forwarded-For' : 'Accept-Encoding')
       .header('Content-Security-Policy', "default-src 'none'; style-src 'unsafe-inline'; img-src 'self' data:; base-uri 'none'; form-action 'self'; frame-ancestors 'none'")
       .header('X-Content-Type-Options', 'nosniff')
       .header('Referrer-Policy', 'strict-origin-when-cross-origin')
       .send(html);
 
-  app.get('/', async (_req, reply) => send(reply, landing()));
+  const regionOf = (req: { headers: Record<string, string | string[] | undefined>; ip: string; query: unknown }, reply: FastifyReply): Region => {
+    const d = detectRegion(req.headers, req.ip, req.query as Record<string, unknown>);
+    if (d.setCookie) reply.header('Set-Cookie', d.setCookie);
+    return d.region;
+  };
+
+  app.get('/', async (req, reply) => send(reply, landing(regionOf(req, reply)), 200, true));
   app.get('/privacy', async (_req, reply) => send(reply, privacy()));
   app.get('/terms', async (_req, reply) => send(reply, terms()));
   app.get('/refunds', async (_req, reply) => send(reply, refunds()));
   app.get('/contact', async (_req, reply) => send(reply, contact()));
   app.get('/about', async (_req, reply) => send(reply, about()));
-  app.get('/pricing', async (_req, reply) => send(reply, pricing()));
+  app.get('/pricing', async (req, reply) => send(reply, pricing(regionOf(req, reply)), 200, true));
   app.get('/shipping', async (_req, reply) => send(reply, shipping()));
 
   app.get('/robots.txt', async (_req, reply) =>

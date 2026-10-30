@@ -238,6 +238,10 @@ Three optional per-business features (Dashboard → Bot & Settings), all off unl
 
 Price or fee questions typed without a question mark (for example "DHA fees") are answered by the AI like any other question.
 
+### 5.10 Prices by country
+
+The landing page, the pricing page and the dashboard billing screen lead with one currency. `src/lib/geo.ts` works out the visitor's country from their IP address (the proxy's `X-Real-Ip` / `X-Forwarded-For`, or a `CF-IPCountry` header if Cloudflare is ever put in front) with an **offline** database (`geoip-country`), so the address is never sent to another service. India sees ₹499 with the Razorpay (UPI and card) option; everyone else, and anyone who cannot be placed, sees $19 with PayPal or Stripe. A link next to the price switches currency (`?region=in` or `?region=world`) and the choice is remembered in a `region` cookie. Pages that show a price are sent with `Cache-Control: private, no-cache` so no cache can serve one country's price to another. The privacy policy states this use of the IP address.
+
 ### 5.8 Referral and redeem codes
 
 Referral: each workspace has a code; a business that signs up with it records `referredById`; every recorded payment may create a commission (default 20% for 12 payments, off by default), reviewed in the operator's Affiliates screen. Redeem codes grant a plan or a trial extension for a number of days; a code cannot overwrite a plan that is currently running.

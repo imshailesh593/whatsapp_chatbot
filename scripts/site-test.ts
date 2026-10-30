@@ -76,6 +76,29 @@ const ok = (c: any, m: string) => { if (!c) throw new Error('FAIL: ' + m); conso
   ok(PLANS.every((p) => pr.includes('₹' + (p.price.INR / 100).toLocaleString('en-IN')) && pr.includes('$' + p.price.USD / 100)), 'the pricing page shows the plan in rupees and in dollars');
   ok(pr.includes('Taxes') && pr.includes('renews every month') && pr.includes(`${TRIAL_DAYS}-day free trial`) && pr.includes('href="/refunds"') && pr.includes('href="/shipping"'), '...with billing terms, the free trial and links to refunds and delivery');
 
+  console.log('\n[prices follow the visitor\'s country]');
+  const visit = (url: string, headers: Record<string, string> = {}) => app.inject({ method: 'GET', url, headers: { accept: 'text/html', ...headers } });
+  const IND = { 'x-real-ip': '49.36.1.1' };
+  const ABROAD = { 'x-real-ip': '8.8.8.8' };
+  const rupee = '₹' + (PLANS[0].price.INR / 100).toLocaleString('en-IN');
+  const dollar = '$' + PLANS[0].price.USD / 100;
+  const card = (cur: string) => `<div class="price">${cur}<small> / month</small></div>`;
+  for (const path of ['/', '/pricing']) {
+    const inIndia = (await visit(path, IND)).body;
+    ok(inIndia.includes(card(rupee)) && !inIndia.includes(card(dollar)) && inIndia.includes('?region=world') && inIndia.includes('Pay by UPI or card'), `${path}: a visitor in India sees rupees, UPI and a link to dollars`);
+    const abroad = (await visit(path, ABROAD)).body;
+    ok(abroad.includes(card(dollar)) && !abroad.includes(card(rupee)) && abroad.includes('?region=in') && abroad.includes('Pay with PayPal or card'), `${path}: a visitor abroad sees dollars, PayPal and a link to rupees`);
+    ok((await visit(path)).body.includes(card(dollar)), `${path}: an unknown visitor sees dollars`);
+    ok((await visit(path, { ...IND, cookie: 'region=OTHER' })).body.includes(card(dollar)), `${path}: a remembered choice beats the address`);
+    ok((await visit(path + '?region=in', ABROAD)).body.includes(card(rupee)), `${path}: ?region=in shows rupees to anyone`);
+  }
+  const switched = await visit('/pricing?region=world', IND);
+  ok(String(switched.headers['set-cookie']).startsWith('region=OTHER;') && switched.body.includes(card(dollar)), 'choosing dollars is remembered in a cookie');
+  const priced = await visit('/', IND);
+  ok(priced.headers['cache-control'] === 'private, no-cache' && String(priced.headers['vary']).includes('X-Real-Ip'), 'a page with a price is never stored for other visitors');
+  ok(String((await visit('/privacy')).headers['cache-control']).startsWith('public'), 'pages without prices stay cacheable');
+  ok(html['/privacy'].includes('use your IP address to work out your country'), 'the privacy policy says the address is used for the currency');
+
   console.log('\n[contact details come from settings, and are escaped]');
   process.env.SUPPORT_EMAIL = 'help@site.example';
   process.env.SUPPORT_PHONE = '+91 90000 00000';
