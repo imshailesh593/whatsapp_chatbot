@@ -143,7 +143,7 @@ export default function BusinessProfile({ workspace, onSaved }: { workspace: Wor
         )}
         <label className="sm:col-span-2 flex items-center gap-2 text-xs text-slate-300">
           <input type="checkbox" checked={f.followUpsEnabled} onChange={(e) => setF((x) => ({ ...x, followUpsEnabled: e.target.checked }))} />
-          <span>Follow up automatically 1, 3, 6 and 48 hours after a customer's last message, in daytime hours only, until they reply, book, say STOP, or the lead is Won or Lost</span>
+          <span>Follow up automatically one day and three days after a customer's last message, in daytime hours only, until they reply, book, say STOP, or the lead is Won or Lost</span>
         </label>
         <div className="sm:col-span-2 flex flex-wrap items-center gap-3">
           <button type="button" onClick={testAlert} disabled={busy || (!f.notifyEmail && !f.notifyPhone)} className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs rounded-lg border border-slate-700 disabled:opacity-40">Save &amp; send a test alert</button>

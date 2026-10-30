@@ -90,7 +90,9 @@ export async function handleIncomingMessage(
   if (cfg.services.length === 0) return;
 
   /** Bot copy in the language the customer chose (businesses that ask for it); plain English otherwise */
-  const speak = async (body: string) => send(phoneNumber, await localize(cfg, body, session!.language, isCapturing()));
+  const speak = async (body: string) => {
+    for (const part of body.split(/\n\s*-{3,}\s*\n/)) if (part.trim()) await send(phoneNumber, await localize(cfg, part.trim(), session!.language, isCapturing()));
+  };
   /** The first thing a customer sees: the language question (when the business asks it and they have not answered yet), else the menu */
   const entry = async () => {
     if (cfg.ws.languageStep && !session!.language) {

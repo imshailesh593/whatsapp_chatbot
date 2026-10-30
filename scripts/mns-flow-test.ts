@@ -93,7 +93,7 @@ setTranslatorForTests(async (text, language) => { translations++; return `[${lan
     const hinglishChat = `9190${run}Hl`;
     await say(hinglishChat, 'hi');
     await say(hinglishChat, '3');
-    ok(to(hinglishChat).at(-1)!.startsWith('[Hinglish] 📝'), 'Hinglish is passed to the translator as its own language');
+    ok(to(hinglishChat).at(-2)!.startsWith('[Hinglish] 📝') && to(hinglishChat).at(-1)!.startsWith('[Hinglish] To assist you better'), 'Hinglish is passed to the translator as its own language, and the form and the menu are two messages');
     const stuck = `9190${run}8`;
     await prisma.workspace.update({ where: { id: W.id }, data: { languageStep: false } });
     invalidateConfig(W.id);
@@ -131,10 +131,11 @@ setTranslatorForTests(async (text, language) => { translations++; return `[${lan
     ok(to(hi).length === 2 && to(hi)[1].startsWith('Sorry, I did not catch that') && to(hi)[1].includes('Malayalam'), 'a question instead of a language gets the choice list again');
     await say(hi, 'Hindi');
     ok((await prisma.session.findFirst({ where: { workspaceId: W.id, phoneNumber: hi } }))!.language === 'Hindi', 'the language is remembered');
-    const menu = to(hi)[2];
-    ok(menu.startsWith('[Hindi] 📝 Please fill out this short form') && menu.includes('https://tally.so/r/7Rrl70') && menu.includes('Then, to assist you better') && (menu.match(/\n/g) ?? []).length >= 10 && /9️⃣/.test(menu) && !/Welcome to/.test(menu), 'the form link and the nine-option menu come next, translated');
+    const form = to(hi)[2];
+    const menu = to(hi)[3];
+    ok(form.startsWith('[Hindi] 📝 Please fill out this short form') && form.includes('https://tally.so/r/7Rrl70') && menu.startsWith('[Hindi] To assist you better') && (menu.match(/\n/g) ?? []).length >= 10 && /9️⃣/.test(menu) && !/Welcome to/.test(menu), 'the form link and the nine-option menu come next as two shorter messages, translated');
     await say(hi, '3');
-    ok(to(hi)[3] === '[Hindi] What is your current profession?', 'the first licensing question is translated');
+    ok(to(hi)[4] === '[Hindi] What is your current profession?', 'the first licensing question is translated');
     const answers = ['Staff nurse', 'B.Sc Nursing, 2018', '5 years', 'No gap', 'India, wants to work in the UAE', 'No', 'Not yet'];
     for (const a of answers) await say(hi, a);
     const [licMsg1, licMsg2] = to(hi).slice(-2);
@@ -147,7 +148,7 @@ setTranslatorForTests(async (text, language) => { translations++; return `[${lan
     const lead = await prisma.lead.findFirst({ where: { workspaceId: W.id, phoneNumber: hi } });
     ok(lead?.serviceCategory === 'LICENSING' && Object.keys(lead.collectedData as object).sort().join() === 'profession,qualification,experience,gap,location,existing_license,exam_status'.split(',').sort().join(), 'the lead is saved with all seven answers');
     await say(hi, 'menu');
-    ok(to(hi).at(-1)!.startsWith('[Hindi] 📝') && to(hi).at(-1)!.includes('to assist you better'), 'MENU shows the menu again without asking the language again');
+    ok(to(hi).at(-2)!.startsWith('[Hindi] 📝') && to(hi).at(-1)!.startsWith('[Hindi] To assist you better'), 'MENU shows the menu again without asking the language again');
 
     console.log('\n[a customer who types a greeting as the language]');
     const hy = `9190${run}7`;
@@ -156,7 +157,7 @@ setTranslatorForTests(async (text, language) => { translations++; return `[${lan
     ok(to(hy)[1].startsWith('Sorry, I did not catch that'), '"Hy" is not taken as Armenian: the customer gets a hint');
     ok((await prisma.session.findFirst({ where: { workspaceId: W.id, phoneNumber: hy } }))!.language === null, '...and no language is stored');
     await say(hy, 'hello');
-    ok(to(hy)[2] === 'No problem, we will continue in English. Type *LANGUAGE* at any time to change it.' && to(hy)[3].includes('to assist you better') && !to(hy)[3].startsWith('['), 'a second miss carries on in English, with the menu');
+    ok(to(hy)[2] === 'No problem, we will continue in English. Type *LANGUAGE* at any time to change it.' && to(hy)[3].includes('short form') && to(hy)[4].startsWith('To assist you better') && !to(hy)[3].startsWith('['), 'a second miss carries on in English, with the menu');
     ok((await prisma.session.findFirst({ where: { workspaceId: W.id, phoneNumber: hy } }))!.language === 'English', '...and English is stored');
     await say(hy, 'language');
     ok(to(hy).at(-1)!.startsWith(OWN_PROFILE.languageWelcome) && to(hy).at(-1)!.includes('5️⃣'), 'LANGUAGE asks the language question again');
@@ -169,9 +170,9 @@ setTranslatorForTests(async (text, language) => { translations++; return `[${lan
     const before = translations;
     await say(en, 'hello');
     await say(en, '1');
-    ok(to(en)[1].startsWith('📝 Please fill out this short form') && to(en)[1].includes('https://tally.so/r/7Rrl70') && !to(en)[1].startsWith('['), 'English customers get the form link and the menu as written');
+    ok(to(en)[1].startsWith('📝 Please fill out this short form') && to(en)[1].includes('https://tally.so/r/7Rrl70') && !to(en)[1].startsWith('[') && to(en)[2].startsWith('To assist you better'), 'English customers get the form link and the menu as written');
     await say(en, 'wappo');
-    ok(to(en)[2].startsWith('What type of business'), 'WAPPO asks about the business, not healthcare questions');
+    ok(to(en)[3].startsWith('What type of business'), 'WAPPO asks about the business, not healthcare questions');
     for (const a of ['A dental clinic', 'Answer enquiries', 'CRM', 'Need help preparing']) await say(en, a);
     ok(to(en).at(-1)!.includes('https://www.wappoai.com'), 'WAPPO closes with wappoai.com');
     ok(translations === before, 'nothing is sent to the translator for English');
@@ -191,10 +192,10 @@ setTranslatorForTests(async (text, language) => { translations++; return `[${lan
     for (const t of ['Staff nurse', 'B.Sc Nursing 2018', 'ok', 'yes']) ok(!looksLikeQuestion(t), `"${t}" is just an answer`);
 
     console.log('\n[follow-ups]');
-    ok(FOLLOW_UP_HOURS.join() === '1,3,6,48', 'the schedule is 1, 3, 6 and 48 hours');
-    const t0 = new Date('2026-11-03T12:00:00Z').getTime();
+    ok(FOLLOW_UP_HOURS.join() === '24,72', 'the schedule is one nudge after a day and a last one after three days');
+    const t0 = new Date('2026-11-20T12:00:00Z').getTime();
     const H = 3_600_000;
-    ok(dueStep(new Date(t0 - 30 * 60_000), 0, t0) === null && dueStep(new Date(t0 - 1 * H), 0, t0) === 0 && dueStep(new Date(t0 - 7 * H), 0, t0) === 2 && dueStep(new Date(t0 - 7 * H), 3, t0) === null && dueStep(new Date(t0 - 49 * H), 3, t0) === 3, 'the right step is picked, and only one even after a long gap');
+    ok(dueStep(new Date(t0 - 5 * H), 0, t0) === null && dueStep(new Date(t0 - 25 * H), 0, t0) === 0 && dueStep(new Date(t0 - 80 * H), 0, t0) === 1 && dueStep(new Date(t0 - 80 * H), 2, t0) === null && dueStep(new Date(t0 - 30 * H), 1, t0) === null, 'the right step is picked, and only one even after a long gap');
     const mk = async (tag: string, hoursAgo: number, data: Record<string, unknown> = {}, stageKey?: string) => {
       const phone = `9199${run}${tag}`;
       const s = await prisma.session.create({
@@ -203,16 +204,16 @@ setTranslatorForTests(async (text, language) => { translations++; return `[${lan
       if (stageKey) await prisma.lead.create({ data: { workspaceId: W.id, sessionId: s.id, phoneNumber: phone, serviceCategory: 'JOBS', collectedData: {}, stageKey } });
       return phone;
     };
-    const q1 = await mk('a', 1.5);
-    const q2 = await mk('b', 7, { language: 'Hindi' });
+    const q1 = await mk('a', 25);
+    const q2 = await mk('b', 75, { language: 'Hindi' });
     const skipped = [
-      await mk('c', 2, { optedOut: true }), await mk('d', 2, { isAgentPaused: true }), await mk('e', 2, { handoffAt: new Date(t0 - H) }),
-      await mk('f', 2, {}, 'won'), await mk('g', 2, {}, 'lost'), await mk('h', 2, {}, 'booked'), await mk('i', 100), await mk('j', 0.5), await mk('k', 2, { followUpCount: 4 })
+      await mk('c', 26, { optedOut: true }), await mk('d', 26, { isAgentPaused: true }), await mk('e', 26, { handoffAt: new Date(t0 - H) }),
+      await mk('f', 26, {}, 'won'), await mk('g', 26, {}, 'lost'), await mk('h', 26, {}, 'booked'), await mk('i', 200), await mk('j', 10), await mk('k', 26, { followUpCount: 2 })
     ];
-    const open = await mk('l', 2, {}, 'new');
+    const open = await mk('l', 26, {}, 'new');
     invalidateConfig(W.id);
     sent.length = 0;
-    const outside = new Date('2026-11-03T22:30:00Z').getTime();
+    const outside = new Date('2026-11-20T22:30:00Z').getTime();
     ok((await followUpTick(outside)) === 0 && sent.length === 0, 'nothing goes out at night');
     await prisma.workspace.update({ where: { id: W.id }, data: { followUpsEnabled: false } });
     invalidateConfig(W.id);
@@ -222,16 +223,16 @@ setTranslatorForTests(async (text, language) => { translations++; return `[${lan
     const n = await followUpTick(t0);
     ok(n === 3 && to(q1).length === 1 && to(q2).length === 1 && to(open).length === 1, 'three eligible customers are nudged, one message each');
     ok(to(q1)[0].startsWith('Hello! I am following up on our previous discussion about International Job Assistance'), 'the first nudge names the service they were asking about');
-    ok(to(q2)[0].startsWith('[Hindi] Hello! I wanted to check whether you have decided'), 'a customer silent for 7 hours gets the third nudge, once, in their language');
+    ok(to(q2)[0].startsWith('[Hindi] Hello! Do you have any update regarding'), 'a customer silent for three days gets the last nudge, once, in their language');
     ok(skipped.every((p) => to(p).length === 0), 'opted out, taken over, handed off, won, lost, booked, too old, too recent and finished sequences are all left alone');
     ok((await followUpTick(t0)) === 0, 'running again straight away sends nothing more');
-    const later = await followUpTick(t0 + 2 * H);
-    ok(later >= 1 && to(q1).length === 2 && to(q1)[1].startsWith('Hello! Do you have any update regarding'), 'two hours later the second nudge goes out to the first customer');
+    const later = await followUpTick(t0 + 48 * H);
+    ok(later >= 1 && to(q1).length === 2 && to(q1)[1].startsWith('Hello! Do you have any update regarding'), 'two days later the second nudge goes out to the first customer');
     await say(q1, 'Sorry, I was busy. Yes interested');
     ok((await prisma.session.findFirst({ where: { workspaceId: W.id, phoneNumber: q1 } }))!.followUpCount === 0, 'a reply from the customer resets the sequence');
-    const stopper = await mk('m', 2);
+    const stopper = await mk('m', 26);
     await say(stopper, 'STOP');
-    ok((await followUpTick(t0 + 10 * H)) >= 0 && to(stopper).every((t) => !/following up/i.test(t)), 'a customer who sends STOP is never nudged');
+    ok((await followUpTick(t0 + 48 * H)) >= 0 && to(stopper).every((t) => !/following up/i.test(t)), 'a customer who sends STOP is never nudged');
 
     console.log('\nMNS FLOW TESTS OK');
   } finally {

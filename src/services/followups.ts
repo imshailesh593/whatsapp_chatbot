@@ -8,7 +8,7 @@ import { localize } from './language';
 import { sendTextMessage, transportReady } from './transport';
 
 /** Hours after the customer's last message at which a nudge may go out. */
-export const FOLLOW_UP_HOURS = [1, 3, 6, 48];
+export const FOLLOW_UP_HOURS = [24, 72];
 const HOUR = 3_600_000;
 /** Sessions that went quiet longer ago than the last step are left alone, so switching the feature on never messages old chats. */
 const OLDEST_HOURS = FOLLOW_UP_HOURS[FOLLOW_UP_HOURS.length - 1] + 24;

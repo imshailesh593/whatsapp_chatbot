@@ -88,7 +88,7 @@ One Node process hosts everything: HTTP server, the WhatsApp sessions, the conve
 | Broadcast | 4 s | Send the next due broadcast message (8–20 s pacing, 9:00–20:00 window, daily cap 150) |
 | Webhook delivery | frequent | Deliver queued outgoing webhooks with retries |
 | Follow-ups | 60 s | Alert owners when a lead's follow-up date is due |
-| Customer follow-ups | 60 s | For businesses that switch it on: nudge customers who went quiet, 1, 3, 6 and 48 hours after their last message (see 5.9) |
+| Customer follow-ups | 60 s | For businesses that switch it on: nudge customers who went quiet, 24 and 72 hours after their last message (see 5.9) |
 | Appointment reminders | 60 s | Remind customers before a booking; expire stale slot offers |
 | Renewals | 1 h | Payment-link renewal reminders (only in Razorpay link mode) |
 
@@ -234,7 +234,7 @@ Three optional per-business features (Dashboard → Bot & Settings), all off unl
 
 - **Language first** (`languageStep`): the first reply asks which language the customer prefers (the text is `languageWelcome`). The answer ("1", "English", "Hindi", "Tamil"...) is stored on the session; from then on every fixed bot message (menu, questions, closing message, reminders) is translated by Gemini into that language, cached, and falls back to the English original if translation is unavailable or the plan's AI allowance is used up. AI answers to side questions are written in that language directly. English chats never call the translator. `MENU` shows the menu again without asking the language again.
 - **Closing message per service** (`Service.closingMessage`): shown when a customer finishes that service's questions, so each service can point to its own link (jobs website, product site, consultation). Empty means the general thank-you.
-- **Customer follow-ups** (`followUpsEnabled`): the follow-up worker (`followups.ts`) sends at most one nudge per quiet customer per pass, the latest one that is due at 1, 3, 6 or 48 hours after the customer's last message. A customer is skipped when they sent STOP, a person has taken over or the chat was handed off, the lead's stage is Won, Lost or Booked, the plan lapsed, WhatsApp is not connected, it is outside 9:00 to 20:00 in the business's time zone, or the chat has been quiet for more than three days (so switching it on never wakes old chats). Any reply from the customer resets the sequence.
+- **Customer follow-ups** (`followUpsEnabled`): the follow-up worker (`followups.ts`) sends at most one nudge per quiet customer per pass, the latest one that is due at 24 or 72 hours after the customer's last message. A customer is skipped when they sent STOP, a person has taken over or the chat was handed off, the lead's stage is Won, Lost or Booked, the plan lapsed, WhatsApp is not connected, it is outside 9:00 to 20:00 in the business's time zone, or the chat has been quiet for more than four days (so switching it on never wakes old chats). Any reply from the customer resets the sequence.
 
 Price or fee questions typed without a question mark (for example "DHA fees") are answered by the AI like any other question.
 
