@@ -6,6 +6,7 @@ import { api } from '../api';
 import { ago } from '../config';
 import type { AdminUser, AffiliateAdmin, CouponInfo, PaymentsSetup, PlatformSettingsInfo } from '../types';
 import Platform from './Platform';
+import { KeysCard, PlanEditor } from './PlanSettings';
 
 type View = 'dashboard' | 'clients' | 'subscriptions' | 'payments' | 'plans' | 'coupons' | 'affiliates' | 'audit' | 'settings';
 
@@ -276,7 +277,8 @@ function Plans() {
           <tr key={p.id}><td className="py-3 px-4 font-semibold text-slate-900">{p.name}</td><td className="py-3 px-4">{inr(p.price.INR)} · {money(p.price.USD, 'USD')}</td><td className="py-3 px-4">{p.limits.conversations.toLocaleString()}</td><td className="py-3 px-4">{p.limits.aiReplies.toLocaleString()}</td><td className="py-3 px-4">{p.limits.seats}</td><td className="py-3 px-4">{p.limits.broadcasts.toLocaleString()}</td><td className="py-3 px-4">{p.integrations ? 'Yes' : 'No'}</td><td className="py-3 px-4 font-semibold">{p.clients}</td></tr>
         ))}
       </Table>
-      <p className="text-xs text-slate-500">{d.internal} internal. Prices and limits are set in <code>src/plans.ts</code> and the matching products in Stripe / Razorpay / PayPal.</p>
+      <p className="text-xs text-slate-500">{d.internal} internal. Edit a plan below; payment providers need a new plan at the new price (Settings, Payments and email keys).</p>
+      {d.plans.map((p) => <PlanEditor key={p.id} plan={p} onChanged={() => api.platformPlans().then(setD).catch(() => undefined)} />)}
     </div>
   );
 }
@@ -535,6 +537,7 @@ function PlatformSettings() {
           </div>
         </div>
       )}
+      <KeysCard />
       <PaymentsSetupCard />
       <p className="text-xs text-slate-500 flex items-center space-x-1.5"><FileText className="w-3.5 h-3.5" /><span>Every change here is written to the audit log.</span></p>
     </div>

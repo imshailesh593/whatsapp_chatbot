@@ -18,12 +18,16 @@ async function rz<T>(method: 'GET' | 'POST', path: string, body?: unknown): Prom
 
 export const planEnvName = (planId: string) => `RAZORPAY_PLAN_${planId.toUpperCase()}`;
 
-/** Creates one monthly Razorpay Plan per plan of ours that has no plan id configured yet. Razorpay cannot delete plans, so never run it twice. */
-export async function createPlans(): Promise<{ plan: string; razorpayPlanId: string; created: boolean }[]> {
+/**
+ * Creates one monthly Razorpay Plan per plan of ours that has no plan id configured yet. Razorpay cannot delete plans, so never run it twice.
+ * With `force` a new one is created even when an id is configured (after a price change: a Razorpay plan cannot change price).
+ * Existing subscribers stay on their old plan and price.
+ */
+export async function createPlans(force = false): Promise<{ plan: string; razorpayPlanId: string; created: boolean }[]> {
   if (!env('RAZORPAY_KEY_ID') || !env('RAZORPAY_KEY_SECRET')) throw new Error('Set RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET first');
   const out: { plan: string; razorpayPlanId: string; created: boolean }[] = [];
   for (const p of PLANS) {
-    const existing = env(planEnvName(p.id));
+    const existing = force ? '' : env(planEnvName(p.id));
     if (existing) {
       out.push({ plan: p.id, razorpayPlanId: existing, created: false });
       continue;

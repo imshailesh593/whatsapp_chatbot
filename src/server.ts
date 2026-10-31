@@ -15,6 +15,8 @@ import { startRenewalWorker } from './services/billing';
 import { startCustomerFollowUps } from './services/followups';
 import { registerPublicApi } from './publicApi';
 import { registerSite } from './site';
+import { loadRuntimeConfig } from './services/runtimeConfig';
+import { loadPlanOverrides } from './services/planConfig';
 
 dotenv.config();
 
@@ -82,8 +84,13 @@ const shutdown = async () => {
 process.on('SIGINT', shutdown);
 process.on('SIGTERM', shutdown);
 
-app
-  .listen({ port: Number(process.env.PORT) || 3000, host: process.env.HOST || '0.0.0.0' })
+// Keys and plan changes saved in the admin panel are applied before the first request
+loadRuntimeConfig()
+  .then(loadPlanOverrides)
+  .catch((err) => console.error('[config] could not load saved settings:', err))
+  .then(() =>
+    app.listen({ port: Number(process.env.PORT) || 3000, host: process.env.HOST || '0.0.0.0' })
+  )
   .catch((err) => {
     app.log.error(err);
     process.exit(1);

@@ -215,6 +215,22 @@ export interface BillingPlan {
   limits: { conversations: number; aiReplies: number; seats: number; broadcasts: number };
 }
 
+export interface ConfigField {
+  key: string;
+  label: string;
+  secret: boolean;
+  set: boolean;
+  source: 'panel' | 'server' | 'none';
+  preview: string;
+}
+
+export interface ConfigInfo {
+  fields: ConfigField[];
+  email: { provider: 'resend' | 'smtp' | 'none'; configured: boolean };
+  razorpayMode: 'subscription' | 'link';
+  razorpayWebhook: string;
+}
+
 export interface PaymentsSetup {
   razorpay: { label: string; ok: boolean; detail: string }[];
   stripe: { label: string; ok: boolean; detail: string }[];

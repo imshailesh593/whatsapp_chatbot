@@ -29,6 +29,9 @@ export const PLANS: PlanDef[] = [
   { id: 'pro', name: 'Pro', price: { INR: 49_900, USD: 1_900 }, limits: { conversations: 1_500, aiReplies: 2_000, seats: 5, broadcasts: 1_000 }, integrations: true, blurb: 'Everything included: one WhatsApp number, AI answers, calendar booking, CRM, broadcasts and integrations.' }
 ];
 
+/** The plans as shipped in code. The operator can change them in the admin panel (see services/planConfig.ts); these are what Reset restores. */
+export const PLAN_DEFAULTS: PlanDef[] = JSON.parse(JSON.stringify(PLANS));
+
 /** Plans that were sold before there was a single plan. Their subscribers and old records are treated as the one plan. */
 const LEGACY_PLAN_IDS = ['starter', 'growth', 'scale'];
 

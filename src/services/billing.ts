@@ -1,3 +1,4 @@
+import { sendBillingEmail } from './billingMail';
 import crypto from 'crypto';
 import { recordCommission } from './affiliate';
 import { deliverAlert } from './alerts';
@@ -174,6 +175,10 @@ export async function applySubscription(workspaceId: string, s: SubState): Promi
     }
   });
   invalidateConfig(workspaceId);
+  // Tell the owner about the moments that matter (silent until email is set up)
+  if (s.status === 'active' && ws.planStatus !== 'active') void sendBillingEmail(workspaceId, 'activated', { plan: s.plan ?? ws.plan });
+  else if (s.status === 'past_due' && ws.planStatus !== 'past_due') void sendBillingEmail(workspaceId, 'failed', { plan: s.plan ?? ws.plan });
+  else if (s.status === 'canceled' && ws.planStatus !== 'canceled') void sendBillingEmail(workspaceId, 'cancelled', { plan: s.plan ?? ws.plan, until: s.periodEnd && s.periodEnd.getTime() > Date.now() ? s.periodEnd : null });
 }
 
 async function firstTime(id: string): Promise<boolean> {
@@ -190,6 +195,7 @@ async function recordPayment(workspaceId: string, p: { provider: Provider; ref: 
     .create({ data: { workspaceId, provider: p.provider, providerRef: p.ref, plan: p.plan, amount: p.amount, currency: p.currency.toUpperCase(), status: p.status } })
     .catch(() => null); // same payment reported twice
   if (row) await recordCommission(row);
+  if (row && p.status === 'paid') void sendBillingEmail(workspaceId, 'paid', { amount: p.amount, currency: p.currency.toUpperCase(), plan: p.plan });
 }
 
 const secondsToDate = (s: unknown) => (typeof s === 'number' ? new Date(s * 1000) : null);

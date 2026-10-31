@@ -39,8 +39,11 @@ import { createCoupon, grantPlan, redeemCoupon } from './services/coupons';
 import { affiliateAdminOverview, getAffiliateSettings, referralOverview, referrerFor, saveAffiliateSettings, setCommissionStatus } from './services/affiliate';
 import { authUrl, cancelAppointment, cleanRules, completeConnection, disconnect as disconnectCalendar, formatSlot, googleConfigured, readState } from './services/calendar';
 import { getUsage } from './services/usage';
-import { checkRazorpay } from './services/razorpaySetup';
-import { checkPaypal } from './services/paypal';
+import { checkRazorpay, createPlans as createRazorpayPlans } from './services/razorpaySetup';
+import { checkPaypal, createPaypalPlans } from './services/paypal';
+import { describeRuntimeConfig, newWebhookSecret, saveRuntimeConfig } from './services/runtimeConfig';
+import { resetPlan, updatePlan } from './services/planConfig';
+import { emailConfigured, emailProvider, sendEmail } from './services/mailer';
 import { currencyOf, detectRegion } from './lib/geo';
 import { cancelSubscription, handlePaypalWebhook, handleRazorpayWebhook, handleStripeWebhook, openPortal, providersAvailable, startCheckout } from './services/billing';
 
@@ -1061,6 +1064,92 @@ export function registerAdmin(app: FastifyInstance, opts: { getQr: (workspaceId:
     return { razorpay, stripe, paypal, razorpayWebhook: `${base}/webhooks/razorpay`, stripeWebhook: `${base}/webhooks/stripe`, paypalWebhook: `${base}/webhooks/paypal`, razorpayReady: providersAvailable().razorpay, stripeReady: providersAvailable().stripe, paypalReady: providersAvailable().paypal };
   });
 
+  // ---- keys and plan settings managed from the panel (stored encrypted; applied immediately) ----
+  const configView = async (req: FastifyRequest) => ({
+    fields: await describeRuntimeConfig(),
+    email: { provider: emailProvider(), configured: emailConfigured() },
+    razorpayMode: process.env.RAZORPAY_MODE === 'link' ? 'link' : 'subscription',
+    razorpayWebhook: `${publicUrl(req).replace(/\/$/, '')}/webhooks/razorpay`
+  });
+
+  app.get('/admin/api/super/config', { preHandler: superOnly }, async (req) => configView(req));
+
+  app.put('/admin/api/super/config', { preHandler: superOnly }, async (req, reply) => {
+    const values = ((req.body as any)?.values ?? {}) as Record<string, unknown>;
+    try {
+      await saveRuntimeConfig(values);
+    } catch (err) {
+      return reply.status(400).send({ error: (err as Error).message });
+    }
+    await audit(req, 'config.update', null, `changed: ${Object.keys(values).join(', ')}`);
+    return configView(req);
+  });
+
+  // A fresh webhook secret to paste into Razorpay. It is shown once; only a masked tail is kept in view afterwards.
+  app.post('/admin/api/super/razorpay/webhook-secret', { preHandler: superOnly }, async (req) => {
+    const secret = newWebhookSecret();
+    await saveRuntimeConfig({ RAZORPAY_WEBHOOK_SECRET: secret });
+    await audit(req, 'config.update', null, 'new Razorpay webhook secret');
+    return { secret };
+  });
+
+  // Creates the monthly plan in Razorpay at the current price (needed after a price change) and starts using it for new subscribers.
+  app.post('/admin/api/super/razorpay/create-plan', { preHandler: superOnly }, async (req, reply) => {
+    try {
+      const made = await createRazorpayPlans(true);
+      await saveRuntimeConfig(Object.fromEntries(made.map((m) => [`RAZORPAY_PLAN_${m.plan.toUpperCase()}`, m.razorpayPlanId])));
+      await audit(req, 'razorpay.plan', null, made.map((m) => m.razorpayPlanId).join(', '));
+      return { plans: made };
+    } catch (err) {
+      return reply.status(400).send({ error: (err as Error).message });
+    }
+  });
+
+  app.post('/admin/api/super/paypal/create-plan', { preHandler: superOnly }, async (req, reply) => {
+    try {
+      const made = await createPaypalPlans(true);
+      await saveRuntimeConfig(Object.fromEntries(made.map((m) => [`PAYPAL_PLAN_${m.plan.toUpperCase()}`, m.paypalPlanId])));
+      await audit(req, 'paypal.plan', null, made.map((m) => m.paypalPlanId).join(', '));
+      return { plans: made };
+    } catch (err) {
+      return reply.status(400).send({ error: (err as Error).message });
+    }
+  });
+
+  app.post('/admin/api/super/email/test', { preHandler: superOnly }, async (req, reply) => {
+    const to = normalizeEmail((req.body as any)?.to ?? me(req).email);
+    if (!isValidEmail(to)) return reply.status(400).send({ error: 'Enter a valid email address' });
+    if (!emailConfigured()) return reply.status(400).send({ error: 'Email is not set up yet: save the Resend API key and the sender first' });
+    try {
+      await sendEmail([to], `Test email from ${PRODUCT_NAME}`, `This is a test from your ${PRODUCT_NAME} admin panel. If you can read it, email is working.`);
+    } catch (err) {
+      return reply.status(400).send({ error: (err as Error).message });
+    }
+    return { ok: true, to };
+  });
+
+  // Change a plan's name, description, prices and limits. Existing subscribers keep the price they subscribed at.
+  app.put('/admin/api/super/plans/:id', { preHandler: superOnly }, async (req, reply) => {
+    const id = String((req.params as any).id);
+    try {
+      const p = await updatePlan(id, (req.body ?? {}) as Record<string, unknown>);
+      await audit(req, 'plan.update', null, `${p.id}: ${p.name}, INR ${p.price.INR / 100}, USD ${p.price.USD / 100}`);
+      return { ok: true };
+    } catch (err) {
+      return reply.status(400).send({ error: (err as Error).message });
+    }
+  });
+
+  app.post('/admin/api/super/plans/:id/reset', { preHandler: superOnly }, async (req, reply) => {
+    try {
+      await resetPlan(String((req.params as any).id));
+      await audit(req, 'plan.reset', null, String((req.params as any).id));
+      return { ok: true };
+    } catch (err) {
+      return reply.status(400).send({ error: (err as Error).message });
+    }
+  });
+
   app.get('/admin/api/super/payments', { preHandler: superOnly }, async () => {
     const rows = await prisma.payment.findMany({ orderBy: { createdAt: 'desc' }, take: 100, include: { workspace: { select: { businessName: true } } } });
     return { payments: rows.map((p) => ({ id: p.id, business: p.workspace.businessName, provider: p.provider, plan: p.plan, amount: p.amount, currency: p.currency, status: p.status, at: p.createdAt.toISOString() })) };
@@ -1079,7 +1168,7 @@ export function registerAdmin(app: FastifyInstance, opts: { getQr: (workspaceId:
   app.get('/admin/api/super/plans', { preHandler: superOnly }, async () => {
     const counts = await prisma.workspace.groupBy({ by: ['plan'], _count: { _all: true } });
     const n = new Map(counts.map((c) => [c.plan, c._count._all]));
-    return { plans: PLANS.map((p) => ({ id: p.id, name: p.name, price: p.price, limits: p.limits, integrations: p.integrations, clients: n.get(p.id) ?? 0 })), internal: n.get('internal') ?? 0 };
+    return { plans: PLANS.map((p) => ({ id: p.id, name: p.name, blurb: p.blurb, price: p.price, limits: p.limits, integrations: p.integrations, clients: n.get(p.id) ?? 0 })), internal: n.get('internal') ?? 0 };
   });
 
   const platformSettings = async () => ({ platformSender: await getSetting<boolean>('platformSender', false), ...(await connectionSlots()), ...serverMemory() });

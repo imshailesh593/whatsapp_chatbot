@@ -112,12 +112,13 @@ export async function verifyPaypalWebhook(headers: Record<string, string | strin
  * Creates one monthly USD PayPal plan per plan of ours that has no plan id in the environment yet, plus the product
  * they belong to. Stable request ids make a repeated run return the same objects instead of creating duplicates.
  */
-export async function createPaypalPlans(): Promise<{ plan: string; paypalPlanId: string; created: boolean }[]> {
+/** With `force` a new PayPal plan is created even when one is configured (after a price change: PayPal plans cannot change price). */
+export async function createPaypalPlans(force = false): Promise<{ plan: string; paypalPlanId: string; created: boolean }[]> {
   if (!paypalKeys()) throw new Error('Set PAYPAL_CLIENT_ID and PAYPAL_CLIENT_SECRET first');
   const out: { plan: string; paypalPlanId: string; created: boolean }[] = [];
   let productId = env('PAYPAL_PRODUCT_ID');
   for (const p of PLANS) {
-    const existing = env(paypalPlanEnv(p.id));
+    const existing = force ? '' : env(paypalPlanEnv(p.id));
     if (existing) {
       out.push({ plan: p.id, paypalPlanId: existing, created: false });
       continue;

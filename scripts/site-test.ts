@@ -74,7 +74,7 @@ const ok = (c: any, m: string) => { if (!c) throw new Error('FAIL: ' + m); conso
   ok(ab.includes('operated by <strong>Rajni</strong>') && ab.includes('not affiliated with WhatsApp or Meta') && ab.includes('Operator:'), 'the about page says what the service is and who runs it');
   const pr = html['/pricing'];
   ok(PLANS.every((p) => pr.includes('₹' + (p.price.INR / 100).toLocaleString('en-IN')) && pr.includes('$' + p.price.USD / 100)), 'the pricing page shows the plan in rupees and in dollars');
-  ok(pr.includes('Taxes') && pr.includes('renews every month') && !/free trial/i.test(pr) && pr.includes('href="/refunds"') && pr.includes('href="/shipping"'), '...with billing terms, the free trial and links to refunds and delivery');
+  ok(pr.includes('Taxes') && pr.includes('debited automatically every month') && !/free trial/i.test(pr) && pr.includes('href="/refunds"') && pr.includes('href="/shipping"'), '...with billing terms, the subscription wording and links to refunds and delivery');
 
   console.log('\n[prices follow the visitor\'s country]');
   const visit = (url: string, headers: Record<string, string> = {}) => app.inject({ method: 'GET', url, headers: { accept: 'text/html', ...headers } });
@@ -85,9 +85,9 @@ const ok = (c: any, m: string) => { if (!c) throw new Error('FAIL: ' + m); conso
   const card = (cur: string) => `<div class="price">${cur}<small> / month</small></div>`;
   for (const path of ['/', '/pricing']) {
     const inIndia = (await visit(path, IND)).body;
-    ok(inIndia.includes(card(rupee)) && !inIndia.includes(card(dollar)) && inIndia.includes('?region=world') && inIndia.includes('Pay by UPI or card'), `${path}: a visitor in India sees rupees, UPI and a link to dollars`);
+    ok(inIndia.includes(card(rupee)) && !inIndia.includes(card(dollar)) && inIndia.includes('?region=world') && inIndia.includes('UPI AutoPay or card'), `${path}: a visitor in India sees rupees, UPI and a link to dollars`);
     const abroad = (await visit(path, ABROAD)).body;
-    ok(abroad.includes(card(dollar)) && !abroad.includes(card(rupee)) && abroad.includes('?region=in') && abroad.includes('Pay with PayPal or card'), `${path}: a visitor abroad sees dollars, PayPal and a link to rupees`);
+    ok(abroad.includes(card(dollar)) && !abroad.includes(card(rupee)) && abroad.includes('?region=in') && abroad.includes('PayPal or card'), `${path}: a visitor abroad sees dollars, PayPal and a link to rupees`);
     ok((await visit(path)).body.includes(card(dollar)), `${path}: an unknown visitor sees dollars`);
     ok((await visit(path, { ...IND, cookie: 'region=OTHER' })).body.includes(card(dollar)), `${path}: a remembered choice beats the address`);
     ok((await visit(path + '?region=in', ABROAD)).body.includes(card(rupee)), `${path}: ?region=in shows rupees to anyone`);

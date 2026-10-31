@@ -261,9 +261,10 @@ ${price}
 <li>Google Calendar booking and human hand-off</li>
 <li class="${p.integrations ? '' : 'no'}">Webhooks and REST API${p.integrations ? '' : ' (not included)'}</li>
 <li>Free updates and email support</li>
-<li>${rupees ? 'Pay by UPI or card' : 'Pay with PayPal or card'}</li>
+<li>${rupees ? 'Monthly subscription: UPI AutoPay or card' : 'Monthly subscription: PayPal or card'}</li>
 </ul>
-<a class="btn p" href="/admin/?plan=pro">Get started</a>
+<a class="btn p" href="/admin/?plan=pro">Subscribe</a>
+<p class="fine" style="margin-top:8px">Renews automatically every month. Cancel any time.</p>
 </div>`;
   }).join('');
 }
@@ -278,7 +279,8 @@ function landing(region: Region): string {
     ['What does the AI do, and what does it not do?', 'It answers questions from the facts you give it (prices, hours, policies), in the language the customer writes in. If the answer is not in your notes it does not guess. It also writes the short briefing when a customer asks for a person, and helps you set up. The questions customers must answer are always the ones you wrote.'],
     ['Can customers talk to a real person?', 'Yes. If a customer asks for a human, the bot stops replying in that chat and alerts you with a summary. You reply from your phone or the dashboard, then hand the chat back to the bot when you are done.'],
     ['How does appointment booking work?', 'Connect your Google Calendar once and set your working days, hours and appointment length. The bot offers real free times from your calendar, books the one the customer chooses and reminds them before it starts.'],
-    ['How much does it cost, and can I cancel?', `One plan with everything included: ${inr(PLANS[0].price.INR)} a month in India, ${usd(PLANS[0].price.USD)} a month everywhere else. Cancel any time from your dashboard and keep access until the end of the period you paid for. See the <a href="/refunds">refund and cancellation policy</a>.`],
+    ['How much does it cost, and can I cancel?', `One plan with everything included: ${inr(PLANS[0].price.INR)} a month in India, ${usd(PLANS[0].price.USD)} a month everywhere else. It is a monthly subscription that renews automatically. Cancel any time from your dashboard and keep access until the end of the period you paid for. See the <a href="/refunds">refund and cancellation policy</a>.`],
+    ['How does the monthly auto-debit work?', `You subscribe once and approve the recurring payment: in India with UPI AutoPay or a card (through Razorpay), elsewhere with PayPal or a card. After that the monthly amount is debited automatically on the same date, and you are notified before each debit. Nothing is charged until you approve. To stop, cancel under Plan &amp; billing (or from your UPI app or PayPal) and no further payments are taken.`],
     ['What happens when my plan ends?', `The bot stops replying to new messages, but your leads and settings stay safe. A paid plan whose renewal fails keeps working for a ${GRACE_DAYS}-day grace period so you can fix the payment.`],
     ['Who can see my customers\' chats?', `Only you and the team members you add. We process the messages to run the service and never sell them. Read the <a href="/privacy">privacy policy</a> for details, including which providers are involved.`],
     ['What do I need to start?', 'A phone with WhatsApp (a business number is best), an email address, and about ten minutes. Sign up, describe your business or choose a template, scan the QR code and go live.']
@@ -418,7 +420,7 @@ function landing(region: Region): string {
 <h2>Live in four steps</h2>
 <p class="sub">No developers needed.</p>
 <div class="grid g4">
-<div class="card"><div class="num">1</div><h3>Sign up</h3><p class="fine">Create your account with your email. ${signupOpen() ? 'Then choose your plan and pay securely.' : ''}</p></div>
+<div class="card"><div class="num">1</div><h3>Sign up and subscribe</h3><p class="fine">Create your account with your email. ${signupOpen() ? 'Then subscribe: approve the monthly payment once and your bot is switched on.' : ''}</p></div>
 <div class="card"><div class="num">2</div><h3>Describe your business</h3><p class="fine">Tell the AI assistant what you do, or pick a template. Review the menu and questions it proposes.</p></div>
 <div class="card"><div class="num">3</div><h3>Scan the QR code</h3><p class="fine">Link your WhatsApp number from Linked devices. Test everything in the simulator first.</p></div>
 <div class="card"><div class="num">4</div><h3>Go live</h3><p class="fine">Press go live. Leads arrive in your dashboard and your phone as they happen.</p></div>
@@ -439,7 +441,7 @@ function landing(region: Region): string {
 
 <section class="alt" id="pricing"><div class="wrap">
 <h2 style="text-align:center">Simple monthly pricing</h2>
-<p class="sub" style="margin-left:auto;margin-right:auto;text-align:center">${pricingLead(region)} It renews monthly and you can cancel at any time. Taxes, if applicable, are extra.</p>
+<p class="sub" style="margin-left:auto;margin-right:auto;text-align:center">${pricingLead(region)} It is a subscription: you approve it once, it is debited automatically every month, and you can cancel at any time. Taxes, if applicable, are extra.</p>
 <div class="grid" style="max-width:460px;margin:0 auto">${planCards}</div>
 <p class="fine" style="margin-top:16px">What counts: a "new conversation" is a customer who messages you for the first time in a calendar month; limits reset every month. See the <a href="/refunds">refund and cancellation policy</a> and the <a href="/terms">terms</a>.</p>
 </div></section>
@@ -599,7 +601,7 @@ function terms(): string {
 <ul>
 <li>Plans, prices and limits are shown on our <a href="/#pricing">pricing section</a> and in your dashboard. Prices are in Indian rupees or US dollars; applicable taxes, if any, are extra.</li>
 <li>The Service starts when your first payment is confirmed. We may change plans, prices and promotions with notice.</li>
-<li>Paid plans are billed monthly in advance and renew automatically through Razorpay (rupees), or Stripe or PayPal (dollars) until you cancel. You authorise us and our payment provider to charge your chosen payment method.</li>
+<li>Paid plans are billed monthly in advance and renew automatically through Razorpay (rupees; UPI AutoPay or card mandate), or PayPal or Stripe (dollars) until you cancel. By subscribing you authorise us and our payment provider to debit your chosen payment method every month at the price shown when you subscribed, and you will be notified before each debit as the payment network requires.</li>
 <li>Monthly limits (new conversations, AI answers, team members, broadcast messages) reset each calendar month. When a limit is reached the related feature stops until the next month or an upgrade, as explained in your dashboard.</li>
 <li>If a payment fails, the plan continues for a ${GRACE_DAYS}-day grace period. If the problem is not fixed the bot stops replying.</li>
 <li>We may change prices with at least 30 days' notice before your next renewal.</li>
@@ -648,7 +650,8 @@ function refunds(): string {
 <h2>1. How billing works</h2>
 <ul>
 <li>Paid plans are billed monthly in advance, in Indian rupees (Razorpay) or US dollars (Stripe or PayPal).</li>
-<li>Plans renew automatically each month until you cancel.</li>
+<li>You subscribe once by approving a recurring payment (UPI AutoPay or card e-mandate through Razorpay, or PayPal or card). The plan then renews and the amount is debited automatically each month until you cancel.</li>
+<li>You are told before each debit. You can cancel the mandate at any time in your dashboard, in your UPI app, or by emailing us from your account email.</li>
 <li>If a renewal payment fails you keep access for a ${GRACE_DAYS}-day grace period.</li>
 </ul>
 
@@ -748,11 +751,12 @@ function pricing(region: Region): string {
     description: `${PRODUCT_NAME} pricing: ${inr(PLANS[0].price.INR)} a month in India, ${usd(PLANS[0].price.USD)} a month elsewhere.`,
     path: '/pricing',
     body: `<main class="doc" style="max-width:760px"><h1>Pricing</h1>
-<p>${pricingLead(region)} Customers in India pay in Indian rupees (UPI or card, through Razorpay); customers elsewhere pay in US dollars (PayPal or card).</p>
+<p>${pricingLead(region)} Customers in India pay in Indian rupees by subscription (UPI AutoPay or card, through Razorpay); customers elsewhere pay in US dollars (PayPal or card).</p>
 <div class="grid" style="max-width:460px;margin:24px 0">${planCardsHtml(region, '/pricing')}</div>
 <h2>Good to know</h2>
 <ul>
-<li>The plan renews every month until you cancel. You keep access until the end of the period you have paid for.</li>
+<li>It is a monthly subscription: you approve the recurring payment once and it is debited automatically every month on the same date, with a reminder before each debit. Cancel any time and you keep access until the end of the period you have paid for.</li>
+<li>If we change the price later, people already subscribed keep the price they signed up at.</li>
 <li>Prices are per business, per month. Taxes such as GST, where they apply, are added at checkout.</li>
 <li>A "new conversation" is a customer who messages you for the first time in a calendar month. Limits reset every month.</li>
 <li>Refunds and cancellation are explained in the <a href="/refunds">Refund &amp; Cancellation Policy</a>. The service is digital: see <a href="/shipping">Shipping &amp; Delivery</a>.</li>

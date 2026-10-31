@@ -148,20 +148,20 @@ export default function Billing({ me }: { me: AdminUser }) {
                     <div className="mt-4 flex flex-col gap-2">
                       {currency === 'INR' && <button disabled={!b.providers.razorpay || !!busy} onClick={() => go(`rz-${p.id}`, () => api.checkout(p.id, 'razorpay'))}
                         className="py-2 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs rounded-lg disabled:opacity-40 flex items-center justify-center space-x-1.5">
-                        {busy === `rz-${p.id}` && <Loader2 className="w-3.5 h-3.5 animate-spin" />}<span>{current ? 'Renew for 30 days (₹)' : 'Pay in ₹ (UPI, cards)'}</span>
+                        {busy === `rz-${p.id}` && <Loader2 className="w-3.5 h-3.5 animate-spin" />}<span>{current ? 'Renew for 30 days (₹)' : 'Subscribe in ₹ (UPI AutoPay, cards)'}</span>
                       </button>}
                       {!current && currency === 'USD' && b.providers.paypal && <button disabled={!!busy} onClick={() => go(`pp-${p.id}`, () => api.checkout(p.id, 'paypal'))}
                         className="py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs rounded-lg border border-slate-700 disabled:opacity-40 flex items-center justify-center space-x-1.5">
-                        {busy === `pp-${p.id}` && <Loader2 className="w-3.5 h-3.5 animate-spin" />}<span>Pay in $ (PayPal)</span>
+                        {busy === `pp-${p.id}` && <Loader2 className="w-3.5 h-3.5 animate-spin" />}<span>Subscribe in $ (PayPal)</span>
                       </button>}
                       {!current && currency === 'USD' && (b.providers.stripe || !b.providers.paypal) && <button disabled={!b.providers.stripe || !!busy} onClick={() => go(`st-${p.id}`, () => api.checkout(p.id, 'stripe'))}
                         className="py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs rounded-lg border border-slate-700 disabled:opacity-40 flex items-center justify-center space-x-1.5">
-                        {busy === `st-${p.id}` && <Loader2 className="w-3.5 h-3.5 animate-spin" />}<span>Pay in $ (card)</span>
+                        {busy === `st-${p.id}` && <Loader2 className="w-3.5 h-3.5 animate-spin" />}<span>Subscribe in $ (card)</span>
                       </button>}
                     </div>
                   )}
                   {owner && !current && currency === 'INR' && !b.providers.razorpay && (
-                    <p className="mt-2 text-[11px] text-amber-300">Payment in rupees is being set up. <button type="button" onClick={() => setChosen('USD')} className="underline">Pay in dollars instead</button></p>
+                    <p className="mt-2 text-[11px] text-amber-300">Subscriptions in rupees are being set up. <button type="button" onClick={() => setChosen('USD')} className="underline">Subscribe in dollars instead</button></p>
                   )}
                 </div>
               );
@@ -175,7 +175,7 @@ export default function Billing({ me }: { me: AdminUser }) {
               {redeemed && <span className="text-xs text-emerald-300">{redeemed}</span>}
             </div>
           )}
-          {anyProvider && owner && <p className="text-[11px] text-slate-500 mt-3">You pay on the payment provider&apos;s secure page. After paying, come back here: your plan switches on as soon as the payment is confirmed (usually within a minute; refresh if it still shows the trial).</p>}
+          {anyProvider && owner && <p className="text-[11px] text-slate-500 mt-3">You approve the monthly payment (UPI AutoPay, card or PayPal) on the payment provider&apos;s secure page. It is then debited automatically every month, and you can cancel any time here. After approving, come back: your plan switches on as soon as the first payment is confirmed (usually within a minute; refresh if it still shows no plan).</p>}
           {!anyProvider && <p className="text-[11px] text-slate-500 mt-3">Online payment is not switched on for this account yet. Contact support to activate a plan.</p>}
           {!owner && <p className="text-[11px] text-slate-500 mt-3">Only the account owner can change the plan.</p>}
           {owner && b.status === 'active' && !b.cancelAtPeriodEnd && b.provider && !linkPaid && (

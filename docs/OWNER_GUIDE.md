@@ -192,6 +192,20 @@ Kept in the `.env` file on the server (never committed to git). Restart the bot 
 
 ## 10. Setting up the optional services
 
+### Keys and plans from the admin panel (no server access needed)
+**Settings → Payments and email keys** saves Razorpay, PayPal-plan and Resend values encrypted in the database and applies them at once. A value saved there wins over the server `.env`; **Clear** puts the `.env` value back.
+
+**Razorpay subscriptions (auto-debit each month):**
+1. Paste the live **key id** and **key secret** and press Save.
+2. Press **Generate a webhook secret**, copy it, then in Razorpay (Settings → Webhooks) add the address shown on the page with that secret, ticking the subscription and payment events.
+3. Press **Create plan at the current price**. This makes the monthly Razorpay plan and stores its id.
+4. Open **Payments setup → Check connections**: every Razorpay line should be ticked.
+Customers then press *Subscribe* on Plan & billing, approve UPI AutoPay or a card once on Razorpay's page, and are debited automatically every month. The **Mode** switch can fall back to one-off payment links.
+
+**Changing a plan:** **Plans** has an editor for the name, description, ₹ and $ prices, limits and the webhooks/API switch. Razorpay and PayPal cannot change the price of an existing plan, so after changing a price press **Create plan at the current price** (Razorpay, and PayPal for dollars). Existing subscribers keep the price they signed up at; new subscribers pay the new one. **Reset to default** restores the values in `src/plans.ts`.
+
+**Email (Resend):** paste the Resend API key and the sender (for example `Wappo <hello@wappoai.com>`, on a domain verified in Resend) and use **Send test email**. Once email is on, business owners also get emails when a subscription starts, a payment is received, a payment fails and a subscription is cancelled.
+
 None of these are required to run. Each is off until you add its keys.
 
 ### Email with Resend
