@@ -87,6 +87,9 @@ globalThis.fetch = (async (url: any, init: any = {}) => {
   const bad = (b: any) => { try { cleanRules(b); return false; } catch { return true; } };
   ok(bad({ slotMinutes: 5 }) && bad({ slotMinutes: 'x' }) && bad({ workDays: [] }) && bad({ workStart: '9am' }) && bad({ daysAhead: 400 }), 'out-of-range or malformed settings are refused');
   ok(cleanRules({ workDays: [5, 1, 1, 9], slotMinutes: 45 }).workDays === '1,5', 'working days are cleaned and sorted');
+  ok(cleanRules({ workEnd: '24:00' }).workEnd === '24:00' && bad({ workEnd: '25:00' }), 'a business open round the clock can close at 24:00');
+  const allDay = generateSlots(Date.parse('2026-11-04T04:00:00Z'), 'Asia/Kolkata', { slotMinutes: 30, bufferMinutes: 0, workDays: '1,2,3,4,5,6,7', workStart: '00:00', workEnd: '24:00', noticeHours: 0, daysAhead: 3 }, [], 500, 100);
+  ok(allDay.some((d) => formatSlot(d, 'Asia/Kolkata').includes('11:30 PM')) && allDay.some((d) => formatSlot(d, 'Asia/Kolkata').includes('12:00 AM')), '24x7 hours offer times from midnight to 11:30 pm');
 
   console.log('\n[booking conversation]');
   const run = Date.now().toString(36);

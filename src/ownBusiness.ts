@@ -267,7 +267,7 @@ export const OWN_PROFILE = {
 export async function applyOwnBusiness(workspaceId: string): Promise<void> {
   await saveServices(workspaceId, OWN_SERVICES);
   await prisma.workspace.update({ where: { id: workspaceId }, data: { ...OWN_PROFILE, onboardingCompleted: true } });
-  // In-bot booking (date, then time): on with the default hours unless the owner already set it up. Adjust the hours in the dashboard.
-  await prisma.calendarConfig.upsert({ where: { workspaceId }, update: {}, create: { workspaceId, refreshToken: '', googleEmail: '' } });
+  // In-bot booking (date, then time): on, open 24x7, unless the owner already set it up. Adjust the hours in the dashboard.
+  await prisma.calendarConfig.upsert({ where: { workspaceId }, update: {}, create: { workspaceId, refreshToken: '', googleEmail: '', workDays: '1,2,3,4,5,6,7', workStart: '00:00', workEnd: '24:00' } });
   invalidateConfig(workspaceId);
 }

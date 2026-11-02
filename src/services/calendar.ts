@@ -437,7 +437,7 @@ export async function handleBookingMessage(cfg: BotConfig, session: { id: string
   const showDays = async (page: number, intro?: string) => {
     let all: Date[];
     try {
-      all = await availableSlots(workspaceId, tz, Date.now(), 100, 600);
+      all = await availableSlots(workspaceId, tz, Date.now(), 100, 2000);
     } catch (err) {
       console.error('[calendar] availability failed:', (err as Error).message);
       void warnOwner(workspaceId, cfg.ws.businessName, (err as Error).message);
@@ -609,7 +609,7 @@ export function cleanRules(b: Record<string, unknown>): Partial<Rules & { remind
     out.workStart = String(b.workStart);
   }
   if (b.workEnd !== undefined) {
-    if (!HHMM.test(String(b.workEnd))) throw new Error('Closing time must look like 18:00');
+    if (!HHMM.test(String(b.workEnd)) && b.workEnd !== '24:00') throw new Error('Closing time must look like 18:00 (24:00 means midnight)');
     out.workEnd = String(b.workEnd);
   }
   return out;
