@@ -217,6 +217,7 @@ async function cleanup() {
   const set = await text(ow);
   for (const t of ['Talk to a person', 'Appointments (Google Calendar)', 'Plan & billing', 'Refer & earn', 'Lead alerts', 'Integrations']) ok(set.includes(t) || (t === 'Integrations' && /webhook|API/i.test(set)), `settings shows "${t}"`);
   await shot(ow, 'ow-6-settings', true);
+  ok(set.includes('Set up with Gemini'), 'the menu editor has a Set up with Gemini button');
   ok(set.includes('Ask Gemini to change how the bot answers'), 'the Gemini prompter for the answering rules is on the settings page');
   // a change to the menu shows a Save bar that stays on screen however long the menu is
   await ow.evaluate(() => (document.querySelector('textarea[placeholder="What the bot asks"]') as HTMLElement | null)?.scrollIntoView());

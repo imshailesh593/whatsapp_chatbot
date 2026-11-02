@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
-import { ArrowDown, ArrowUp, Plus, Save, Trash2 } from 'lucide-react';
+import { ArrowDown, ArrowUp, Plus, Save, Sparkles, Trash2 } from 'lucide-react';
+import MenuAssistant from './MenuAssistant';
 import { api } from '../api';
 import type { Overview, ServiceDef, TemplateInfo } from '../types';
 
@@ -27,6 +28,7 @@ export default function BotBuilder({ overview, onSaved }: { overview: Overview; 
   const [error, setError] = useState('');
   const [note, setNote] = useState('');
   const [templates, setTemplates] = useState<TemplateInfo[]>([]);
+  const [assist, setAssist] = useState(false);
   const dirty = useMemo(() => JSON.stringify(services) !== saved, [services, saved]);
 
   // Leaving the page with unsaved changes would lose them
@@ -88,7 +90,10 @@ export default function BotBuilder({ overview, onSaved }: { overview: Overview; 
             Customers pick a service by number or keyword, then answer its questions one at a time. Test every change in the Bot Simulator tab.
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <button onClick={() => setAssist(true)} className="flex items-center space-x-1.5 px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-emerald-300 font-semibold text-xs rounded-lg border border-emerald-500/40 transition">
+            <Sparkles className="w-3.5 h-3.5" /><span>Set up with Gemini</span>
+          </button>
           <select value="" onChange={(e) => useTemplate(e.target.value)} className="bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-2 text-xs text-slate-300">
             <option value="">Start from a template…</option>
             {templates.map((t) => <option key={t.id} value={t.id}>{t.label}</option>)}
@@ -141,6 +146,10 @@ export default function BotBuilder({ overview, onSaved }: { overview: Overview; 
         className="mt-4 flex items-center space-x-1.5 px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg text-xs font-semibold border border-slate-700 disabled:opacity-40">
         <Plus className="w-3.5 h-3.5" /><span>Add service</span>
       </button>
+      {assist && (
+        <MenuAssistant overview={overview} onClose={() => setAssist(false)}
+          onUse={(list) => { setServices(list.slice(0, MAX_SERVICES)); setAssist(false); setError(''); setNote('The new menu is in the editor below. Check it, then press Save changes.'); window.scrollTo({ top: 0, behavior: 'smooth' }); }} />
+      )}
       {error && <p className="text-xs text-rose-400 mt-3" role="alert">{error}</p>}
       {note && <p className="text-xs text-emerald-400 mt-3">{note}</p>}
       {/* Always visible at the bottom of the screen, so a long menu never hides the Save button */}
