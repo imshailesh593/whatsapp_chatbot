@@ -97,6 +97,7 @@ export const api = {
   applyTemplate: (id: string) => post<{ workspace: Workspace }>('/admin/api/templates/apply', { id }).then((r) => r.workspace),
   setLive: (enabled: boolean) => post<{ workspace: Workspace }>('/admin/api/workspace/live', { enabled }).then((r) => r.workspace),
   onboardingInfo: () => request<{ aiAvailable: boolean; completed: boolean; businessName: string }>('/admin/api/onboarding'),
+  suggestInstructions: (request: string, current: string) => post<{ instructions: string; summary: string }>('/admin/api/ai-instructions/suggest', { request, current }),
   onboardingChat: (history: ChatTurn[], draft: Draft | null) => post<{ reply: string; draft: Draft | null }>('/admin/api/onboarding/chat', { history, draft }),
   onboardingApply: (draft: Draft, extras: Partial<Workspace>) => post<{ workspace: Workspace }>('/admin/api/onboarding/apply', { draft, extras }).then((r) => r.workspace),
   onboardingComplete: () => post<{ workspace: Workspace }>('/admin/api/onboarding/complete', {}).then((r) => r.workspace),

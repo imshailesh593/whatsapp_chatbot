@@ -33,6 +33,8 @@ model Workspace {
   bookingNote            String    @default("") @map("booking_note")
   tone                   String    @default("friendly")
   knowledge              String    @default("")
+  /// Owner's extra rules for how the AI answers (written with the Gemini prompter in the dashboard)
+  aiInstructions         String    @default("") @map("ai_instructions")
   languages              String    @default("English")
   timezone               String    @default("UTC")
   notifyEmail            String    @default("") @map("notify_email")

@@ -62,6 +62,7 @@ export interface Workspace {
   bookingNote: string;
   tone: string;
   knowledge: string;
+  aiInstructions: string;
   languages: string;
   timezone: string;
   notifyEmail: string;

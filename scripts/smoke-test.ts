@@ -217,6 +217,19 @@ async function cleanup() {
   const set = await text(ow);
   for (const t of ['Talk to a person', 'Appointments (Google Calendar)', 'Plan & billing', 'Refer & earn', 'Lead alerts', 'Integrations']) ok(set.includes(t) || (t === 'Integrations' && /webhook|API/i.test(set)), `settings shows "${t}"`);
   await shot(ow, 'ow-6-settings', true);
+  ok(set.includes('Ask Gemini to change how the bot answers'), 'the Gemini prompter for the answering rules is on the settings page');
+  // a change to the menu shows a Save bar that stays on screen however long the menu is
+  await ow.evaluate(() => (document.querySelector('textarea[placeholder="What the bot asks"]') as HTMLElement | null)?.scrollIntoView());
+  await ow.type('textarea[placeholder="What the bot asks"]', ' extra');
+  await sleep(300);
+  const menuSaveBar = await ow.evaluate(() => {
+    const b = Array.from(document.querySelectorAll('button')).filter((x) => x.textContent?.includes('Save changes')).pop();
+    if (!b) return null;
+    const r = b.getBoundingClientRect();
+    return { top: r.top, bottom: r.bottom, vh: window.innerHeight };
+  });
+  ok(!!menuSaveBar && menuSaveBar.top >= 0 && menuSaveBar.bottom <= menuSaveBar.vh, 'after editing a question the Save changes button is on screen');
+  await shot(ow, 'ow-6b-save-bar');
   ok(set.includes('Google sign-in is not set up'), 'calendar card explains Google keys are missing');
   const refLink = await ow.$$eval('input[readonly]', (els: any[]) => els.map((e) => e.value).find((v) => v.includes('?ref=')) ?? '');
   ok(/\/admin\/\?ref=[A-Z0-9]{7}$/.test(refLink), 'the owner sees their own referral link');

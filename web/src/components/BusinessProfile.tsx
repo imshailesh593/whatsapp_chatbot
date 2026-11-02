@@ -1,17 +1,18 @@
 import { FormEvent, useEffect, useState } from 'react';
 import { Play, Pause } from 'lucide-react';
 import { api } from '../api';
+import { Sparkles } from 'lucide-react';
 import type { Workspace } from '../types';
 
 type Fields = Pick<
   Workspace,
-  'timezone' | 'businessName' | 'tagline' | 'description' | 'welcomeIntro' | 'tone' | 'languages' | 'bookingLabel' | 'bookingUrl' | 'bookingNote' | 'formUrl' | 'knowledge' | 'notifyEmail' | 'notifyPhone' | 'handoffEnabled' | 'handoffMessage' | 'languageStep' | 'languageWelcome' | 'followUpsEnabled'
+  'timezone' | 'businessName' | 'tagline' | 'description' | 'welcomeIntro' | 'tone' | 'languages' | 'bookingLabel' | 'bookingUrl' | 'bookingNote' | 'formUrl' | 'knowledge' | 'aiInstructions' | 'notifyEmail' | 'notifyPhone' | 'handoffEnabled' | 'handoffMessage' | 'languageStep' | 'languageWelcome' | 'followUpsEnabled'
 >;
 
 const pick = (w: Workspace): Fields => ({
   timezone: w.timezone, businessName: w.businessName, tagline: w.tagline, description: w.description, welcomeIntro: w.welcomeIntro, tone: w.tone,
   languages: w.languages, bookingLabel: w.bookingLabel, bookingUrl: w.bookingUrl, bookingNote: w.bookingNote, formUrl: w.formUrl,
-  knowledge: w.knowledge, notifyEmail: w.notifyEmail, notifyPhone: w.notifyPhone, handoffEnabled: w.handoffEnabled, handoffMessage: w.handoffMessage, languageStep: w.languageStep, languageWelcome: w.languageWelcome, followUpsEnabled: w.followUpsEnabled
+  knowledge: w.knowledge, aiInstructions: w.aiInstructions ?? '', notifyEmail: w.notifyEmail, notifyPhone: w.notifyPhone, handoffEnabled: w.handoffEnabled, handoffMessage: w.handoffMessage, languageStep: w.languageStep, languageWelcome: w.languageWelcome, followUpsEnabled: w.followUpsEnabled
 });
 
 export default function BusinessProfile({ workspace, onSaved }: { workspace: Workspace; onSaved: () => void }) {
@@ -34,6 +35,24 @@ export default function BusinessProfile({ workspace, onSaved }: { workspace: Wor
       setError((err as Error).message);
     } finally {
       setBusy(false);
+    }
+  }
+
+  // The Gemini prompter: describe the change in plain words, review the proposal, then apply it to the box and save
+  const [ask, setAsk] = useState('');
+  const [proposal, setProposal] = useState<{ instructions: string; summary: string } | null>(null);
+  const [asking, setAsking] = useState(false);
+  const [askError, setAskError] = useState('');
+  async function suggest() {
+    setAsking(true);
+    setAskError('');
+    setProposal(null);
+    try {
+      setProposal(await api.suggestInstructions(ask, f.aiInstructions));
+    } catch (err) {
+      setAskError((err as Error).message);
+    } finally {
+      setAsking(false);
     }
   }
 
@@ -106,6 +125,36 @@ export default function BusinessProfile({ workspace, onSaved }: { workspace: Wor
           <textarea rows={6} value={f.knowledge} maxLength={8000} onChange={set('knowledge')} className={input} placeholder="Opening hours: Mon–Sat 9–6&#10;Consultation costs ₹500…&#10;The AI will not invent anything that is not written here." />
         </div>
         <div className="sm:col-span-2 border-t border-slate-800 pt-4">
+          <h4 className="text-sm font-bold text-white flex items-center gap-1.5"><Sparkles className="w-4 h-4 text-emerald-400" />How the bot answers questions</h4>
+          <p className="text-[11px] text-slate-500 mt-1">Rules for the style of free answers: length, tone, what to ask back, when to bring in a person. Facts (prices, hours, links) belong in the box above. Describe a change and Gemini rewrites the rules for you to review.</p>
+        </div>
+        <div className="sm:col-span-2">
+          <label className={label}>Answering instructions</label>
+          <textarea rows={5} value={f.aiInstructions} maxLength={4000} onChange={set('aiInstructions')} className={input}
+            placeholder={'- Keep answers under four short lines\n- Always end by asking which service they are interested in\n- If the customer sounds upset, offer to connect them with a person'} />
+        </div>
+        <div className="sm:col-span-2 bg-slate-900 border border-slate-800 rounded-xl p-3">
+          <label className={label}>Ask Gemini to change how the bot answers</label>
+          <div className="flex gap-2">
+            <input value={ask} maxLength={1000} onChange={(e) => setAsk(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); if (ask.trim().length > 2 && !asking) suggest(); } }}
+              className={input} placeholder="e.g. Make answers shorter and friendlier, and always ask for the customer's city" />
+            <button type="button" onClick={suggest} disabled={asking || ask.trim().length < 3} className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-emerald-300 text-xs font-semibold rounded-lg border border-slate-700 disabled:opacity-40 whitespace-nowrap">{asking ? 'Thinking…' : 'Suggest change'}</button>
+          </div>
+          {askError && <p className="text-[11px] text-rose-400 mt-2" role="alert">{askError}</p>}
+          {proposal && (
+            <div className="mt-3 space-y-2">
+              <p className="text-[11px] text-emerald-300">{proposal.summary}</p>
+              <textarea readOnly rows={Math.min(10, proposal.instructions.split('\n').length + 1)} value={proposal.instructions} className={input + ' bg-slate-950'} />
+              <div className="flex flex-wrap items-center gap-2">
+                <button type="button" onClick={() => { setF((x) => ({ ...x, aiInstructions: proposal.instructions })); setProposal(null); setAsk(''); setNote('Instructions updated below: press Save to keep them, then try them in the Bot Simulator.'); }}
+                  className="px-4 py-2 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs rounded-lg">Use these instructions</button>
+                <button type="button" onClick={() => setProposal(null)} className="px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs rounded-lg border border-slate-700">Discard</button>
+                <span className="text-[11px] text-slate-500">Nothing changes until you press Save.</span>
+              </div>
+            </div>
+          )}
+        </div>
+        <div className="sm:col-span-2 border-t border-slate-800 pt-4">
           <h4 className="text-sm font-bold text-white">Lead alerts</h4>
           <p className="text-[11px] text-slate-500 mt-1">Get a message the moment a customer finishes the questions, or says they have booked.</p>
         </div>
@@ -154,7 +203,7 @@ export default function BusinessProfile({ workspace, onSaved }: { workspace: Wor
             </span>
           )}
         </div>
-        <div className="sm:col-span-2 flex items-center gap-3">
+        <div className="sm:col-span-2 flex items-center gap-3 sticky bottom-3 z-20 bg-slate-900/95 backdrop-blur border border-slate-800 rounded-xl px-4 py-3">
           <button disabled={busy} className="px-5 py-2 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs rounded-lg transition disabled:opacity-50">{busy ? 'Saving…' : 'Save'}</button>
           {note && <span className="text-xs text-emerald-400">{note}</span>}
           {error && <span className="text-xs text-rose-400" role="alert">{error}</span>}

@@ -29,6 +29,14 @@ export default function BotBuilder({ overview, onSaved }: { overview: Overview; 
   const [templates, setTemplates] = useState<TemplateInfo[]>([]);
   const dirty = useMemo(() => JSON.stringify(services) !== saved, [services, saved]);
 
+  // Leaving the page with unsaved changes would lose them
+  useEffect(() => {
+    if (!dirty) return;
+    const warn = (e: BeforeUnloadEvent) => { e.preventDefault(); e.returnValue = ''; };
+    window.addEventListener('beforeunload', warn);
+    return () => window.removeEventListener('beforeunload', warn);
+  }, [dirty]);
+
   useEffect(() => { api.templates().then(setTemplates).catch(() => undefined); }, []);
 
   const patchService = (i: number, p: Partial<ServiceDef>) => setServices((s) => s.map((x, k) => (k === i ? { ...x, ...p } : x)));
@@ -135,6 +143,20 @@ export default function BotBuilder({ overview, onSaved }: { overview: Overview; 
       </button>
       {error && <p className="text-xs text-rose-400 mt-3" role="alert">{error}</p>}
       {note && <p className="text-xs text-emerald-400 mt-3">{note}</p>}
+      {/* Always visible at the bottom of the screen, so a long menu never hides the Save button */}
+      {(dirty || busy) && (
+        <div className="sticky bottom-3 mt-4 z-20 flex flex-wrap items-center justify-between gap-3 bg-slate-900/95 backdrop-blur border border-emerald-500/40 rounded-xl px-4 py-3 shadow-2xl">
+          <span className="text-xs text-amber-300">You have unsaved changes. Customers still see the old menu until you save.</span>
+          <div className="flex items-center gap-2">
+            <button onClick={() => { setServices(JSON.parse(saved)); setError(''); setNote(''); }} disabled={busy}
+              className="px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs rounded-lg border border-slate-700 disabled:opacity-40">Discard</button>
+            <button onClick={save} disabled={busy}
+              className="flex items-center space-x-1.5 px-4 py-2 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs rounded-lg transition disabled:opacity-40">
+              <Save className="w-3.5 h-3.5" /><span>{busy ? 'Saving…' : 'Save changes'}</span>
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

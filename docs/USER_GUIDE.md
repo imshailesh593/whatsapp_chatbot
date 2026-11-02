@@ -350,3 +350,11 @@ Your plan limits the number of team members.
 | Forgot password | Ask your account owner, or the service operator, to reset it |
 
 If something still looks wrong, note what you did, what you expected and the time, and send it to your service provider.
+
+## Changing how the bot answers (Gemini prompter)
+Under **Bot & Settings → Business & bot → How the bot answers questions** you can write rules for the *style* of free answers (length, tone, what to ask back, when to bring in a person). Facts such as prices and links go in the facts box above it.
+1. Type the change in plain words, for example "keep answers under three lines and always ask for the customer's city", and press **Suggest change**.
+2. Gemini shows the rewritten instructions with a one-line summary. Press **Use these instructions** (or Discard).
+3. Press **Save** and try it in the Bot Simulator. Nothing changes for customers until you save.
+
+When you edit the menu and questions, a **Save changes** bar stays at the bottom of the screen until you save or discard.

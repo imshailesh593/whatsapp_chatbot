@@ -38,7 +38,8 @@ import { PLANS, accessState, currentPeriod, planById } from './plans';
 import { createCoupon, grantPlan, redeemCoupon } from './services/coupons';
 import { affiliateAdminOverview, getAffiliateSettings, referralOverview, referrerFor, saveAffiliateSettings, setCommissionStatus } from './services/affiliate';
 import { authUrl, cancelAppointment, cleanRules, completeConnection, disconnect as disconnectCalendar, formatSlot, googleConfigured, readState } from './services/calendar';
-import { getUsage } from './services/usage';
+import { admitAiReply, getUsage } from './services/usage';
+import { suggestInstructions } from './services/gemini';
 import { checkRazorpay, createPlans as createRazorpayPlans } from './services/razorpaySetup';
 import { checkPaypal, createPaypalPlans } from './services/paypal';
 import { describeRuntimeConfig, newWebhookSecret, saveRuntimeConfig } from './services/runtimeConfig';
@@ -122,6 +123,7 @@ const WS_FIELDS = [
   'bookingNote',
   'tone',
   'knowledge',
+  'aiInstructions',
   'languages',
   'timezone',
   'notifyEmail',
@@ -141,6 +143,7 @@ const WS_MAX: Record<(typeof WS_FIELDS)[number], number> = {
   bookingNote: 200,
   tone: 40,
   knowledge: 8000,
+  aiInstructions: 4000,
   languages: 80,
   timezone: 60,
   notifyEmail: 254,
@@ -190,6 +193,7 @@ const publicWorkspace = (w: Workspace) => ({
   bookingNote: w.bookingNote,
   tone: w.tone,
   knowledge: w.knowledge,
+  aiInstructions: w.aiInstructions,
   languages: w.languages,
   timezone: w.timezone,
   notifyEmail: w.notifyEmail,
@@ -652,6 +656,23 @@ export function registerAdmin(app: FastifyInstance, opts: { getQr: (workspaceId:
       console.error('[onboarding] failed:', (err as Error).message, ip);
       return reply.status(502).send({ error: 'The assistant could not answer just now. Please try again.' });
     }
+  });
+
+  // The Gemini prompter: the owner says in plain words how the bot should answer, Gemini rewrites the answering instructions.
+  // Nothing is saved here: the dashboard shows the proposal and the owner decides.
+  app.post('/admin/api/ai-instructions/suggest', { preHandler: manager }, async (req, reply) => {
+    const b = (req.body ?? {}) as { request?: unknown; current?: unknown };
+    const request = String(b.request ?? '').trim().slice(0, 1000);
+    if (request.length < 3) return reply.status(400).send({ error: 'Tell Gemini what you want to change, for example: keep answers under three lines.' });
+    if (!onboardingAvailable()) return reply.status(503).send({ error: 'Gemini is not available right now. You can still write the instructions by hand.' });
+    if (throttled(attempts, `ai:${wsId(req)}`, 60)) return reply.status(429).send({ error: 'Too many requests, please wait a few minutes' });
+    bump(attempts, `ai:${wsId(req)}`, 60 * 60_000);
+    const cfg = await loadConfig(wsId(req));
+    if (!(await admitAiReply(cfg.ws))) return reply.status(429).send({ error: "This month's AI allowance is used up." });
+    const current = String(b.current ?? cfg.ws.aiInstructions ?? '').slice(0, 4000);
+    const out = await suggestInstructions(cfg, current, request);
+    if (!out) return reply.status(502).send({ error: 'Gemini could not answer just now. Please try again.' });
+    return out;
   });
 
   app.post('/admin/api/onboarding/apply', { preHandler: manager }, async (req, reply) => {

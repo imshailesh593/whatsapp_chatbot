@@ -91,6 +91,11 @@ async function cleanup() {
   r = await call(hA, 'PUT', '/admin/api/workspace', { tagline: 'Healthy teeth', businessName: 'Acme Dental' });
   ok(r.json().workspace.tagline === 'Healthy teeth', 'settings saved');
   ok((await call(hA, 'PUT', '/admin/api/workspace', { businessName: '  ' })).statusCode === 400, 'empty business name refused');
+  r = await call(hA, 'PUT', '/admin/api/workspace', { aiInstructions: '- Keep answers under three lines' });
+  ok(r.statusCode === 200 && (await call(hA, 'GET', '/admin/api/overview')).json().workspace.aiInstructions === '- Keep answers under three lines', 'the answering instructions are saved with the business profile');
+  ok((await call(hA, 'PUT', '/admin/api/workspace', { aiInstructions: 'x'.repeat(4001) })).json().workspace.aiInstructions.length === 4000, 'and are limited to 4000 characters');
+  ok((await call(hA, 'POST', '/admin/api/ai-instructions/suggest', { request: '' })).statusCode === 400, 'the Gemini prompter needs a request');
+  ok((await call(hA, 'POST', '/admin/api/ai-instructions/suggest', { request: 'make it shorter' })).statusCode === 503, 'and says so when Gemini is not available');
 
   // ---- simulator drives the REAL engine, per workspace ----
   const sim = async (h: any, text: string) => (await call(h, 'POST', '/admin/api/simulate', { id: 'tst', name: 'Sim <b>', text })).json();
