@@ -49,6 +49,7 @@ export const api = {
   alertInfo: () => request<{ emailAvailable: boolean; whatsappReady: boolean }>('/admin/api/alerts'),
   testAlert: () => post<{ whatsapp: string; email: string }>('/admin/api/alerts/test', {}),
   calendar: () => request<CalendarInfo>('/admin/api/calendar'),
+  calendarBuiltin: () => post<{ ok: true }>('/admin/api/calendar/builtin', {}),
   calendarConnect: () => request<{ url: string }>('/admin/api/calendar/connect'),
   calendarSave: (s: NonNullable<CalendarInfo['settings']>) => request<{ ok: true }>('/admin/api/calendar', { method: 'PUT', body: JSON.stringify(s) }),
   calendarDisconnect: () => post<{ ok: true }>('/admin/api/calendar/disconnect', {}),

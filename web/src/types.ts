@@ -339,6 +339,8 @@ export interface CouponInfo {
 export interface CalendarInfo {
   googleAvailable: boolean;
   connected: boolean;
+  /** Booking is on without Google: only the bookings made here count */
+  builtin: boolean;
   email: string;
   timezone: string;
   settings: {

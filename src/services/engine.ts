@@ -28,6 +28,8 @@ const RESET_COMMANDS = ['reset', 'menu', 'restart', 'start'];
 const OPT_OUT_COMMANDS = ['stop', 'unsubscribe', 'stop all'];
 const LANGUAGE_COMMANDS = ['language', 'change language', 'lang', 'भाषा'];
 // The consultation link goes out only when the customer asks for more information, a detailed talk or to book (fee questions are answered, not redirected)
+const BOOK_COMMAND_RE = /^(book|book now|book appointment|book an appointment|book a call|book a consultation|schedule|schedule a call)$/i;
+const ALREADY_BOOKED_RE = /already\s+booked|i\s+(have\s+)?booked|booking\s+done/i;
 const MORE_INFO_RE = /\bconsultation\b|\bappointment\b|\bbook(ing)?\b|\bmore\s+(info|information|details)\b|\bmore\b\W*$|know more|tell me more|\bdiscuss\b|\bcounsel(l)?(ing|or)?\b|jaankari|janakari|one[- ]to[- ]one/i;
 const BOOKED_RE = /already\s+booked|i\s+(have\s+)?booked|booking\s+done|booked\s+(a\s+)?(slot|consultation|appointment|call)/i;
 
@@ -148,6 +150,11 @@ export async function handleIncomingMessage(
     return;
   }
 
+  // A customer in the middle of picking a date or a time: their number or MORE / BACK belongs to the booking, whatever stage the chat is in
+  if (session.slotOffer && (await calendarConnected(workspaceId)) && (await handleBookingMessage(cfg, session, text, isCapturing()))) return;
+  // BOOK on its own starts booking from the menu too
+  if (session.stage === SessionStage.AWAITING_SERVICE_SELECTION && BOOK_COMMAND_RE.test(lower) && (await calendarConnected(workspaceId)) && (await handleBookingMessage(cfg, session, 'book an appointment', isCapturing()))) return;
+
   // 3. Stage state machine
   switch (session.stage) {
     case SessionStage.WELCOME: {
@@ -258,7 +265,10 @@ export async function handleIncomingMessage(
 
     case SessionStage.COMPLETED: {
       // A linked Google Calendar: offer real free times and book them
-      if ((await calendarConnected(workspaceId)) && (await handleBookingMessage(cfg, session, text, isCapturing()))) return;
+      const calendarOn = await calendarConnected(workspaceId);
+      // With booking on, "more info" means the customer wants a consultation: offer dates instead of a link
+      const bookingText = calendarOn && !looksLikeQuestion(text) && MORE_INFO_RE.test(lower) && !ALREADY_BOOKED_RE.test(text) && !/\b(cancel|reschedule)\b/i.test(lower) ? 'book an appointment' : text;
+      if (calendarOn && (await handleBookingMessage(cfg, session, bookingText, isCapturing()))) return;
       const hasBooking = !!cfg.ws.bookingUrl.trim();
       if (hasBooking && BOOKED_RE.test(text)) {
         // Move the lead to "Booked" unless it is already there or has been closed (won / lost) by the team

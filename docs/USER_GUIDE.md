@@ -12,7 +12,7 @@ Contents
 4. [Working your leads (CRM)](#4-working-your-leads-crm)
 5. [Live inbox and taking over a chat](#5-live-inbox-and-taking-over-a-chat)
 6. [When a customer asks for a person](#6-when-a-customer-asks-for-a-person)
-7. [Booking appointments with Google Calendar](#7-booking-appointments-with-google-calendar)
+7. [Booking appointments in the chat](#7-booking-appointments-in-the-chat)
 8. [Setting up your bot](#8-setting-up-your-bot)
 9. [Lead alerts](#9-lead-alerts)
 10. [Broadcasts](#10-broadcasts)
@@ -75,7 +75,7 @@ Words customers can use at any time:
 | `menu`, `reset`, `restart`, `start` | The conversation starts again from the menu |
 | `STOP` or `UNSUBSCRIBE` | They are removed from broadcasts. `START` or `MENU` brings them back |
 | "talk to a person", "real human", "customer care" (and similar) | The bot hands the chat to you ([section 6](#6-when-a-customer-asks-for-a-person)) |
-| "book an appointment" | They are offered real free times, if you linked Google Calendar ([section 7](#7-booking-appointments-with-google-calendar)) |
+| "book an appointment" | They choose a date and a time, if booking is switched on ([section 7](#7-booking-appointments-in-the-chat)) |
 | "cancel appointment" | Their next appointment is cancelled |
 | "I have already booked" | The lead moves to **Booked** |
 
@@ -152,18 +152,44 @@ You can change the message the customer sees, or switch the feature off, in **Bo
 
 ---
 
-## 7. Booking appointments with Google Calendar
+## 7. Booking appointments in the chat
 
-Optional. Once connected, customers who have finished the questions can book real free times by themselves.
+Optional. Customers pick a **date**, then a **time**, right in WhatsApp. They get a confirmation message, and you get a WhatsApp alert for every booking.
 
-### Connect
-1. Open **Bot & Settings → Appointments (Google Calendar)**.
-2. Press **Connect Google Calendar** and approve access with the Google account whose calendar you use.
-   - If you see "Google sign-in is not set up on this server yet", the service operator has not added Google keys. Ask them.
+### Switch it on
+1. Open **Bot & Settings → Appointments**.
+2. Press **Turn on booking (built-in calendar)**. No Google account is needed: the bot offers your working hours, minus appointments already booked here.
+   - Or press **Connect Google Calendar instead** (if the service operator has added Google keys). Then the bot also skips times busy in your Google Calendar and adds every booking to it.
 3. Set your rules and press **Save**:
 
 | Setting | Meaning |
 |---|---|
+| Appointment length | Minutes per booking (10 to 240) |
+| Break between | Gap kept before and after each booking |
+| Opens / Closes | Daily booking hours, in your business time zone |
+| Working days | Days of the week customers can book |
+| Minimum notice | Fewest hours between now and a bookable time |
+| Book up to | How many days ahead customers can book |
+| Remind customer | Hours before the appointment to send a WhatsApp reminder (0 turns reminders off) |
+
+Make sure your **time zone** is right in Business & bot, and put the **WhatsApp number for alerts** under Lead alerts: that is where the booking alert goes. All times use your time zone.
+
+### How a booking happens
+1. After the questions the customer replies `BOOK` (or "more info", "book an appointment", "schedule"). `BOOK` also works straight from the menu.
+2. The bot lists the next open **dates**, seven to a page. `MORE` shows later dates.
+3. The customer replies with a number and sees that day's **times**. `MORE` shows later times and `BACK` returns to the dates.
+4. The customer replies with a number to book. They get a WhatsApp confirmation with the date, time and length. The lead moves to **Booked** and you get a WhatsApp alert (and an email, if set up) with the customer's name, number, time and answers.
+5. Before the appointment, the customer gets a reminder.
+
+When booking is on, the consultation link is not sent; booking replaces it. Messages follow the language the customer chose.
+
+Customers can reply `CANCEL APPOINTMENT` or `RESCHEDULE`. You can also cancel from the list under **Upcoming appointments**, which tells the customer too. Two customers can never take the same time. Dates and times offered more than 30 minutes ago are not booked by a late reply.
+
+The Bot Simulator never creates real bookings.
+
+To stop, press **Turn off booking** (or **Disconnect** for Google). Existing appointments stay on record.
+
+---|---|
 | Appointment length | Minutes per booking (10 to 240) |
 | Break between | Gap kept before and after each booking |
 | Opens / Closes | Daily booking hours, in your business time zone |

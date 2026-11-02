@@ -66,15 +66,16 @@ export default function Appointments({ me }: { me: AdminUser }) {
 
   return (
     <div className={card}>
-      <h3 className="font-bold text-white text-base flex items-center space-x-2"><CalendarDays className="w-4 h-4 text-emerald-400" /><span>Appointments (Google Calendar)</span></h3>
+      <h3 className="font-bold text-white text-base flex items-center space-x-2"><CalendarDays className="w-4 h-4 text-emerald-400" /><span>Appointments</span></h3>
       <p className="text-[11px] text-slate-500 mt-1">
-        Connect your Google Calendar and the bot offers real free times to customers who have finished the questions, books the one they choose, adds it to your calendar and reminds them. Times use your business time zone ({info.timezone}).
+        Turn on booking and the bot lets customers pick a date and a time, books it, confirms it to them on WhatsApp, alerts you on WhatsApp and reminds them before it starts. Use the built-in calendar, or connect Google Calendar so the bot also avoids your other events and adds each booking to it. Times use your business time zone ({info.timezone}).
       </p>
 
       {!info.connected && (
-        <div className="mt-4">
+        <div className="mt-4 flex flex-wrap items-center gap-3">
+          {canEdit && <button onClick={() => run(() => api.calendarBuiltin(), 'Booking is on. Set your working hours below.')} disabled={busy} className="px-4 py-2 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs rounded-lg disabled:opacity-50">Turn on booking (built-in calendar)</button>}
           {info.googleAvailable ? (
-            canEdit && <button onClick={connect} disabled={busy} className="px-4 py-2 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs rounded-lg disabled:opacity-50">Connect Google Calendar</button>
+            canEdit && <button onClick={connect} disabled={busy} className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 font-semibold text-xs rounded-lg border border-slate-700 disabled:opacity-50">Connect Google Calendar instead</button>
           ) : (
             <p className="text-[11px] text-amber-400">Google sign-in is not set up on this server yet. The platform operator needs to add the Google keys first.</p>
           )}
@@ -84,8 +85,9 @@ export default function Appointments({ me }: { me: AdminUser }) {
       {info.connected && form && (
         <>
           <div className="mt-4 flex flex-wrap items-center gap-3 text-xs">
-            <span className="px-2.5 py-1 rounded-full border bg-emerald-500/15 text-emerald-300 border-emerald-500/40 font-semibold">Connected{info.email ? ` · ${info.email}` : ''}</span>
-            {canEdit && <button onClick={() => window.confirm('Disconnect Google Calendar? The bot will stop offering times. Existing appointments stay in your calendar.') && run(() => api.calendarDisconnect(), 'Disconnected.')} className="text-slate-400 hover:text-rose-300 underline">Disconnect</button>}
+            <span className="px-2.5 py-1 rounded-full border bg-emerald-500/15 text-emerald-300 border-emerald-500/40 font-semibold">{info.builtin ? 'Booking is on · built-in calendar' : `Google Calendar connected${info.email ? ` · ${info.email}` : ''}`}</span>
+            {info.builtin && info.googleAvailable && canEdit && <button onClick={connect} disabled={busy} className="text-emerald-300 hover:text-emerald-200 underline">Connect Google Calendar too</button>}
+            {canEdit && <button onClick={() => window.confirm(info.builtin ? 'Turn off booking? The bot will stop offering times. Existing appointments stay on record.' : 'Disconnect Google Calendar and turn off booking? The bot will stop offering times. Existing appointments stay in your calendar.') && run(() => api.calendarDisconnect(), 'Booking is off.')} className="text-slate-400 hover:text-rose-300 underline">{info.builtin ? 'Turn off booking' : 'Disconnect'}</button>}
           </div>
 
           <div className="mt-4 grid grid-cols-2 sm:grid-cols-4 gap-3 text-[11px] text-slate-400">
@@ -108,7 +110,7 @@ export default function Appointments({ me }: { me: AdminUser }) {
 
           <h4 className="mt-6 text-xs font-bold uppercase tracking-wider text-slate-400">Upcoming appointments</h4>
           {info.appointments.length === 0 ? (
-            <p className="text-[11px] text-slate-500 mt-2">None yet. Customers book by messaging &ldquo;book an appointment&rdquo; after they finish the questions.</p>
+            <p className="text-[11px] text-slate-500 mt-2">None yet. Customers book by replying BOOK after they finish the questions.</p>
           ) : (
             <div className="mt-2 divide-y divide-slate-800/70 border border-slate-800 rounded-xl overflow-hidden text-xs">
               {info.appointments.map((a) => (

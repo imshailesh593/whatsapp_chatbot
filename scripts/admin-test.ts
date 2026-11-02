@@ -377,7 +377,14 @@ async function cleanup() {
   ok(r.json().connected === false && r.json().googleAvailable === false && r.json().settings === null && r.json().appointments.length === 0, 'a new business has no calendar linked');
   ok((await call(hA, 'GET', '/admin/api/calendar/connect')).statusCode === 400, 'connecting is refused with a clear message while the server has no Google keys');
   ok((await app.inject('/admin/api/calendar/callback?code=x&state=forged')).headers.location === '/admin/?calendar=denied', 'a forged sign-in state is turned away');
-  ok((await call(hA, 'PUT', '/admin/api/calendar', { slotMinutes: 30 })).statusCode === 409, 'settings need a linked calendar first');
+  ok((await call(hA, 'PUT', '/admin/api/calendar', { slotMinutes: 30 })).statusCode === 409, 'settings need booking switched on first');
+  ok((await app.inject({ method: 'POST', url: '/admin/api/calendar/builtin' })).statusCode === 401, 'switching booking on needs a login');
+  ok((await call(hA, 'POST', '/admin/api/calendar/builtin')).statusCode === 200, 'booking can be switched on without Google (built-in calendar)');
+  r = await call(hA, 'GET', '/admin/api/calendar');
+  ok(r.json().connected && r.json().builtin && r.json().email === '' && r.json().settings.workStart === '09:00', 'it is reported as built-in, with default working hours');
+  ok((await call(hA, 'PUT', '/admin/api/calendar', { workStart: '10:00', workEnd: '17:00' })).statusCode === 200, 'its hours can be changed');
+  await call(hA, 'POST', '/admin/api/calendar/disconnect');
+  ok(!(await call(hA, 'GET', '/admin/api/calendar')).json().connected, 'and it can be turned off');
   ok((await call(hA, 'POST', '/admin/api/appointments/nope/cancel')).statusCode === 404, 'cancelling an unknown appointment is a 404');
   process.env.GOOGLE_CLIENT_ID = 'cid';
   process.env.GOOGLE_CLIENT_SECRET = 'cs';

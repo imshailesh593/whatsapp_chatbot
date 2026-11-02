@@ -112,7 +112,7 @@ export async function translateText(text: string, language: string): Promise<str
       model: MODEL,
       contents: text.slice(0, 3000),
       config: {
-        systemInstruction: `Translate the user's WhatsApp message into ${describeLanguage(language.slice(0, 40))}. Keep every number, URL, emoji, line break and *bold* mark exactly as they are, and keep the words MENU, STOP, START, BOOK, LANGUAGE and MORE INFO in Latin letters. Do not add or remove anything. Output only the translation.`,
+        systemInstruction: `Translate the user's WhatsApp message into ${describeLanguage(language.slice(0, 40))}. Keep every number, URL, emoji, line break and *bold* mark exactly as they are, and keep the words MENU, STOP, START, BOOK, LANGUAGE, MORE, MORE INFO, BACK, CANCEL APPOINTMENT and RESCHEDULE in Latin letters. Do not add or remove anything. Output only the translation.`,
         temperature: 0.1,
         maxOutputTokens: 1500,
         thinkingConfig: { thinkingBudget: 0 }

@@ -120,72 +120,84 @@ globalThis.fetch = (async (url: any, init: any = {}) => {
 
     await handleIncomingMessage(W.id, p1, 'Asha', 'hello, can I book a slot?');
     let offer = replies(W.id, p1).at(-1)!;
-    ok(offer.includes('Reply with a number to book') && offer.includes('1️⃣') && offer.includes('5️⃣') && offer.includes('MORE'), 'asking to book returns five numbered times');
-    ok(offer.includes('Asia/Kolkata'), 'times are shown in the business time zone');
-    ok(!!(await prisma.session.findFirst({ where: { workspaceId: W.id, phoneNumber: p1 } }))!.slotOffer, 'the offered times are remembered');
+    ok(offer.includes('Choose a date') && offer.includes('1️⃣') && offer.includes('7️⃣') && offer.includes('MORE for later dates'), 'asking to book first offers dates: seven to a page, with MORE for later ones');
+    ok(offer.includes('Asia/Kolkata'), 'dates are shown in the business time zone');
+    ok(!!(await prisma.session.findFirst({ where: { workspaceId: W.id, phoneNumber: p1 } }))!.slotOffer, 'the offered dates are remembered');
     const fb = calls.filter((c) => c.url.endsWith('/freeBusy')).at(-1)!;
     ok(fb.body.items[0].id === 'primary', 'availability is read from Google free/busy');
 
     await handleIncomingMessage(W.id, p1, 'Asha', '9');
-    ok(/number from 1 to 5/.test(replies(W.id, p1).at(-1)!), 'a number outside the list is corrected');
+    ok(/one of the numbers/.test(replies(W.id, p1).at(-1)!), 'a number outside the list is corrected');
     await handleIncomingMessage(W.id, p1, 'Asha', 'more');
     const page2 = replies(W.id, p1).at(-1)!;
-    ok(page2.includes('1️⃣') && page2 !== offer, 'MORE shows later times');
+    ok(page2.includes('Choose a date') && page2.includes('1️⃣') && page2 !== offer && !page2.includes('MORE'), 'MORE shows later dates');
     await handleIncomingMessage(W.id, p1, 'Asha', 'book an appointment');
     offer = replies(W.id, p1).at(-1)!;
 
     // a price question is not a booking request; an old offer does not book
     const pq = replies(W.id, p1).length;
     await handleIncomingMessage(W.id, p1, 'Asha', 'How much is an appointment?');
-    ok(!replies(W.id, p1).slice(pq).some((t) => t.includes('Reply with a number')), 'a question about the price of an appointment does not open the time list');
+    ok(!replies(W.id, p1).slice(pq).some((t) => t.includes('Choose a date')), 'a question about the price of an appointment does not open the date list');
     await handleIncomingMessage(W.id, p1, 'Asha', 'book an appointment');
-    await prisma.session.updateMany({ where: { workspaceId: W.id, phoneNumber: p1 }, data: { slotOffer: { slots: [new Date(Date.now() + 5 * 86_400_000).toISOString()], page: 0, at: Date.now() - 31 * 60_000 } } });
+    await prisma.session.updateMany({ where: { workspaceId: W.id, phoneNumber: p1 }, data: { slotOffer: { step: 'times', days: [{ label: 'x', slots: [new Date(Date.now() + 5 * 86_400_000).toISOString()] }], day: 0, tpage: 0, page: 0, at: Date.now() - 31 * 60_000 } } });
     const eb = calls.filter((c) => c.url.includes('/events') && c.method === 'POST').length;
     await handleIncomingMessage(W.id, p1, 'Asha', '1');
     ok(calls.filter((c) => c.url.includes('/events') && c.method === 'POST').length === eb, 'times offered more than 30 minutes ago are not booked by a late reply');
     await handleIncomingMessage(W.id, p1, 'Asha', 'book an appointment');
 
+    // pick a date: its times are listed, and BACK returns to the dates
+    await handleIncomingMessage(W.id, p1, 'Asha', '1');
+    const times = replies(W.id, p1).at(-1)!;
+    ok(times.includes('choose a time') && times.includes('1️⃣') && /\d{1,2}:\d{2} (am|pm)/.test(times) && times.includes('BACK'), 'choosing a date lists its times');
+    await handleIncomingMessage(W.id, p1, 'Asha', 'back');
+    ok(replies(W.id, p1).at(-1)!.includes('Choose a date'), 'BACK returns to the dates');
+    await handleIncomingMessage(W.id, p1, 'Asha', '1');
+
     // someone else takes the first time while Asha is deciding
-    const offered = (await prisma.session.findFirst({ where: { workspaceId: W.id, phoneNumber: p1 } }))!.slotOffer as { slots: string[] };
-    const first = new Date(offered.slots[0]);
+    const offered = (await prisma.session.findFirst({ where: { workspaceId: W.id, phoneNumber: p1 } }))!.slotOffer as { days: { slots: string[] }[] };
+    const first = new Date(offered.days[0].slots[0]);
     busy = [{ start: first.toISOString(), end: new Date(first.getTime() + 1800_000).toISOString() }];
     await handleIncomingMessage(W.id, p1, 'Asha', '1');
-    ok(/just taken/.test(replies(W.id, p1).at(-2)!) && replies(W.id, p1).at(-1)!.includes('Reply with a number'), 'a time taken in the meantime is refused and fresh options are offered');
+    ok(/just taken/.test(replies(W.id, p1).at(-1)!) && replies(W.id, p1).at(-1)!.includes('Choose a date'), 'a time taken in the meantime is refused and the dates are offered again');
     ok(!calls.some((c) => c.url.includes('/events') && c.method === 'POST'), 'nothing was created in the calendar for the taken slot');
     busy = [];
 
-    const offered2 = (await prisma.session.findFirst({ where: { workspaceId: W.id, phoneNumber: p1 } }))!.slotOffer as { slots: string[] };
-    await handleIncomingMessage(W.id, p1, 'Asha', '2');
+    await handleIncomingMessage(W.id, p1, 'Asha', '1');
+    const offered2 = (await prisma.session.findFirst({ where: { workspaceId: W.id, phoneNumber: p1 } }))!.slotOffer as { days: { slots: string[] }[] };
+    const pickNo = Math.min(2, offered2.days[0].slots.length);
+    await handleIncomingMessage(W.id, p1, 'Asha', String(pickNo));
     await new Promise((r) => setTimeout(r, 400));
     const done = replies(W.id, p1).at(-1)!;
-    ok(done.startsWith('✅ Booked:') && done.includes('CANCEL APPOINTMENT'), 'the customer gets a confirmation');
+    ok(done.startsWith('✅ *Booked!*') && done.includes('CANCEL APPOINTMENT') && done.includes('30 minutes') && done.includes('Asia/Kolkata'), 'the customer gets a confirmation with the date, time and length');
+    const bookedAt = offered2.days[0].slots[pickNo - 1];
     const ev = calls.filter((c) => c.url.includes('/events') && c.method === 'POST').at(-1)!;
-    ok(ev.body.start.dateTime === offered2.slots[1] && /Asha/.test(ev.body.summary) && ev.body.description.includes('answer 0'), 'the Google event has the chosen time, the customer and their answers');
+    ok(ev.body.start.dateTime === bookedAt && /Asha/.test(ev.body.summary) && ev.body.description.includes('answer 0'), 'the Google event has the chosen time, the customer and their answers');
     const appt = await prisma.appointment.findFirst({ where: { workspaceId: W.id, phoneNumber: p1, status: 'confirmed' } });
-    ok(!!appt && appt.googleEventId === 'ev1' && appt.startsAt.toISOString() === offered2.slots[1], 'the appointment is recorded with its Google event id');
+    ok(!!appt && appt.googleEventId === 'ev1' && appt.startsAt.toISOString() === bookedAt, 'the appointment is recorded with its Google event id');
     ok((await prisma.lead.findFirst({ where: { workspaceId: W.id, phoneNumber: p1 } }))!.stageKey === 'booked', 'the lead moves to Booked');
-    ok(replies(W.id, '919000000009').some((t) => t.includes('New appointment') && t.includes('Asha')), 'the owner is alerted');
+    ok(replies(W.id, '919000000009').some((t) => t.includes('New appointment') && t.includes('Asha') && t.includes('+' + p1)), 'the owner is alerted on WhatsApp with the customer, number and time');
     ok(!(await prisma.session.findFirst({ where: { workspaceId: W.id, phoneNumber: p1 } }))!.slotOffer, 'the offer is cleared after booking');
 
     await handleIncomingMessage(W.id, p1, 'Asha', 'can I schedule a meeting');
     ok(/already have an appointment/.test(replies(W.id, p1).at(-1)!), 'a second booking request points to the existing appointment');
     await handleIncomingMessage(W.id, p1, 'Asha', 'I have already booked');
-    ok(!replies(W.id, p1).at(-1)!.includes('Reply with a number'), '"I have already booked" is not treated as a request for times');
+    ok(!replies(W.id, p1).at(-1)!.includes('Choose a date'), '"I have already booked" is not treated as a request for times');
 
     // a second customer cannot take the same time
     const p2 = `9162${run}`;
     await finish(p2, 'Bala');
     await handleIncomingMessage(W.id, p2, 'Bala', 'appointment please');
-    const o3 = (await prisma.session.findFirst({ where: { workspaceId: W.id, phoneNumber: p2 } }))!.slotOffer as { slots: string[] };
-    ok(!o3.slots.includes(offered2.slots[1]), 'a booked time is no longer offered to others');
+    const o3 = (await prisma.session.findFirst({ where: { workspaceId: W.id, phoneNumber: p2 } }))!.slotOffer as { days: { slots: string[] }[] };
+    ok(!o3.days.flatMap((d) => d.slots).includes(bookedAt), 'a booked time is no longer offered to others');
 
     // two customers pick the same time at once: only one wins
     const p3 = `9163${run}`;
     await finish(p3, 'Chen');
     await handleIncomingMessage(W.id, p3, 'Chen', 'appointment please');
-    await prisma.session.updateMany({ where: { workspaceId: W.id, phoneNumber: { in: [p2, p3] } }, data: { slotOffer: { slots: [o3.slots[0]], page: 0, at: Date.now() } } });
+    const same = o3.days.find((d) => d.slots.length)!.slots[0];
+    await prisma.session.updateMany({ where: { workspaceId: W.id, phoneNumber: { in: [p2, p3] } }, data: { slotOffer: { step: 'times', days: [{ label: 'd', slots: [same] }], day: 0, tpage: 0, page: 0, at: Date.now() } } });
     await Promise.all([handleIncomingMessage(W.id, p2, 'Bala', '1'), handleIncomingMessage(W.id, p3, 'Chen', '1')]);
-    const taken = await prisma.appointment.count({ where: { workspaceId: W.id, startsAt: new Date(o3.slots[0]), status: 'confirmed' } });
+    const taken = await prisma.appointment.count({ where: { workspaceId: W.id, startsAt: new Date(same), status: 'confirmed' } });
     ok(taken === 1, 'simultaneous bookings of one time: exactly one succeeds');
 
     // cancelling
@@ -206,6 +218,7 @@ globalThis.fetch = (async (url: any, init: any = {}) => {
       await handleIncomingMessage(W.id, sim, 'Sim', '1');
       for (let i = 0; i < 3; i++) await handleIncomingMessage(W.id, sim, 'Sim', `a${i}`);
       await handleIncomingMessage(W.id, sim, 'Sim', 'book appointment');
+      await handleIncomingMessage(W.id, sim, 'Sim', '1');
       await handleIncomingMessage(W.id, sim, 'Sim', '1');
     });
     ok(calls.filter((c) => c.url.includes('/events') && c.method === 'POST').length === evBefore, 'the test chat never creates a real calendar event');
@@ -236,7 +249,38 @@ globalThis.fetch = (async (url: any, init: any = {}) => {
     ok(!(await prisma.calendarConfig.findUnique({ where: { workspaceId: W.id } })) && calls.some((c) => c.url.includes('/revoke')), 'disconnecting removes the link and revokes access at Google');
     const m = replies(W.id, p1).length;
     await handleIncomingMessage(W.id, p1, 'Asha', 'appointment please');
-    ok(!replies(W.id, p1).slice(m).some((t) => t.includes('Reply with a number')), 'after disconnecting the bot stops offering times');
+    ok(!replies(W.id, p1).slice(m).some((t) => t.includes('Choose a date')), 'after disconnecting the bot stops offering times');
+
+    // ---- the built-in calendar: no Google at all ----
+    console.log('\n[built-in calendar, no Google]');
+    await prisma.calendarConfig.create({ data: { workspaceId: W.id, refreshToken: '', googleEmail: '' } });
+    invalidateConfig(W.id);
+    const p5 = `9165${run}`;
+    await finish(p5, 'Esha');
+    const gBefore = calls.length;
+    await handleIncomingMessage(W.id, p5, 'Esha', 'more info');
+    ok(replies(W.id, p5).at(-1)!.includes('Choose a date'), 'with booking on, "more info" after the questions offers dates');
+    ok(calls.length === gBefore, 'the built-in calendar never calls Google');
+    await handleIncomingMessage(W.id, p5, 'Esha', '2');
+    await handleIncomingMessage(W.id, p5, 'Esha', '3');
+    await new Promise((r) => setTimeout(r, 400));
+    const done5 = replies(W.id, p5).at(-1)!;
+    ok(done5.startsWith('✅ *Booked!*') && calls.length === gBefore, 'a booking is confirmed to the customer without Google');
+    const a5 = await prisma.appointment.findFirst({ where: { workspaceId: W.id, phoneNumber: p5, status: 'confirmed' } });
+    ok(!!a5 && a5.googleEventId === null, 'it is recorded with no Google event');
+    ok(replies(W.id, '919000000009').some((t) => t.includes('New appointment') && t.includes('Esha')), 'and the owner is alerted on WhatsApp');
+    const p6 = `9166${run}`;
+    await finish(p6, 'Farid');
+    await handleIncomingMessage(W.id, p6, 'Farid', 'appointment please');
+    const o6 = (await prisma.session.findFirst({ where: { workspaceId: W.id, phoneNumber: p6 } }))!.slotOffer as { days: { slots: string[] }[] };
+    ok(!o6.days.flatMap((d) => d.slots).includes(a5!.startsAt.toISOString()), 'a time booked in the built-in calendar is not offered again');
+    // BOOK from the menu, before any questions
+    const p7 = `9167${run}`;
+    await handleIncomingMessage(W.id, p7, 'Gita', 'hi');
+    await handleIncomingMessage(W.id, p7, 'Gita', 'book');
+    ok(replies(W.id, p7).at(-1)!.includes('Choose a date'), 'BOOK on its own starts booking straight from the menu');
+    await handleIncomingMessage(W.id, p7, 'Gita', '1');
+    ok(replies(W.id, p7).at(-1)!.includes('choose a time'), 'and a number at that point picks the date, not a menu option');
   } finally {
     setTransport(W.id, null);
     await prisma.workspace.delete({ where: { id: W.id } });

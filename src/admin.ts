@@ -419,11 +419,19 @@ export function registerAdmin(app: FastifyInstance, opts: { getQr: (workspaceId:
     return {
       googleAvailable: googleConfigured(),
       connected: !!cal,
+      builtin: !!cal && !cal.refreshToken,
       email: cal?.googleEmail ?? '',
       timezone: ws.timezone,
       settings: cal ? { slotMinutes: cal.slotMinutes, bufferMinutes: cal.bufferMinutes, workDays: cal.workDays.split(',').map(Number), workStart: cal.workStart, workEnd: cal.workEnd, noticeHours: cal.noticeHours, daysAhead: cal.daysAhead, reminderHours: cal.reminderHours } : null,
       appointments: appts.map((a) => ({ id: a.id, phone: a.phoneNumber, name: a.name, startsAt: a.startsAt.toISOString(), when: formatSlot(a.startsAt, ws.timezone), past: a.startsAt.getTime() < Date.now() }))
     };
+  });
+
+  // Booking without Google: the bot offers the working hours below, minus appointments already booked here
+  app.post('/admin/api/calendar/builtin', { preHandler: manager }, async (req) => {
+    await prisma.calendarConfig.upsert({ where: { workspaceId: wsId(req) }, update: {}, create: { workspaceId: wsId(req), refreshToken: '', googleEmail: '' } });
+    await prisma.auditLog.create({ data: { actor: me(req).email, action: 'calendar.builtin', workspaceId: wsId(req), detail: '' } }).catch(() => undefined);
+    return { ok: true };
   });
 
   app.get('/admin/api/calendar/connect', { preHandler: manager }, async (req, reply) => {
@@ -448,7 +456,7 @@ export function registerAdmin(app: FastifyInstance, opts: { getQr: (workspaceId:
 
   app.put('/admin/api/calendar', { preHandler: manager }, async (req, reply) => {
     const cal = await prisma.calendarConfig.findUnique({ where: { workspaceId: wsId(req) } });
-    if (!cal) return reply.status(409).send({ error: 'Connect Google Calendar first' });
+    if (!cal) return reply.status(409).send({ error: 'Turn on booking first' });
     let data;
     try {
       data = cleanRules((req.body ?? {}) as Record<string, unknown>);

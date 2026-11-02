@@ -27,6 +27,9 @@ setTranslatorForTests(async (text, language) => { translations++; return `[${lan
   setTransport(W.id, { sendText: async (t, text) => void sent.push({ to: t, text }), ready: () => true });
   try {
     await applyOwnBusiness(W.id);
+    // The consultation-link behaviour is tested first; in-bot booking (which replaces the link) is switched back on in its own section at the end
+    if (!(await prisma.calendarConfig.findUnique({ where: { workspaceId: W.id } }))) throw new Error('FAIL: the own-business setup should switch booking on');
+    await prisma.calendarConfig.delete({ where: { workspaceId: W.id } });
     const cfg = await loadConfig(W.id);
     const say = async (phone: string, text: string) => handleIncomingMessage(W.id, phone, 'Test', text);
 
@@ -50,7 +53,7 @@ setTranslatorForTests(async (text, language) => { translations++; return `[${lan
     ok(closingOf('JOBS').includes('https://www.mnsinstitutejobs.com') && closingOf('WAPPO').includes('https://www.wappoai.com') && closingOf('ZEXY_AI').includes('https://zexyai.com'), 'each service closes with its own link');
     const TOPMATE = 'https://topmate.io/mnsinstitute/';
     ok(cfg.services.every((s) => !s.closingMessage.includes('topmate')), 'no closing message sends the Topmate link on its own: it is only sent when the customer asks for more');
-    ok(cfg.services.every((s) => s.closingMessage.includes('*MORE INFO*') && s.closingMessage.length < 3000), 'each one tells the customer to reply MORE INFO for a consultation, and fits a WhatsApp message');
+    ok(cfg.services.every((s) => s.closingMessage.includes('*BOOK*') && s.closingMessage.length < 3000), 'each one tells the customer to reply BOOK for a consultation, and fits a WhatsApp message');
     const all = (key: string, answers: Record<string, string> = {}) => renderClosing(closingOf(key), answers);
     const has = (key: string, words: string[], answers: Record<string, string> = {}) => words.every((w) => all(key, answers).includes(w));
     ok(has('COACHING', ['₹14,500', '₹12,000', 'DHA', '2 months']), 'coaching: both prices and the DHA rule');
@@ -139,7 +142,7 @@ setTranslatorForTests(async (text, language) => { translations++; return `[${lan
     const answers = ['Staff nurse', 'B.Sc Nursing, 2018', '5 years', 'No gap', 'India, wants to work in the UAE', 'No', 'Not yet'];
     for (const a of answers) await say(hi, a);
     const [licMsg1, licMsg2] = to(hi).slice(-2);
-    ok(licMsg1.startsWith('[Hindi] Thanks for sharing your details') && licMsg1.includes('₹1,75,000') && licMsg2.startsWith('[Hindi] *After you pass DHA') && licMsg2.includes('₹40,000') && licMsg2.includes('*MORE INFO*') && !(licMsg1 + licMsg2).includes('topmate'), 'the licensing closing arrives as two translated messages (packages, then the post-result fee), with the fees and no link');
+    ok(licMsg1.startsWith('[Hindi] Thanks for sharing your details') && licMsg1.includes('₹1,75,000') && licMsg2.startsWith('[Hindi] *After you pass DHA') && licMsg2.includes('₹40,000') && licMsg2.includes('*BOOK*') && !(licMsg1 + licMsg2).includes('topmate'), 'the licensing closing arrives as two translated messages (packages, then the post-result fee), with the fees and no link');
     ok(licMsg1.length < 500 && licMsg2.length < 600 && !licMsg1.includes('---') && !licMsg2.includes('---'), '...each short enough to read at a glance, and the split marker never reaches the customer');
     await say(hi, 'DHA fees');
     ok(!to(hi).at(-1)!.includes('topmate'), 'asking about fees afterwards does not send the consultation link');
@@ -182,7 +185,7 @@ setTranslatorForTests(async (text, language) => { translations++; return `[${lan
     ok(to(en2).at(-1) === 'What is your current profession?', 'jobs starts with the profile questions');
     for (const a of ['Nurse', 'GNM 2015', '8 years', 'None', 'India', 'Canada', 'No']) await say(en2, a);
     const jobsMsgs = to(en2).slice(-2);
-    ok(jobsMsgs[0].includes('₹50,000') && jobsMsgs[0].includes('₹43,500') && jobsMsgs[1].includes('https://www.mnsinstitutejobs.com') && jobsMsgs[1].includes('*MORE INFO*') && !jobsMsgs.join(' ').includes('topmate'), 'jobs closes as two messages: the fees and inclusions, then the timeline and the website, with no consultation link');
+    ok(jobsMsgs[0].includes('₹50,000') && jobsMsgs[0].includes('₹43,500') && jobsMsgs[1].includes('https://www.mnsinstitutejobs.com') && jobsMsgs[1].includes('*BOOK*') && !jobsMsgs.join(' ').includes('topmate'), 'jobs closes as two messages: the fees and inclusions, then the timeline and the website, with no consultation link');
     for (const [ask, wantsLink] of [['MORE INFO', true], ['more', true], ['Can I book a consultation?', true], ['tell me more', true], ['I want to discuss my profile', true], ['what is the fee?', false], ['ok thanks', false]] as const) {
       await say(en2, ask);
       ok(to(en2).at(-1)!.includes(TOPMATE) === wantsLink, `"${ask}" ${wantsLink ? 'sends' : 'does not send'} the consultation link`);
@@ -235,6 +238,27 @@ setTranslatorForTests(async (text, language) => { translations++; return `[${lan
     const stopper = await mk('m', 26);
     await say(stopper, 'STOP');
     ok((await followUpTick(t0 + 48 * H)) >= 0 && to(stopper).every((t) => !/checking in|still interested/i.test(t)), 'a customer who sends STOP is never nudged');
+
+    console.log('\n[booking a consultation in the chat]');
+    await prisma.calendarConfig.create({ data: { workspaceId: W.id, refreshToken: '', googleEmail: '' } });
+    invalidateConfig(W.id);
+    const bk = `9188${run}`;
+    await say(bk, 'hi');
+    await say(bk, 'Hindi');
+    await say(bk, '9');
+    await say(bk, 'Please call me');
+    await say(bk, '10:00');
+    ok(to(bk).at(-1)!.includes('BOOK') && !to(bk).at(-1)!.includes('topmate'), 'the closing message offers BOOK, not the link');
+    await say(bk, 'BOOK');
+    ok(to(bk).at(-1)!.startsWith('[Hindi] 📅 *Choose a date*'), "BOOK offers dates, in the customer's language");
+    await say(bk, '1');
+    ok(to(bk).at(-1)!.startsWith('[Hindi] 🕒'), 'a date leads to its times');
+    await say(bk, '1');
+    ok(to(bk).at(-1)!.startsWith('[Hindi] ✅ *Booked!*'), "a time books it and confirms in the customer's language");
+    ok(to('918700825077').some((t) => t.includes('New appointment') && t.includes('+' + bk)), 'the team number is alerted on WhatsApp');
+    ok(!to(bk).some((t) => t.includes('topmate')), 'the Topmate link is not needed once booking is in the chat');
+    await new Promise((r) => setTimeout(r, 600)); // let the background lead-event write finish before the workspace is removed
+    await prisma.appointment.deleteMany({ where: { workspaceId: W.id } });
 
     console.log('\nMNS FLOW TESTS OK');
   } finally {

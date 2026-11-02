@@ -14,7 +14,7 @@ const TEAM_PHONE = '+91 8700825077';
 const ZEXY = 'https://zexyai.com';
 
 /** Every closing message tells the customer what to type for more. The consultation link itself is only sent when they ask. */
-const MORE = 'Reply *MORE INFO* to book a one-to-one consultation, or *MENU* for the menu. You can also ask me anything here.';
+const MORE = 'Reply *BOOK* to pick a date and time for a one-to-one consultation, or *MENU* for the menu. You can also ask me anything here.';
 const closing = ([first, ...rest]: string[]) => [`Thanks for sharing your details! 🙌\n\n${first}`, ...rest, MORE].join('\n\n');
 
 const profile = (...extra: { key: string; prompt: string }[]) => [
@@ -249,6 +249,9 @@ export const OWN_PROFILE = {
   bookingLabel: 'one-to-one consultation with our team',
   bookingUrl: TOPMATE,
   formUrl: FORM,
+  // Bookings and their alerts use this zone and number
+  timezone: 'Asia/Kolkata',
+  notifyPhone: TEAM_PHONE.replace(/\D/g, ''),
   languageStep: true,
   welcomeIntro: 'Thank you for contacting us.',
   languageWelcome: 'Hello! 👋 Welcome to MNS. Which language would you prefer?',
@@ -264,5 +267,7 @@ export const OWN_PROFILE = {
 export async function applyOwnBusiness(workspaceId: string): Promise<void> {
   await saveServices(workspaceId, OWN_SERVICES);
   await prisma.workspace.update({ where: { id: workspaceId }, data: { ...OWN_PROFILE, onboardingCompleted: true } });
+  // In-bot booking (date, then time): on with the default hours unless the owner already set it up. Adjust the hours in the dashboard.
+  await prisma.calendarConfig.upsert({ where: { workspaceId }, update: {}, create: { workspaceId, refreshToken: '', googleEmail: '' } });
   invalidateConfig(workspaceId);
 }

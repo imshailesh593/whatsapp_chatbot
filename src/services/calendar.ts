@@ -1,3 +1,4 @@
+import { localize } from './language';
 import crypto from 'crypto';
 import { prisma } from '../lib/prisma';
 import { Prisma } from '@prisma/client';
@@ -128,7 +129,7 @@ export async function disconnect(workspaceId: string): Promise<void> {
   const cfg = await prisma.calendarConfig.findUnique({ where: { workspaceId } });
   if (!cfg) return;
   try {
-    await fetch('https://oauth2.googleapis.com/revoke', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams({ token: decryptToken(cfg.refreshToken) }).toString(), signal: AbortSignal.timeout(TIMEOUT) });
+    if (cfg.refreshToken) await fetch('https://oauth2.googleapis.com/revoke', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams({ token: decryptToken(cfg.refreshToken) }).toString(), signal: AbortSignal.timeout(TIMEOUT) });
   } catch {
     /* revoking is best-effort: the link is removed here either way */
   }
@@ -190,10 +191,10 @@ const minutesOf = (hhmm: string) => {
 };
 
 /**
- * Free start times within working hours, earliest first, at most two per day so the offer spans several days.
+ * Free start times within working hours, earliest first, at most `perDay` per day (two by default, so a short list spans several days).
  * Pure: the caller supplies the busy intervals.
  */
-export function generateSlots(now: number, tzRaw: string, r: Rules, busy: Busy[], limit = 40): Date[] {
+export function generateSlots(now: number, tzRaw: string, r: Rules, busy: Busy[], limit = 40, perDay = 2): Date[] {
   const tz = safeZone(tzRaw);
   const days = new Set(r.workDays.split(',').map(Number));
   const from = now + r.noticeHours * 3600_000;
@@ -207,7 +208,7 @@ export function generateSlots(now: number, tzRaw: string, r: Rules, busy: Busy[]
     if (!days.has(iso)) continue;
     const y = day.getUTCFullYear(), mo = day.getUTCMonth() + 1, d = day.getUTCDate();
     let taken = 0;
-    for (let t = minutesOf(r.workStart); t + r.slotMinutes <= minutesOf(r.workEnd) && taken < 2; t += r.slotMinutes) {
+    for (let t = minutesOf(r.workStart); t + r.slotMinutes <= minutesOf(r.workEnd) && taken < perDay; t += r.slotMinutes) {
       const start = zonedToUtc(y, mo, d, Math.floor(t / 60), t % 60, tz);
       if (start < from || start > now + r.daysAhead * 86_400_000 + 86_400_000) continue;
       if (busy.some((b) => start < b.end + buf && start + slot > b.start - buf)) continue;
@@ -221,6 +222,7 @@ export function generateSlots(now: number, tzRaw: string, r: Rules, busy: Busy[]
 // ---------- Google Calendar calls ----------
 
 async function busyTimes(cfg: { workspaceId: string; refreshToken: string; calendarId: string }, from: number, to: number): Promise<Busy[]> {
+  if (!cfg.refreshToken) return []; // the built-in calendar: only the bookings made here count
   const token = await accessToken(cfg.workspaceId, cfg.refreshToken);
   const res = await googleJson<{ calendars?: Record<string, { busy?: { start: string; end: string }[] }> }>('https://www.googleapis.com/calendar/v3/freeBusy', {
     method: 'POST',
@@ -236,12 +238,12 @@ async function ourBusy(workspaceId: string, from: number, to: number): Promise<B
   return rows.map((a) => ({ start: a.startsAt.getTime(), end: a.endsAt.getTime() }));
 }
 
-export async function availableSlots(workspaceId: string, tz: string, now = Date.now()): Promise<Date[]> {
+export async function availableSlots(workspaceId: string, tz: string, now = Date.now(), perDay = 2, limit = 40): Promise<Date[]> {
   const cfg = await prisma.calendarConfig.findUnique({ where: { workspaceId } });
   if (!cfg) return [];
   const to = now + (cfg.daysAhead + 2) * 86_400_000;
   const busy = [...(await busyTimes(cfg, now, to)), ...(await ourBusy(workspaceId, now, to))];
-  return generateSlots(now, tz, cfg, busy);
+  return generateSlots(now, tz, cfg, busy, limit, perDay);
 }
 
 const locks = new Map<string, Promise<unknown>>();
@@ -264,18 +266,22 @@ export function bookSlot(cfg: BotConfig, phone: string, name: string | null, sta
       const busy = [...(await busyTimes(cal, start.getTime() - 3600_000, end.getTime() + 3600_000)), ...(await ourBusy(workspaceId, start.getTime() - 3600_000, end.getTime() + 3600_000))];
       const buf = cal.bufferMinutes * 60_000;
       if (busy.some((b) => start.getTime() < b.end + buf && end.getTime() > b.start - buf)) return { ok: false, reason: 'taken' } as const;
-      const token = await accessToken(workspaceId, cal.refreshToken);
-      const ev = await googleJson<{ id: string }>(`https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(cal.calendarId)}/events`, {
-        method: 'POST',
-        token,
-        body: JSON.stringify({
-          summary: `${name || 'Customer'} · ${cfg.ws.businessName}`,
-          description: `Booked through WhatsApp by ${name || 'a customer'} (+${phone})\n\n${details}`.slice(0, 2000),
-          start: { dateTime: start.toISOString() },
-          end: { dateTime: end.toISOString() }
-        })
-      });
-      const row = await prisma.appointment.create({ data: { workspaceId, phoneNumber: phone, name, startsAt: start, endsAt: end, googleEventId: ev.id } });
+      let eventId: string | null = null;
+      if (cal.refreshToken) {
+        const token = await accessToken(workspaceId, cal.refreshToken);
+        const ev = await googleJson<{ id: string }>(`https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(cal.calendarId)}/events`, {
+          method: 'POST',
+          token,
+          body: JSON.stringify({
+            summary: `${name || 'Customer'} · ${cfg.ws.businessName}`,
+            description: `Booked through WhatsApp by ${name || 'a customer'} (+${phone})\n\n${details}`.slice(0, 2000),
+            start: { dateTime: start.toISOString() },
+            end: { dateTime: end.toISOString() }
+          })
+        });
+        eventId = ev.id;
+      }
+      const row = await prisma.appointment.create({ data: { workspaceId, phoneNumber: phone, name, startsAt: start, endsAt: end, googleEventId: eventId } });
       return { ok: true, appointmentId: row.id, start } as const;
     } catch (err) {
       console.error('[calendar] booking failed:', (err as Error).message);
@@ -298,7 +304,7 @@ export async function cancelAppointment(workspaceId: string, id: string): Promis
   if (!a) return null;
   await prisma.appointment.update({ where: { id }, data: { status: 'canceled' } });
   const cal = await prisma.calendarConfig.findUnique({ where: { workspaceId } });
-  if (cal && a.googleEventId) {
+  if (cal?.refreshToken && a.googleEventId) {
     try {
       const token = await accessToken(workspaceId, cal.refreshToken);
       await fetch(`https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(cal.calendarId)}/events/${encodeURIComponent(a.googleEventId)}`, { method: 'DELETE', headers: { Authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(TIMEOUT) });
@@ -322,13 +328,36 @@ const PRICE_Q_RE = /\b(how much|fee|fees|cost|price|charges?|rate)\b/i;
 const OFFER_TTL_MS = 30 * 60_000;
 const ALREADY_RE = /already\s+booked|i\s+(have\s+)?booked|booking\s+done|booked\s+(a\s+)?(slot|consultation|appointment|call)/i;
 const CANCEL_RE = /\b(cancel|reschedule)\b.{0,30}\b(appointment|booking|slot|meeting|call|it)\b/i;
-const PAGE = 5;
-const NUMBERS = ['1️⃣', '2️⃣', '3️⃣', '4️⃣', '5️⃣'];
+const DAYS_PER_PAGE = 7;
+const TIMES_PER_PAGE = 8;
+const NUMBERS = ['1️⃣', '2️⃣', '3️⃣', '4️⃣', '5️⃣', '6️⃣', '7️⃣', '8️⃣', '9️⃣'];
 
-interface Offer {
-  slots: string[];
+interface DayOffer {
+  /** days: the customer is choosing a date; times: a time on days[day] */
+  step: 'days' | 'times';
+  /** Every open date with its start times (ISO), so a later number picks from exactly what was shown */
+  days: { label: string; slots: string[] }[];
   page: number;
+  day?: number;
+  tpage?: number;
   at: number;
+}
+
+const dayKey = (d: Date, tz: string) => new Intl.DateTimeFormat('en-CA', { timeZone: safeZone(tz), year: 'numeric', month: '2-digit', day: '2-digit' }).format(d);
+const dayLabel = (d: Date, tz: string) => new Intl.DateTimeFormat('en-IN', { weekday: 'short', day: 'numeric', month: 'short', timeZone: safeZone(tz) }).format(d);
+export const formatTime = (d: Date, tz: string) =>
+  new Intl.DateTimeFormat('en-IN', { hour: 'numeric', minute: '2-digit', hour12: true, timeZone: safeZone(tz) }).format(d).replace(/\b(am|pm)\b/i, (x) => x.toLowerCase());
+
+/** Groups start times by calendar date in the business's time zone. */
+export function groupByDay(slots: Date[], tz: string): { label: string; slots: string[] }[] {
+  const out: { key: string; label: string; slots: string[] }[] = [];
+  for (const d of slots) {
+    const key = dayKey(d, tz);
+    let day = out.find((x) => x.key === key);
+    if (!day) out.push((day = { key, label: dayLabel(d, tz), slots: [] }));
+    day.slots.push(d.toISOString());
+  }
+  return out.map(({ label, slots: sl }) => ({ label, slots: sl }));
 }
 
 /** Marks the lead as Booked unless it is already there or the team has closed it. Returns true if it moved. */
@@ -345,97 +374,164 @@ export async function markLeadBooked(workspaceId: string, phone: string, session
   return true;
 }
 
-function offerText(slots: Date[], tz: string, page: number, more: boolean): string {
-  const lines = slots.map((d, i) => `${NUMBERS[i]} ${formatSlot(d, tz)}`);
-  return [`Here are the next available times (${tz.replace(/_/g, ' ')}):`, ...lines, '', `Reply with a number to book${more ? ', or MORE for later times' : ''}.`].join('\n');
+const zoneName = (tz: string) => tz.replace(/_/g, ' ');
+
+function daysText(o: DayOffer, tz: string): string {
+  const slice = o.days.slice(o.page * DAYS_PER_PAGE, (o.page + 1) * DAYS_PER_PAGE);
+  const more = o.days.length > (o.page + 1) * DAYS_PER_PAGE;
+  return [`📅 *Choose a date* (${zoneName(tz)})`, ...slice.map((d, i) => `${NUMBERS[i]} ${d.label}`), '', `Reply with a number${more ? ', or MORE for later dates' : ''}.`].join('\n');
+}
+
+function timesText(o: DayOffer, tz: string): string {
+  const day = o.days[o.day ?? 0];
+  const tp = o.tpage ?? 0;
+  const slice = day.slots.slice(tp * TIMES_PER_PAGE, (tp + 1) * TIMES_PER_PAGE);
+  const more = day.slots.length > (tp + 1) * TIMES_PER_PAGE;
+  return [`🕒 *${day.label}*: choose a time (${zoneName(tz)})`, ...slice.map((t, i) => `${NUMBERS[i]} ${formatTime(new Date(t), tz)}`), '', `Reply with a number${more ? ', MORE for later times' : ''}, or BACK to change the date.`].join('\n');
+}
+
+/** After a successful booking: the customer gets a confirmation on WhatsApp and the business gets an alert (WhatsApp and email). */
+async function announceBooking(cfg: BotConfig, session: { id: string; phoneNumber: string; contactName: string | null; answers: unknown; language?: string | null }, start: Date, details: string): Promise<void> {
+  const workspaceId = cfg.ws.id;
+  const phone = session.phoneNumber;
+  const tz = cfg.ws.timezone || 'UTC';
+  const cal = await prisma.calendarConfig.findUnique({ where: { workspaceId } });
+  const when = formatSlot(start, tz);
+  const mins = cal?.slotMinutes ?? 30;
+  const what = cfg.ws.bookingLabel.trim() ? `your ${cfg.ws.bookingLabel.trim()}` : 'your appointment';
+  const confirmation = [
+    `✅ *Booked!* ${what.charAt(0).toUpperCase() + what.slice(1)} with ${cfg.ws.businessName.split('|')[0].trim()}`,
+    `📅 ${when} (${zoneName(tz)})`,
+    `⏱ ${mins} minutes`,
+    '',
+    'We will remind you before it starts. Reply CANCEL APPOINTMENT if you cannot make it, or RESCHEDULE to pick another time.'
+  ].join('\n');
+  await sendTextMessage(workspaceId, phone, await localize(cfg, confirmation, session.language, false));
+  void markLeadBooked(workspaceId, phone, session.id, 'appointment booked');
+  const lead = await prisma.lead.findFirst({ where: { workspaceId, phoneNumber: phone }, select: { id: true, serviceCategory: true } });
+  if (lead) void logLeadEvent(lead.id, workspaceId, 'appointment', `Booked ${when}`, 'bot');
+  void deliverAlert(
+    workspaceId,
+    `📅 New appointment: ${session.contactName || 'a customer'}`,
+    [`🗓 ${when} (${zoneName(tz)}), ${mins} min`, `📞 +${phone}`, lead?.serviceCategory ? `Service: ${lead.serviceCategory}` : '', details ? '\n' + details : ''].filter(Boolean).join('\n')
+  );
 }
 
 /**
  * Handles a message from a customer who has finished the questions, when the business has a calendar linked.
  * Returns true when it replied (the caller should stop), false when the message is not about booking.
  */
-export async function handleBookingMessage(cfg: BotConfig, session: { id: string; phoneNumber: string; contactName: string | null; slotOffer: unknown; answers: unknown }, text: string, capturing: boolean): Promise<boolean> {
+export async function handleBookingMessage(cfg: BotConfig, session: { id: string; phoneNumber: string; contactName: string | null; slotOffer: unknown; answers: unknown; language?: string | null }, text: string, capturing: boolean): Promise<boolean> {
   const workspaceId = cfg.ws.id;
   const phone = session.phoneNumber;
   const tz = cfg.ws.timezone || 'UTC';
-  const send = (body: string) => sendTextMessage(workspaceId, phone, body);
+  // In the language the customer chose (businesses that ask for it); the commands (BOOK, MORE, BACK ...) stay in English letters
+  const send = async (body: string) => sendTextMessage(workspaceId, phone, await localize(cfg, body, session.language, capturing));
   const clearOffer = () => prisma.session.update({ where: { id: session.id }, data: { slotOffer: Prisma.DbNull } });
   const lower = text.toLowerCase().trim();
-  const raw = (session.slotOffer ?? null) as Offer | null;
+  const raw = (session.slotOffer ?? null) as DayOffer | null;
   // Times offered a while ago may be gone: a later "2" must not book them
-  const offer = raw && raw.at && Date.now() - raw.at < OFFER_TTL_MS ? raw : null;
+  const offer = raw && Array.isArray(raw.days) && raw.at && Date.now() - raw.at < OFFER_TTL_MS ? raw : null;
+  const saveOffer = (o: DayOffer) => prisma.session.update({ where: { id: session.id }, data: { slotOffer: o as unknown as Prisma.InputJsonValue } });
 
-  const showSlots = async (page: number) => {
+  const showDays = async (page: number, intro?: string) => {
     let all: Date[];
     try {
-      all = await availableSlots(workspaceId, tz);
+      all = await availableSlots(workspaceId, tz, Date.now(), 100, 600);
     } catch (err) {
       console.error('[calendar] availability failed:', (err as Error).message);
       void warnOwner(workspaceId, cfg.ws.businessName, (err as Error).message);
       await send('Sorry, I cannot see our calendar right now. Our team will get back to you to fix a time.');
       return;
     }
-    const slice = all.slice(page * PAGE, page * PAGE + PAGE);
-    if (slice.length === 0) {
+    const days = groupByDay(all, tz);
+    if (days.length === 0 || page * DAYS_PER_PAGE >= days.length) {
       await clearOffer();
-      await send(page === 0 ? 'There are no free times in the coming days. Our team will get in touch to fix a time with you.' : 'That is all the times I have open for now. Our team can arrange another time if you need one.');
+      await send(page === 0 ? 'There are no free times in the coming days. Our team will get in touch to fix a time with you.' : 'That is all the dates I have open for now. Our team can arrange another time if you need one.');
       return;
     }
-    await prisma.session.update({ where: { id: session.id }, data: { slotOffer: { slots: slice.map((d) => d.toISOString()), page, at: Date.now() } satisfies Offer } });
-    await send(offerText(slice, tz, page, all.length > (page + 1) * PAGE));
+    const o: DayOffer = { step: 'days', days, page, at: Date.now() };
+    await saveOffer(o);
+    await send((intro ? intro + '\n\n' : '') + daysText(o, tz));
   };
 
-  // Choosing from the list we just offered
-  if (offer?.slots?.length) {
+  // Choosing from the list we just offered: first a date, then a time
+  if (offer) {
     const n = /^\s*([1-9])\s*[.)]?\s*$/.exec(text)?.[1];
-    if (lower === 'more') {
-      await showSlots(offer.page + 1);
-      return true;
-    }
     if (/^(no|none|cancel|later|skip|not now)$/.test(lower)) {
       await clearOffer();
       await send('No problem. Message me whenever you want to book a time.');
       return true;
     }
-    if (n) {
-      const pick = offer.slots[Number(n) - 1];
-      if (!pick) {
-        await send(`Please reply with a number from 1 to ${offer.slots.length}.`);
+    if (offer.step === 'days') {
+      if (lower === 'more') {
+        if (offer.days.length > (offer.page + 1) * DAYS_PER_PAGE) {
+          const next = { ...offer, page: offer.page + 1, at: Date.now() };
+          await saveOffer(next);
+          await send(daysText(next, tz));
+        } else await send('That is all the dates I have open. Reply with a number from the list, or NO to stop.');
         return true;
       }
-      if (capturing) {
-        // The simulator must never put a real event in the owner's calendar
-        await clearOffer();
-        await send(`✅ (Simulator) Would book ${formatSlot(new Date(pick), tz)}. Nothing was added to the calendar.`);
-        return true;
-      }
-      const existing = await nextAppointment(workspaceId, phone);
-      if (existing) await cancelAppointment(workspaceId, existing.id); // choosing again replaces the earlier booking
-      const start = new Date(pick);
-      const answers = (session.answers ?? {}) as Record<string, string>;
-      const details = Object.entries(answers).map(([k, v]) => `${k.replace(/_/g, ' ')}: ${String(v).slice(0, 200)}`).join('\n');
-      const r = await bookSlot(cfg, phone, session.contactName, start, details);
-      if (!r.ok) {
-        if (r.reason === 'taken') {
-          await send('Sorry, that time was just taken. Here are fresh options.');
-          await showSlots(0);
-        } else {
-          await clearOffer();
-          await send('Sorry, I could not complete the booking just now. Our team will contact you to fix a time.');
+      if (n) {
+        const idx = offer.page * DAYS_PER_PAGE + Number(n) - 1;
+        if (Number(n) > DAYS_PER_PAGE || !offer.days[idx]) {
+          await send('Please reply with one of the numbers in the list.');
+          return true;
         }
+        const next: DayOffer = { ...offer, step: 'times', day: idx, tpage: 0, at: Date.now() };
+        await saveOffer(next);
+        await send(timesText(next, tz));
         return true;
       }
-      await clearOffer();
-      const when = formatSlot(r.start, tz);
-      const cal = await prisma.calendarConfig.findUnique({ where: { workspaceId } });
-      await send(`✅ Booked: ${when} (${cal?.slotMinutes ?? 30} min). We will remind you before it starts. Reply CANCEL APPOINTMENT if you cannot make it.`);
-      void markLeadBooked(workspaceId, phone, session.id, 'appointment booked');
-      const lead = await prisma.lead.findFirst({ where: { workspaceId, phoneNumber: phone }, select: { id: true } });
-      if (lead) void logLeadEvent(lead.id, workspaceId, 'appointment', `Booked ${when}`, 'bot');
-      void deliverAlert(workspaceId, `📅 New appointment: ${session.contactName || 'a customer'}`, `${when}\n+${phone}${details ? '\n\n' + details : ''}`);
-      return true;
+    } else {
+      const day = offer.days[offer.day ?? 0];
+      if (lower === 'back') {
+        const next: DayOffer = { ...offer, step: 'days', at: Date.now() };
+        await saveOffer(next);
+        await send(daysText(next, tz));
+        return true;
+      }
+      if (lower === 'more') {
+        if (day.slots.length > ((offer.tpage ?? 0) + 1) * TIMES_PER_PAGE) {
+          const next = { ...offer, tpage: (offer.tpage ?? 0) + 1, at: Date.now() };
+          await saveOffer(next);
+          await send(timesText(next, tz));
+        } else await send('Those are all the times on this date. Reply with a number, or BACK to change the date.');
+        return true;
+      }
+      if (n) {
+        const pick = day.slots[(offer.tpage ?? 0) * TIMES_PER_PAGE + Number(n) - 1];
+        if (Number(n) > TIMES_PER_PAGE || !pick) {
+          await send('Please reply with one of the numbers in the list.');
+          return true;
+        }
+        if (capturing) {
+          // The simulator must never put a real event in the owner's calendar
+          await clearOffer();
+          await send(`✅ (Simulator) Would book ${formatSlot(new Date(pick), tz)}. Nothing was added to the calendar.`);
+          return true;
+        }
+        const existing = await nextAppointment(workspaceId, phone);
+        if (existing) await cancelAppointment(workspaceId, existing.id); // choosing again replaces the earlier booking
+        const start = new Date(pick);
+        const answers = (session.answers ?? {}) as Record<string, string>;
+        const details = Object.entries(answers).map(([k, v]) => `${k.replace(/_/g, ' ')}: ${String(v).slice(0, 200)}`).join('\n');
+        const r = await bookSlot(cfg, phone, session.contactName, start, details);
+        if (!r.ok) {
+          if (r.reason === 'taken') await showDays(0, 'Sorry, that time was just taken. Please choose another.');
+          else {
+            await clearOffer();
+            await send('Sorry, I could not complete the booking just now. Our team will contact you to fix a time.');
+          }
+          return true;
+        }
+        await clearOffer();
+        await announceBooking(cfg, session, r.start, details);
+        return true;
+      }
     }
   }
+
 
   if (CANCEL_RE.test(text) && text.length < 120) {
     const a = await nextAppointment(workspaceId, phone);
@@ -445,7 +541,7 @@ export async function handleBookingMessage(cfg: BotConfig, session: { id: string
     const resched = /reschedule/i.test(text);
     await send(resched ? `Cancelled your ${when} appointment. Let me find you another time.` : `Cancelled your appointment on ${when}. Message me any time to book another.`);
     if (!capturing) void deliverAlert(workspaceId, `❌ Appointment cancelled: ${session.contactName || phone}`, `The customer cancelled ${when}.`);
-    if (resched) await showSlots(0);
+    if (resched) await showDays(0);
     return true;
   }
 
@@ -455,7 +551,7 @@ export async function handleBookingMessage(cfg: BotConfig, session: { id: string
       await send(`You already have an appointment on ${formatSlot(a.startsAt, tz)}. Reply CANCEL APPOINTMENT to cancel it, or "new appointment" to pick another time.`);
       return true;
     }
-    await showSlots(0);
+    await showDays(0);
     return true;
   }
   return false;
