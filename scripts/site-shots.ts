@@ -25,7 +25,7 @@ const PORT = 3058;
       await page.emulateMediaFeatures([{ name: 'prefers-color-scheme', value: theme }]);
       page.on('response', (r) => { if (r.status() >= 400) problems.push(`${r.status()} ${r.url()}`); });
       page.on('console', (m) => { if (m.type() === 'error' && !/Failed to load resource/.test(m.text())) problems.push(m.text()); });
-      await page.goto(`http://localhost:${PORT}${path}`, { waitUntil: 'networkidle0' });
+      await page.goto(`http://localhost:${PORT}${path}`, { waitUntil: "networkidle0" }); await new Promise((r) => setTimeout(r, 4800));
       const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
       if (overflow > 2) problems.push(`${name} ${tag}: sideways overflow ${overflow}px`);
       const font = await page.evaluate(() => document.fonts.check('16px Inter'));
