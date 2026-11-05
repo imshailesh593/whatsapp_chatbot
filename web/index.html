@@ -7,10 +7,10 @@
     <link rel="apple-touch-icon" href="/wappo-icon.png" />
     <title>Wappo</title>
     <script>
-      // Apply the saved (or device) theme before the first paint so there is no flash
+      // Apply the saved theme (light unless dark was chosen) before the first paint so there is no flash
       try {
         var t = localStorage.getItem('theme');
-        if (t !== 'light' && t !== 'dark') t = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+        if (t !== 'dark') t = 'light';
         if (t === 'dark') document.documentElement.classList.add('dark');
       } catch (e) {}
     </script>

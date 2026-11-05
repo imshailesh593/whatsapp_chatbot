@@ -9,12 +9,12 @@ const read = (): Theme => {
   } catch {
     /* storage unavailable */
   }
-  return window.matchMedia?.('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+  return 'light'; // light unless the person chose dark with the toggle
 };
 
 const apply = (t: Theme) => document.documentElement.classList.toggle('dark', t === 'dark');
 
-/** Light or dark, remembered per browser; the first visit follows the device setting. */
+/** Light by default; dark only when chosen with the toggle, and remembered per browser. */
 export function useTheme(): [Theme, () => void] {
   const [theme, setTheme] = useState<Theme>(() => read());
   useEffect(() => { apply(theme); }, [theme]);

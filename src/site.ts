@@ -30,7 +30,6 @@ const n = (v: number) => v.toLocaleString('en-IN');
 const CSS = `
 @font-face{font-family:"Inter";src:url(/admin/inter.woff2) format("woff2");font-weight:100 900;font-style:normal;font-display:swap}
 :root{--bg:#fff;--alt:#f6f9fc;--card:#fff;--ink:#0a2540;--ink2:#425466;--mute:#6b7c93;--line:#e3e8ee;--brand:#0a8a64;--brand2:#067a58;--soft:#e6f7f0;--accent:#10b981;--btn:#0a2540;--btnh:#16365a;--btnt:#fff;--warn:#fff8e6;--warnline:#f6dc9a;--danger:#c0264b;--shadow:10 37 64;--g1:#a7f3d0;--g2:#67e8f9;--g3:#c4b5fd;--g4:#fbcfe8}
-@media (prefers-color-scheme:dark){:root{--bg:#060b16;--alt:#0a1120;--card:#0d1526;--ink:#f1f5fb;--ink2:#b4c0d3;--mute:#8091a9;--line:#1b2740;--brand:#34d399;--brand2:#6ee7b7;--soft:#0b2a23;--accent:#34d399;--btn:#f1f5fb;--btnh:#fff;--btnt:#06101f;--warn:#241d0a;--warnline:#58430f;--danger:#fb7185;--shadow:0 0 0;--g1:#065f46;--g2:#0e7490;--g3:#4c1d95;--g4:#831843}}
 *{box-sizing:border-box}html{scroll-behavior:smooth;-webkit-text-size-adjust:100%}
 body{margin:0;background:var(--bg);color:var(--ink);font:17px/1.65 "Inter",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;-webkit-font-smoothing:antialiased;font-feature-settings:"cv11","ss01"}
 a{color:var(--brand);text-underline-offset:3px}a:hover{color:var(--brand2)}
@@ -83,7 +82,6 @@ h3{font-size:19px;margin:0 0 8px;letter-spacing:-.02em;font-weight:650}
 .row div{flex:1;min-width:0;line-height:1.35}.row b{display:block;font-weight:600}.row small{color:var(--mute);font-size:12.5px}
 .pill{font-style:normal;font-size:12px;font-weight:600;padding:3px 11px;border-radius:99px;background:var(--alt);color:var(--ink2);border:1px solid var(--line);white-space:nowrap}
 .pill.hot{background:#ffe8e3;color:#b3261e;border-color:#ffd0c8}.pill.ok{background:var(--soft);color:var(--brand);border-color:color-mix(in srgb,var(--brand) 25%,transparent)}
-@media (prefers-color-scheme:dark){.pill.hot{background:#3a1c18;color:#ff9b91;border-color:#5a2b24}}
 .phone{background:#0b141a;border-radius:30px;padding:10px;max-width:300px;box-shadow:0 40px 70px -20px rgba(0,0,0,.55),0 0 0 1px rgba(255,255,255,.07) inset}
 .stage .phone{position:absolute;right:-30px;bottom:0;width:230px;transform:rotate(3deg);z-index:2}
 .phone .bar{background:#075e54;color:#fff;border-radius:20px 20px 0 0;padding:11px 14px;font-weight:600;font-size:13.5px;display:flex;align-items:center;gap:9px}
@@ -123,7 +121,6 @@ section.alt .card{background:var(--card)}
 .lc b{display:block;font-weight:600}.lc span{color:var(--mute)}
 .tag{display:inline-block;font-size:11px;padding:2px 9px;border-radius:99px;background:var(--soft);color:var(--brand);font-weight:600;margin-top:5px}
 .tag.hot{background:#ffe8e3;color:#b3261e}
-@media (prefers-color-scheme:dark){.tag.hot{background:#3a1c18;color:#ff9b91}}
 .brief{border:1px solid var(--warnline);background:var(--warn);border-radius:14px;padding:14px 16px;font-size:14px;margin-bottom:14px}
 .brief b{display:block;margin-bottom:4px}
 .slot{display:flex;justify-content:space-between;align-items:center;border:1px solid var(--line);background:var(--bg);border-radius:12px;padding:13px 15px;margin:10px 0;font-size:14.5px;font-weight:600}
@@ -213,7 +210,7 @@ function page(d: Doc): string {
 <title>${esc(d.title)}</title>
 <meta name="description" content="${esc(d.description)}">
 <meta property="og:title" content="${esc(d.title)}"><meta property="og:description" content="${esc(d.description)}"><meta property="og:type" content="website">${base() ? `<meta property="og:image" content="${esc(base())}/admin/wappo-logo.jpg">` : ''}
-<meta name="theme-color" content="#047857"><meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#047857"><meta name="color-scheme" content="light">
 <link rel="preload" href="/admin/inter.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="icon" type="image/png" href="/admin/wappo-icon-64.png">
 <link rel="apple-touch-icon" href="/admin/wappo-icon.png">
