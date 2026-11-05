@@ -26,6 +26,12 @@ const PORT = 3058;
       page.on('response', (r) => { if (r.status() >= 400) problems.push(`${r.status()} ${r.url()}`); });
       page.on('console', (m) => { if (m.type() === 'error' && !/Failed to load resource/.test(m.text())) problems.push(m.text()); });
       await page.goto(`http://localhost:${PORT}${path}`, { waitUntil: "networkidle0" }); await new Promise((r) => setTimeout(r, 4800));
+      // scroll through the page once so everything that rises into view has done so
+      const total0 = await page.evaluate(() => document.documentElement.scrollHeight);
+      for (let y = 0; y < total0; y += 500) { await page.evaluate((v) => window.scrollTo(0, v), y); await new Promise((r) => setTimeout(r, 140)); }
+      await new Promise((r) => setTimeout(r, 1800));
+      await page.evaluate(() => window.scrollTo(0, 0));
+      await new Promise((r) => setTimeout(r, 400));
       const overflow = await page.evaluate(() => document.documentElement.scrollWidth - window.innerWidth);
       if (overflow > 2) problems.push(`${name} ${tag}: sideways overflow ${overflow}px`);
       const font = await page.evaluate(() => document.fonts.check('16px Inter'));

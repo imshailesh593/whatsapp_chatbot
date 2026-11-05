@@ -1,3 +1,4 @@
+import { SITE_JS } from './siteScript';
 import type { FastifyInstance, FastifyReply } from 'fastify';
 import { PRODUCT_NAME } from './brand';
 import { PLANS, GRACE_DAYS } from './plans';
@@ -194,6 +195,76 @@ table.t th,table.t td{border:1px solid var(--line);padding:11px 15px;text-align:
 @media (max-width:980px){.hero .wrap{grid-template-columns:1fr;gap:36px}.stage{padding:0 0 64px 0;max-width:560px;margin:0 auto;width:100%}.stage .phone{right:-6px}.split{grid-template-columns:1fr;gap:40px}.rev .vis{order:2}.split .vis{order:2}.vs{grid-template-columns:1fr}.fl{grid-template-columns:1fr 1fr}.uses{grid-template-columns:1fr 1fr}.uses .card{border-right:1px solid var(--line)!important;border-bottom:1px solid var(--line)!important}.g3,.g4{grid-template-columns:1fr 1fr}.stats .wrap{grid-template-columns:1fr 1fr}.stat:nth-child(3){border-left:0;padding-left:0}section{padding:72px 0}nav.main a.h{display:none}}
 @media (max-width:620px){.fl,.uses,.g3,.g2,.g4{grid-template-columns:1fr}.plan ul{grid-template-columns:1fr}.plan.pop{padding:28px 22px}.cta-band{padding:56px 22px;border-radius:24px}.wrap{padding:0 20px}.hero{padding:44px 0 24px}.stage .phone{width:200px;right:-6px}.stage{padding-bottom:60px}.stat b{font-size:38px}.price{font-size:52px}}
 @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important;scroll-behavior:auto!important}.stage .chat .b{opacity:1}.win{transform:none}}
+
+/* ---- techy layer: blueprint grid, mono labels, motion ---- */
+@property --ang{syntax:"<angle>";initial-value:0deg;inherits:false}
+:root{--mono:ui-monospace,SFMono-Regular,"JetBrains Mono",Menlo,Consolas,monospace}
+#prog{position:fixed;top:0;left:0;right:0;height:3px;background:linear-gradient(90deg,#10b981,#22d3ee,#818cf8);transform-origin:left;transform:scaleX(0);z-index:60;pointer-events:none}
+header.top{transition:border-color .2s,box-shadow .2s}
+header.top.stuck{border-bottom-color:var(--line);box-shadow:0 8px 30px -22px rgba(var(--shadow),.5)}
+.hero:before{content:"";position:absolute;inset:0;background-image:linear-gradient(color-mix(in srgb,var(--ink) 7%,transparent) 1px,transparent 1px),linear-gradient(90deg,color-mix(in srgb,var(--ink) 7%,transparent) 1px,transparent 1px);background-size:56px 56px;-webkit-mask-image:radial-gradient(70% 80% at 70% 30%,#000,transparent 78%);mask-image:radial-gradient(70% 80% at 70% 30%,#000,transparent 78%);pointer-events:none}
+.orb{position:absolute;border-radius:50%;filter:blur(64px);pointer-events:none;animation:float 16s ease-in-out infinite}
+.orb.o1{width:340px;height:340px;right:6%;top:40px;background:color-mix(in srgb,var(--g2) 70%,transparent)}
+.orb.o2{width:280px;height:280px;right:28%;top:300px;background:color-mix(in srgb,var(--g3) 60%,transparent);animation-delay:-7s;animation-duration:19s}
+@keyframes float{0%,100%{transform:translate(0,0) scale(1)}33%{transform:translate(-36px,26px) scale(1.08)}66%{transform:translate(30px,-22px) scale(.94)}}
+.eyebrow{font-family:var(--mono);text-transform:uppercase;letter-spacing:.09em;font-size:12.5px;font-weight:600}
+.eyebrow:before{animation:ping 2.4s ease-out infinite}
+@keyframes ping{0%{box-shadow:0 0 0 0 color-mix(in srgb,var(--accent) 55%,transparent)}80%,100%{box-shadow:0 0 0 9px transparent}}
+.btn.p{position:relative;overflow:hidden}
+.btn.p:before{content:"";position:absolute;top:0;left:-70%;width:40%;height:100%;background:linear-gradient(100deg,transparent,rgba(255,255,255,.38),transparent);transform:skewX(-20deg);animation:shine 5s ease-in-out infinite}
+@keyframes shine{0%,62%{left:-70%}100%{left:140%}}
+.btn.s,.btn.p{will-change:transform}
+/* reveal on scroll (only when the script runs) */
+.js .rv{opacity:0;transform:translateY(26px);transition:opacity .8s cubic-bezier(.2,.7,.2,1),transform .8s cubic-bezier(.2,.7,.2,1)}
+.js .rv.in{opacity:1;transform:none}
+/* pointer spotlight */
+.card,.mock,.term{position:relative}
+.card:after,.mock:after{content:"";position:absolute;inset:0;border-radius:inherit;pointer-events:none;background:radial-gradient(340px circle at var(--mx,-999px) var(--my,-999px),color-mix(in srgb,var(--accent) 15%,transparent),transparent 70%);opacity:0;transition:opacity .25s}
+.card:hover:after,.mock:hover:after{opacity:1}
+/* live event ticker */
+.ticker{border-top:1px solid var(--line);border-bottom:1px solid var(--line);background:var(--alt);overflow:hidden;padding:15px 0;white-space:nowrap;font:500 13px/1 var(--mono);color:var(--ink2);-webkit-mask-image:linear-gradient(90deg,transparent,#000 8%,#000 92%,transparent);mask-image:linear-gradient(90deg,transparent,#000 8%,#000 92%,transparent)}
+.ticker .track{display:inline-flex;gap:54px;animation:marq 60s linear infinite;padding-left:54px}
+.ticker:hover .track{animation-play-state:paused}
+.ticker span{display:inline-flex;align-items:center;gap:9px}
+.ticker i{width:7px;height:7px;border-radius:50%;background:var(--accent);box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 25%,transparent);display:inline-block}
+.ticker time{color:var(--mute)}.ticker b{color:var(--brand);font-weight:600}
+@keyframes marq{to{transform:translateX(-50%)}}
+/* flow diagram */
+.flow{background:var(--card);border:1px solid var(--line);border-radius:24px;padding:28px 24px;overflow-x:auto;box-shadow:0 40px 80px -50px rgba(var(--shadow),.4)}
+.flow svg{width:100%;min-width:820px;height:auto;display:block}
+.flow .node rect{fill:var(--bg);stroke:var(--line);stroke-width:1.5}
+.flow .node.hot rect{stroke:var(--accent);filter:drop-shadow(0 8px 18px color-mix(in srgb,var(--accent) 35%,transparent))}
+.flow .node text{fill:var(--ink);font:600 15px Inter,system-ui,sans-serif;text-anchor:middle}
+.flow .node .sm{fill:var(--mute);font:500 12px var(--mono)}
+.flow .base{stroke:var(--line);stroke-width:2;fill:none}
+.flow .run{stroke:url(#fg);stroke-width:2.5;fill:none;stroke-dasharray:7 9;animation:dash 1.1s linear infinite}
+@keyframes dash{to{stroke-dashoffset:-32}}
+.flow .pulse{fill:var(--accent)}
+.flow .ring{fill:none;stroke:var(--accent);stroke-width:2;transform-box:fill-box;transform-origin:center;animation:ring 2.6s ease-out infinite}
+@keyframes ring{0%{transform:scale(.6);opacity:.9}100%{transform:scale(2.4);opacity:0}}
+/* code window */
+.term{background:#0a1020;color:#d7e3f4;border-radius:20px;border:1px solid #1c2842;font:13.5px/1.75 var(--mono);box-shadow:0 50px 90px -40px rgba(10,16,32,.7);overflow:hidden}
+.term .tb{display:flex;align-items:center;gap:7px;padding:13px 16px;border-bottom:1px solid #1c2842;color:#7f93b4;font-size:12px}
+.term .tb i{width:10px;height:10px;border-radius:50%;background:#26334f;display:inline-block}
+.term .tb span{margin-left:8px}
+.term .code{padding:18px 20px 22px;overflow-x:auto}
+.split>*,.grid>*,.vs>*{min-width:0}
+.term{max-width:100%}
+.term .ln{display:block;white-space:pre;overflow:hidden;max-width:100%}
+.js .term:not(.typing) .ln{max-width:0}
+.term.typing .ln{max-width:0;animation:type .8s steps(38,end) forwards;animation-delay:calc(var(--i)*.42s)}
+@keyframes type{from{max-width:0}to{max-width:100%}}
+.term .k{color:#7dd3fc}.term .s{color:#86efac}.term .n{color:#fcd34d}.term .c{color:#64789c}.term .m{color:#f9a8d4}
+.term .caret:after{content:"▍";color:#86efac;animation:blink 1s steps(1) infinite;margin-left:2px}
+@keyframes blink{50%{opacity:0}}
+.chipsrow{display:flex;flex-wrap:wrap;gap:8px;margin-top:22px}
+.chipsrow span{font:500 12.5px var(--mono);border:1px solid var(--line);border-radius:8px;padding:6px 11px;background:var(--card);color:var(--ink2)}
+/* pricing outline turns */
+.plan.pop:before{background:conic-gradient(from var(--ang),var(--g1),var(--g2),var(--g3),var(--g4),var(--g1));animation:spin 7s linear infinite}
+@keyframes spin{to{--ang:360deg}}
+.stat b{font-variant-numeric:tabular-nums}
+@media (max-width:620px){.orb{display:none}.ticker{font-size:12px}}
+@media (prefers-reduced-motion:reduce){.term .ln{max-width:100%!important}.orb,.ticker .track,.btn.p:before{animation:none!important}#prog{display:none}}
 `;
 
 type Doc = { title: string; description: string; path: string; body: string; landing?: boolean };
@@ -216,7 +287,9 @@ function page(d: Doc): string {
 <link rel="apple-touch-icon" href="/admin/wappo-icon.png">
 ${canon}
 <style>${CSS}</style>
+${d.landing ? '<script src="/site.js" defer></script>' : ''}
 </head><body>
+${d.landing ? '<div id="prog" aria-hidden="true"></div>' : ''}
 <header class="top"><div class="wrap">
 <a class="logo" href="/"><img src="/admin/wappo-icon.png" alt="${name} logo" width="32" height="32">${name}</a>
 <nav class="main">
@@ -351,7 +424,7 @@ function landing(region: Region): string {
   ];
 
   const body = `
-<section class="hero"><div class="hero-bg" aria-hidden="true"></div><div class="wrap">
+<section class="hero"><div class="hero-bg" aria-hidden="true"><span class="orb o1"></span><span class="orb o2"></span></div><div class="wrap">
 <div>
 <span class="eyebrow">WhatsApp lead capture, on your own number</span>
 <h1>Turn every WhatsApp enquiry into a qualified lead.</h1>
@@ -375,6 +448,8 @@ function landing(region: Region): string {
 <div class="b in">Great! Reply <b>BOOK</b> to pick a date and time.</div></div></div>
 </div>
 </div></section>
+
+<div class="ticker" aria-hidden="true"><div class="track"><span><i></i><time>09:41:02</time> new chat <b>+91 98••• ••210</b> · Whitening</span><span><i></i><time>09:41:09</time> answers saved 4/4 <b>Priya S.</b> · lead created</span><span><i></i><time>09:41:15</time> booked <b>Tue 11:00</b> · alert sent to you</span><span><i></i><time>09:42:31</time> webhook 200 <b>lead.created</b> · Google Sheets</span><span><i></i><time>09:44:08</time> asked for a person <b>Rohan M.</b> · AI briefing sent</span><span><i></i><time>09:47:50</time> reminder sent <b>Neha D.</b> · Tue 11:00</span><span><i></i><time>09:52:13</time> new chat <b>+44 7••• ••918</b> · Check-up</span><span><i></i><time>09:52:40</time> replied in <b>Hindi</b> · language chosen by the customer</span><span><i></i><time>09:41:02</time> new chat <b>+91 98••• ••210</b> · Whitening</span><span><i></i><time>09:41:09</time> answers saved 4/4 <b>Priya S.</b> · lead created</span><span><i></i><time>09:41:15</time> booked <b>Tue 11:00</b> · alert sent to you</span><span><i></i><time>09:42:31</time> webhook 200 <b>lead.created</b> · Google Sheets</span><span><i></i><time>09:44:08</time> asked for a person <b>Rohan M.</b> · AI briefing sent</span><span><i></i><time>09:47:50</time> reminder sent <b>Neha D.</b> · Tue 11:00</span><span><i></i><time>09:52:13</time> new chat <b>+44 7••• ••918</b> · Check-up</span><span><i></i><time>09:52:40</time> replied in <b>Hindi</b> · language chosen by the customer</span></div></div>
 
 <section class="stats"><div class="wrap">
 <div class="stat"><b>10 min</b><span>typical set-up</span></div>
@@ -461,6 +536,33 @@ function landing(region: Region): string {
 <h2 style="margin-top:14px">A simple CRM built in</h2>
 <p>Every lead lands in a board you can move through your own stages, with owner, tags, notes and a full timeline. Add teammates with roles, and export to CSV any time.</p>
 <ul class="tick"><li>List and board views, search and filters</li><li>Follow-up reminders on any lead</li><li>Analytics: conversations, funnel, sources and drop-off points</li></ul>
+</div>
+</div></section>
+
+<section class="alt" id="flow"><div class="wrap">
+<div class="center"><span class="eyebrow">How a message travels</span><h2 style="margin-top:14px">From first message to booked, in seconds</h2>
+<p class="sub">Every step happens on its own, around the clock. You only step in when a person is really needed.</p></div>
+<div class="flow"><svg viewBox="0 0 1000 220" role="img" aria-label="A customer message goes to the AI assistant, becomes a lead in the CRM, books an appointment and alerts you">
+<defs><linearGradient id="fg" gradientUnits="userSpaceOnUse" x1="20" y1="0" x2="980" y2="0"><stop offset="0" stop-color="#10b981"/><stop offset=".55" stop-color="#22d3ee"/><stop offset="1" stop-color="#818cf8"/></linearGradient></defs>
+<path class="base" d="M20 110 H980"/><path class="run" d="M20 110 H980"/>
+<circle class="pulse" r="6"><animateMotion dur="6s" repeatCount="indefinite" path="M20 110 H980"/></circle>
+<circle class="pulse" r="4" opacity=".6"><animateMotion dur="6s" begin="-3s" repeatCount="indefinite" path="M20 110 H980"/></circle>
+<g class="node"><rect x="20" y="68" width="152" height="84" rx="16"/><text x="96" y="104">Customer</text><text class="sm" x="96" y="128">WhatsApp</text></g>
+<g class="node hot"><circle class="ring" cx="298" cy="110" r="22"/><rect x="222" y="68" width="152" height="84" rx="16"/><text x="298" y="104">AI assistant</text><text class="sm" x="298" y="128">asks + answers</text></g>
+<g class="node"><rect x="424" y="68" width="152" height="84" rx="16"/><text x="500" y="104">Lead saved</text><text class="sm" x="500" y="128">CRM + stage</text></g>
+<g class="node"><rect x="626" y="68" width="152" height="84" rx="16"/><text x="702" y="104">Booking</text><text class="sm" x="702" y="128">date + time</text></g>
+<g class="node"><rect x="828" y="68" width="152" height="84" rx="16"/><text x="904" y="104">You</text><text class="sm" x="904" y="128">instant alert</text></g>
+</svg></div>
+</div></section>
+
+<section><div class="wrap split rev">
+<div class="vis"><div class="term"><div class="tb"><i></i><i></i><i></i><span>webhook · lead.created</span></div><div class="code"><span class="ln c" style="--i:0"># every new lead is pushed to your tools, signed and retried</span><span class="ln" style="--i:1"><span class="m">POST</span> https://hooks.your-app.com/wappo</span><span class="ln" style="--i:2"><span class="k">X-Event</span>: <span class="s">lead.created</span></span><span class="ln" style="--i:3"><span class="k">X-Signature</span>: <span class="s">sha256=9f2c…</span></span><span class="ln" style="--i:4">{</span><span class="ln" style="--i:5">  <span class="k">"event"</span>: <span class="s">"lead.created"</span>,</span><span class="ln" style="--i:6">  <span class="k">"lead"</span>: { <span class="k">"name"</span>: <span class="s">"Priya S."</span>, <span class="k">"service"</span>: <span class="s">"Whitening"</span>,</span><span class="ln" style="--i:7">           <span class="k">"stage"</span>: <span class="s">"new"</span>, <span class="k">"answers"</span>: { <span class="c">…</span> } }</span><span class="ln" style="--i:8">}</span><span class="ln c" style="--i:9"># or read and move leads yourself</span><span class="ln" style="--i:10"><span class="n">$</span> curl -H <span class="s">"Authorization: Bearer lk_…"</span> \\</span><span class="ln caret" style="--i:11">       https://your-app.com/api/v1/leads</span></div></div><div class="eg">Illustration: real payloads carry the full lead and every answer</div></div>
+<div>
+<span class="eyebrow">Connect your tools</span>
+<h2 style="margin-top:14px">Plug it into everything you already use</h2>
+<p>Every new lead and every stage change can be sent to Zapier, Make, n8n, a Google Sheet or your own server. A REST API lets your systems read leads and move them through your pipeline.</p>
+<ul class="tick"><li>Signed webhooks with automatic retries</li><li>Secret API keys you create and revoke yourself</li><li>Included in the plan, no extra fee</li></ul>
+<div class="chipsrow"><span>Zapier</span><span>Make</span><span>n8n</span><span>Google Sheets</span><span>Your own server</span></div>
 </div>
 </div></section>
 
@@ -847,7 +949,7 @@ export function registerSite(app: FastifyInstance): void {
       .header('Content-Type', 'text/html; charset=utf-8')
       .header('Cache-Control', perVisitor ? 'private, no-cache' : 'public, max-age=300')
       .header('Vary', perVisitor ? 'Cookie, X-Real-Ip, X-Forwarded-For' : 'Accept-Encoding')
-      .header('Content-Security-Policy', "default-src 'none'; style-src 'unsafe-inline'; font-src 'self'; img-src 'self' data:; base-uri 'none'; form-action 'self'; frame-ancestors 'none'")
+      .header('Content-Security-Policy', "default-src 'none'; script-src 'self'; style-src 'unsafe-inline'; font-src 'self'; img-src 'self' data:; base-uri 'none'; form-action 'self'; frame-ancestors 'none'")
       .header('X-Content-Type-Options', 'nosniff')
       .header('Referrer-Policy', 'strict-origin-when-cross-origin')
       .send(html);
@@ -866,6 +968,8 @@ export function registerSite(app: FastifyInstance): void {
   app.get('/about', async (_req, reply) => send(reply, about()));
   app.get('/pricing', async (req, reply) => send(reply, pricing(regionOf(req, reply)), 200, true));
   app.get('/shipping', async (_req, reply) => send(reply, shipping()));
+
+  app.get('/site.js', async (_req, reply) => reply.header('Content-Type', 'application/javascript; charset=utf-8').header('Cache-Control', 'public, max-age=300').header('X-Content-Type-Options', 'nosniff').send(SITE_JS));
 
   app.get('/robots.txt', async (_req, reply) =>
     reply.type('text/plain').send(`User-agent: *\nAllow: /\nDisallow: /admin/\nDisallow: /qr\nDisallow: /api/\n${base() ? `Sitemap: ${base()}/sitemap.xml\n` : ''}`)

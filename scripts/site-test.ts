@@ -32,11 +32,16 @@ const ok = (c: any, m: string) => { if (!c) throw new Error('FAIL: ' + m); conso
     const b = html[p];
     ok(b.includes('© ' + new Date().getFullYear() + ' Rajni'), `${p}: the footer names the operator, Rajni`);
     ok(['/about', '/pricing', '/privacy', '/terms', '/refunds', '/shipping', '/contact'].every((l) => b.includes(`href="${l}"`)), `${p}: the footer links every policy and company page`);
-    ok(!/<script/i.test(b), `${p}: no scripts`);
+    ok(p === '/' ? (b.match(/<script/gi) ?? []).length === 1 && b.includes('<script src="/site.js" defer></script>') : !/<script/i.test(b), p === '/' ? `${p}: one script, the site's own /site.js` : `${p}: no scripts`);
     ok(/<title>[^<]{10,}<\/title>/.test(b) && /<meta name="description" content="[^"]{20,}">/.test(b) && b.includes('width=device-width'), `${p}: has a title, description and is mobile-ready`);
     ok(b.includes(`<link rel="canonical" href="https://site.example${p}">`), `${p}: canonical address uses PUBLIC_URL`);
   }
   ok((await get('/')).headers['content-security-policy']!.toString().includes("default-src 'none'"), 'pages are served with a strict content security policy');
+  const csp = (await get('/')).headers['content-security-policy']!.toString();
+  ok(csp.includes("script-src 'self'") && !/unsafe-eval|script-src[^;]*unsafe-inline|https?:\/\//.test(csp), 'scripts may only come from the site itself: no inline, no eval, no other origins');
+  const js = await get('/site.js');
+  ok(js.statusCode === 200 && String(js.headers['content-type']).startsWith('application/javascript') && js.body.includes('IntersectionObserver') && !/fetch\(|XMLHttpRequest|eval\(|document\.write|https?:\/\//.test(js.body), 'the motion script is served from the site and makes no network calls');
+  ok(js.body.includes('prefers-reduced-motion') && html['/'].includes('id="prog"') && html['/'].includes('class="ticker"') && html['/'].includes('id="flow"'), 'it respects reduced motion, and the page has the progress line, the live ticker and the flow diagram');
 
   ok(html['/'].includes('src="/admin/wappo-icon.png"') && html['/'].includes('rel="icon"') && html['/'].includes('property="og:image" content="https://site.example/admin/wappo-logo.jpg"'), 'the Wappo logo is in the header and footer, is the browser-tab icon and the share image');
   ok((await get('/')).headers['content-security-policy']!.toString().includes("img-src 'self' data:"), "the policy allows the site's own images");
