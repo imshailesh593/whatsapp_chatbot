@@ -43,7 +43,7 @@ After signing up, a short set-up walks you through five steps:
 5. **Go live**, or keep the bot paused and finish later.
 
 ### Link your WhatsApp number
-1. Open **Bot & Settings** and press **Connect WhatsApp** (or use step 3 of the set-up).
+1. Open **Settings** and press **Connect WhatsApp** (or use step 3 of the set-up).
 2. A QR code appears.
 3. On the phone that holds your business number: open WhatsApp → **Settings → Linked devices → Link a device** and scan the QR code.
 4. The status changes to **Connected**.
@@ -56,7 +56,7 @@ Notes:
 - Keep the phone in normal use. If you log the device out from your phone, the bot stops and shows a new QR code.
 
 ### Go live
-In **Bot & Settings**, press **Bot is paused · go live** and confirm. From then on the bot replies to everyone who messages your number. You can pause it again the same way.
+In **Settings**, press **Bot is paused · go live** and confirm. From then on the bot replies to everyone who messages your number. You can pause it again the same way.
 
 ---
 
@@ -89,12 +89,12 @@ Sign in at your dashboard address. The tabs across the top:
 
 | Tab | What it is for |
 |---|---|
-| **Qualified Leads CRM** | Every contact and lead, with stages, owners, tags and follow-ups |
-| **Live Inbox & Human Takeover** | Read conversations and reply yourself |
+| **Leads** | Every contact and lead, with stages, owners, tags and follow-ups |
+| **Inbox** | Read conversations and reply yourself |
 | **Bot Simulator** | Test the bot as a customer. Never sends to WhatsApp |
 | **Analytics** | Funnel, sources, trends |
 | **Broadcasts** | Send a message to many contacts, safely |
-| **Bot & Settings** | Everything you configure |
+| **Settings** | Everything you configure |
 
 The coloured strip under the header shows totals, and a banner tells you if the bot is paused, you have not subscribed yet, or WhatsApp is disconnected.
 
@@ -104,12 +104,12 @@ Agents (see [section 15](#15-your-team-and-roles)) only see the CRM, Inbox and S
 
 ## 4. Working your leads (CRM)
 
-Each customer who finishes the questions becomes a lead. Open **Qualified Leads CRM**.
+Each customer who finishes the questions becomes a lead. Open **Leads**.
 
 - **List and board.** Switch between a table and a board with one column per stage. Drag a card between columns, or change the stage from the lead's window.
 - **Search and filter** by name, phone or place, and by service, stage, owner or tag. A counter shows how many follow-ups are due.
 - **Open a lead** to see their answers, the whole message history and a **timeline** of everything that happened (stage changes, owner, notes, appointments, hand-offs).
-- **Stage.** The default pipeline is New lead → Contacted → Follow-up → Booked → Won / Lost. Customize it under **Lead pipeline** in Bot & Settings. The bot moves a lead to **Booked** when the customer confirms a booking. It never pulls a Won or Lost lead back.
+- **Stage.** The default pipeline is New lead → Contacted → Follow-up → Booked → Won / Lost. Customize it under **Lead pipeline** in Settings. The bot moves a lead to **Booked** when the customer confirms a booking. It never pulls a Won or Lost lead back.
 - **Owner.** Assign the lead to a team member.
 - **Tags.** Short labels such as `hot` or `call-back`.
 - **Follow-up date.** Pick a date and time. When it arrives you get one reminder alert.
@@ -123,7 +123,7 @@ Where a lead came from is shown as its **source** when they used a tagged chat l
 
 ## 5. Live inbox and taking over a chat
 
-**Live Inbox & Human Takeover** shows real message history per customer.
+**Inbox** shows real message history per customer.
 
 To reply yourself:
 1. Open the customer's chat.
@@ -148,7 +148,7 @@ If a customer writes something like "can I talk to a real person?", "connect me 
 
 You then reply from your phone or the inbox. To give the chat back to the bot, press the bot button (or send `!resume`).
 
-You can change the message the customer sees, or switch the feature off, in **Bot & Settings → Talk to a person**. The briefing counts as one AI answer against your plan.
+You can change the message the customer sees, or switch the feature off, in **Settings → Talk to a person**. The briefing counts as one AI answer against your plan.
 
 ---
 
@@ -157,7 +157,7 @@ You can change the message the customer sees, or switch the feature off, in **Bo
 Optional. Customers pick a **date**, then a **time**, right in WhatsApp. They get a confirmation message, and you get a WhatsApp alert for every booking.
 
 ### Switch it on
-1. Open **Bot & Settings → Appointments**.
+1. Open **Settings → Appointments**.
 2. Press **Turn on booking (built-in calendar)**. No Google account is needed: the bot offers your working hours, minus appointments already booked here.
    - Or press **Connect Google Calendar instead** (if the service operator has added Google keys). Then the bot also skips times busy in your Google Calendar and adds every booking to it.
 3. Set your rules and press **Save**:
@@ -217,7 +217,7 @@ To stop, press **Disconnect**. Existing events stay in your calendar.
 
 ## 8. Setting up your bot
 
-All under **Bot & Settings**. Changes apply to new messages straight away. Test every change in the **Bot Simulator**.
+All under **Settings**. Changes apply to new messages straight away. Test every change in the **Bot Simulator**.
 
 ### Business & bot
 - **Business name, tagline, description.** Shown in greetings and used by the AI.
@@ -240,7 +240,7 @@ Rename, recolor, add or remove stages. "New lead" and "Booked" are built in and 
 
 ## 9. Lead alerts
 
-In **Bot & Settings → Lead alerts** enter:
+In **Settings → Lead alerts** enter:
 - **WhatsApp number** (with country code, e.g. `919876543210`). Alerts are sent from your linked number, so connect WhatsApp first.
 - **Email.** Email works only if the service has email switched on. If not, you will see a note saying so.
 
@@ -273,7 +273,7 @@ Only message people who have contacted you or agreed to hear from you. Unwanted 
 
 ## 12. Connecting other tools
 
-Under **Bot & Settings**. Included with your plan.
+Under **Settings**. Included with your plan.
 
 - **Click-to-chat links.** Ready-made `wa.me` links for your website, ads and posters. Add a tag (for example `summer24`) and every lead from that link is recorded with that source, visible in the CRM and Analytics.
 - **Webhooks.** Give us a web address and we send it a JSON message whenever a lead is created or changes stage. Each request is signed (`X-Signature`, an HMAC-SHA256 of the body using your webhook secret) and failures are retried. Works with Zapier, Make, n8n, your own server, or a Google Sheet (a ready-made Apps Script is provided). Up to 5 webhooks.
@@ -293,7 +293,7 @@ There is one plan, **Pro**: ₹499 a month in India or $19 a month elsewhere. Th
 
 Pro includes 1 WhatsApp number.
 
-**Language and follow-ups** (Bot & Settings → Business profile, section "Language and follow-ups"):
+**Language and follow-ups** (Settings → Business profile, section "Language and follow-ups"):
 - *Ask the customer's preferred language first*: the first message asks for a language, and the menu, questions and replies are then written in it. Translation uses your monthly AI answers.
 - *Follow up automatically*: customers who go quiet get a polite nudge one day and three days after their last message (daytime only). It stops for a week once the consultation link has been sent to that customer, and when they reply, send STOP, you take over, or the lead is Won, Lost or Booked.
 - Each menu option can have its own *closing message* (Menu & questions), for example with the right website link.
@@ -319,7 +319,7 @@ What happens at a limit:
 
 ## 14. Refer and earn
 
-If your service runs a referral programme you will see **Refer & earn** in Bot & Settings.
+If your service runs a referral programme you will see **Refer & earn** in Settings.
 
 - Copy your personal link and share it.
 - You earn a percentage of what it pays for its first payments. The percentage and number of payments are shown on the card.
@@ -332,7 +332,7 @@ For privacy, the businesses you referred are shown with shortened names.
 
 ## 15. Your team and roles
 
-Add people under **Team** (bottom of Bot & Settings). Share their password privately. They can change it from the account menu.
+Add people under **Team** (bottom of Settings). Share their password privately. They can change it from the account menu.
 
 | Role | Can do |
 |---|---|
@@ -378,7 +378,7 @@ Your plan limits the number of team members.
 If something still looks wrong, note what you did, what you expected and the time, and send it to your service provider.
 
 ## Changing how the bot answers (Gemini prompter)
-Under **Bot & Settings → Business & bot → How the bot answers questions** you can write rules for the *style* of free answers (length, tone, what to ask back, when to bring in a person). Facts such as prices and links go in the facts box above it.
+Under **Settings → Business & bot → How the bot answers questions** you can write rules for the *style* of free answers (length, tone, what to ask back, when to bring in a person). Facts such as prices and links go in the facts box above it.
 1. Type the change in plain words, for example "keep answers under three lines and always ask for the customer's city", and press **Suggest change**.
 2. Gemini shows the rewritten instructions with a one-line summary. Press **Use these instructions** (or Discard).
 3. Press **Save** and try it in the Bot Simulator. Nothing changes for customers until you save.

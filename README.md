@@ -24,7 +24,7 @@ Each business is a **workspace** with its own menu, questions, branding, team, l
 ## Admin console (`/admin/`)
 Sign in with an admin email and password (add or remove admins under *Questionnaires & Settings*, change your own password from the account menu). Everything runs on the live database:
 - **Leads CRM**: every contact, search/filter, funnel progress, status (qualified / Topmate booked / follow-up), notes, CSV export.
-- **Live Inbox & Human Takeover**: real message history; pause the bot for a chat and reply from the console (sent through the linked WhatsApp).
+- **Inbox**: real message history; pause the bot for a chat and reply from the console (sent through the linked WhatsApp).
 - **Bot Simulator**: chat with the real bot logic; nothing is sent to WhatsApp. Test data is hidden from CRM/stats/export unless "Show simulator data" is ticked.
 - **Questionnaires & Settings**: the live question matrix, Topmate link, WhatsApp connection status.
 

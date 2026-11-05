@@ -222,7 +222,7 @@ If a send fails, the alert test shows the provider's message (for example "domai
 2. Set up the OAuth consent screen. Add your own account as a test user while testing. To let any customer connect their calendar you must publish the app, and Google may require a verification review because the calendar scope is sensitive.
 3. Create an **OAuth client ID**, type **Web application**. Add this authorised redirect URI exactly: `https://<your-domain>/admin/api/calendar/callback` (it must match `PUBLIC_URL`).
 4. Put the ID and secret in `.env` as `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET`, make sure `PUBLIC_URL` is set, and restart.
-5. In a test business: Bot & Settings → Appointments → Connect Google Calendar.
+5. In a test business: Settings → Appointments → Connect Google Calendar.
 
 Each business connects its own Google account. Their refresh token is stored encrypted. Disconnecting revokes it at Google.
 

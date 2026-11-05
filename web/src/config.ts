@@ -3,12 +3,12 @@ import type { StageDef } from './types';
 /** One small dot in the badge's own colour, so every service looks the same apart from its colour. */
 const DOT = '●';
 const BADGES = [
-  'bg-blue-500/15 text-blue-300 border-blue-500/30',
-  'bg-emerald-500/15 text-emerald-300 border-emerald-500/30',
-  'bg-purple-500/15 text-purple-300 border-purple-500/30',
-  'bg-amber-500/15 text-amber-300 border-amber-500/30',
-  'bg-cyan-500/15 text-cyan-300 border-cyan-500/30',
-  'bg-rose-500/15 text-rose-300 border-rose-500/30'
+  'bg-info-soft text-info border-info-line/30',
+  'bg-brand-soft text-brand-text border-brand/30',
+  'bg-violet-soft text-violet border-violet-line/30',
+  'bg-warn-soft text-warn border-warn-line/30',
+  'bg-info-soft text-info border-info-line/30',
+  'bg-danger-soft text-danger border-danger-line/30'
 ];
 
 /** Services are defined per business, so the colour is derived from the service key. */
@@ -19,15 +19,15 @@ export function serviceStyle(key: string | null, title: string | null) {
 }
 
 export const COLOR_CLS: Record<string, string> = {
-  emerald: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40',
-  blue: 'bg-blue-500/20 text-blue-300 border-blue-500/40',
-  amber: 'bg-amber-500/20 text-amber-300 border-amber-500/40',
-  purple: 'bg-purple-500/20 text-purple-300 border-purple-500/40',
-  green: 'bg-green-500/20 text-green-300 border-green-500/40',
-  rose: 'bg-rose-500/20 text-rose-300 border-rose-500/40',
-  orange: 'bg-orange-500/20 text-orange-300 border-orange-500/40',
-  cyan: 'bg-cyan-500/20 text-cyan-300 border-cyan-500/40',
-  slate: 'bg-slate-500/20 text-slate-300 border-slate-500/40'
+  emerald: 'bg-brand-soft text-brand-text border-brand/40',
+  blue: 'bg-info-soft text-info border-info-line/40',
+  amber: 'bg-warn-soft text-warn border-warn-line/40',
+  purple: 'bg-violet-soft text-violet border-violet-line/40',
+  green: 'bg-brand-soft text-brand-text border-brand/40',
+  rose: 'bg-danger-soft text-danger border-danger-line/40',
+  orange: 'bg-warn-soft text-warn border-warn-line/40',
+  cyan: 'bg-info-soft text-info border-info-line/40',
+  slate: 'bg-muted/20 text-fg2 border-line-strong/40'
 };
 
 /** Label and badge classes for a contact's pipeline stage (null = still answering the questions). */

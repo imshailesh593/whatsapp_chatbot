@@ -39,19 +39,19 @@ export default function PipelineEditor({ stages: initial, onSaved }: { stages: S
     }
   }
 
-  const input = 'bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-emerald-500';
-  const iconBtn = 'p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 disabled:opacity-30 disabled:hover:bg-transparent transition';
+  const input = 'bg-sunken border border-line rounded-lg px-3 py-2 text-xs text-fg focus:outline-none focus:border-brand/40';
+  const iconBtn = 'p-1.5 rounded-lg text-muted hover:text-fg hover:bg-subtle disabled:opacity-30 disabled:hover:bg-transparent transition';
 
   return (
-    <div className="bg-slate-950 border border-slate-800 rounded-2xl p-5 shadow-lg">
+    <div className="bg-card border border-line rounded-2xl p-5 shadow-lg">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h3 className="font-bold text-white text-base">Lead pipeline</h3>
-          <p className="text-xs text-slate-400 mt-1 max-w-xl">
+          <h3 className="font-bold text-fg text-base">Lead pipeline</h3>
+          <p className="text-xs text-muted mt-1 max-w-xl">
             The stages a lead moves through. New leads start in <strong>New lead</strong>; when a customer says they have booked, the bot moves them to <strong>Booked</strong>. Those two stay, you can rename them and add your own.
           </p>
         </div>
-        <button onClick={save} disabled={busy || !dirty} className="flex items-center space-x-1.5 px-4 py-2 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs rounded-lg transition disabled:opacity-40">
+        <button onClick={save} disabled={busy || !dirty} className="flex items-center space-x-1.5 px-4 py-2 bg-brand hover:bg-brand text-on-brand font-bold text-xs rounded-lg transition disabled:opacity-40">
           <Save className="w-3.5 h-3.5" /><span>{busy ? 'Saving…' : 'Save pipeline'}</span>
         </button>
       </div>
@@ -71,15 +71,15 @@ export default function PipelineEditor({ stages: initial, onSaved }: { stages: S
             </select>
             <button className={iconBtn} disabled={i <= 1} onClick={() => setStages(move(stages, i, -1))} title="Move up"><ArrowUp className="w-3.5 h-3.5" /></button>
             <button className={iconBtn} disabled={i === 0 || i === stages.length - 1} onClick={() => setStages(move(stages, i, 1))} title="Move down"><ArrowDown className="w-3.5 h-3.5" /></button>
-            <button className={iconBtn + ' hover:text-rose-400'} disabled={LOCKED.includes(s.key)} onClick={() => setStages(stages.filter((_, k) => k !== i))} title="Remove (leads in it go back to New lead)"><Trash2 className="w-3.5 h-3.5" /></button>
+            <button className={iconBtn + ' hover:text-danger'} disabled={LOCKED.includes(s.key)} onClick={() => setStages(stages.filter((_, k) => k !== i))} title="Remove (leads in it go back to New lead)"><Trash2 className="w-3.5 h-3.5" /></button>
           </div>
         ))}
       </div>
       <button disabled={stages.length >= 12} onClick={() => setStages([...stages, { key: '', label: '', color: 'slate', kind: 'open' }])}
-        className="mt-3 flex items-center space-x-1 text-xs text-emerald-400 hover:text-emerald-300 disabled:opacity-40">
+        className="mt-3 flex items-center space-x-1 text-xs text-brand-text hover:text-brand-text disabled:opacity-40">
         <Plus className="w-3.5 h-3.5" /><span>Add stage</span>
       </button>
-      {error && <p className="text-xs text-rose-400 mt-3" role="alert">{error}</p>}
+      {error && <p className="text-xs text-danger mt-3" role="alert">{error}</p>}
     </div>
   );
 }

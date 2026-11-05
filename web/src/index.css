@@ -1,5 +1,83 @@
+@import '@fontsource-variable/inter';
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-body { margin: 0; font-family: ui-sans-serif, system-ui, sans-serif; }
+/* Design tokens: every colour in the app comes from here, so light and dark stay consistent. Values are "R G B". */
+:root {
+  --app: 246 247 249;
+  --card: 255 255 255;
+  --sunken: 249 250 251;
+  --subtle: 241 244 248;
+  --line: 226 231 238;
+  --line-strong: 203 211 224;
+  --fg: 15 23 42;
+  --fg2: 51 65 85;
+  --muted: 100 116 139;
+  --brand: 4 120 87;
+  --brand-strong: 6 95 70;
+  --brand-soft: 232 250 241;
+  --brand-text: 4 120 87;
+  --on-brand: 255 255 255;
+  --danger: 190 18 60;
+  --danger-soft: 255 241 243;
+  --danger-line: 254 205 211;
+  --warn: 180 83 9;
+  --warn-soft: 255 247 230;
+  --warn-line: 252 222 150;
+  --info: 29 78 216;
+  --info-soft: 237 244 255;
+  --info-line: 191 215 254;
+  --violet: 109 40 217;
+  --violet-soft: 245 241 255;
+  --violet-line: 221 211 254;
+  --shadow: 15 23 42;
+  color-scheme: light;
+}
+
+.dark {
+  --app: 8 10 14;
+  --card: 16 19 26;
+  --sunken: 12 15 21;
+  --subtle: 28 33 43;
+  --line: 36 42 54;
+  --line-strong: 58 66 82;
+  --fg: 241 245 249;
+  --fg2: 203 213 225;
+  --muted: 139 150 168;
+  --brand: 16 185 129;
+  --brand-strong: 52 211 153;
+  --brand-soft: 11 39 31;
+  --brand-text: 52 211 153;
+  --on-brand: 3 18 12;
+  --danger: 251 113 133;
+  --danger-soft: 46 16 24;
+  --danger-line: 94 30 44;
+  --warn: 251 191 36;
+  --warn-soft: 44 33 10;
+  --warn-line: 92 68 16;
+  --info: 125 180 255;
+  --info-soft: 14 28 54;
+  --info-line: 34 62 112;
+  --violet: 183 160 255;
+  --violet-soft: 30 22 56;
+  --violet-line: 62 46 112;
+  --shadow: 0 0 0;
+  color-scheme: dark;
+}
+
+html { -webkit-text-size-adjust: 100%; font-size: 15px; }
+body {
+  margin: 0;
+  font-family: 'Inter Variable', Inter, ui-sans-serif, system-ui, sans-serif;
+  font-feature-settings: 'cv11', 'ss01';
+  background: rgb(var(--app));
+  color: rgb(var(--fg));
+  -webkit-font-smoothing: antialiased;
+}
+* { scrollbar-width: thin; scrollbar-color: rgb(var(--line-strong)) transparent; }
+::selection { background: rgb(var(--brand) / 0.25); }
+:focus-visible { outline: 2px solid rgb(var(--brand) / 0.6); outline-offset: 2px; }
+input, select, textarea { color: rgb(var(--fg)); }
+input::placeholder, textarea::placeholder { color: rgb(var(--muted) / 0.8); }
+input[type='checkbox'], input[type='radio'] { accent-color: rgb(var(--brand)); }

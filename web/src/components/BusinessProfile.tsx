@@ -86,19 +86,19 @@ export default function BusinessProfile({ workspace, onSaved }: { workspace: Wor
     }
   }
 
-  const input = 'w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-emerald-500';
-  const label = 'text-[11px] font-medium text-slate-400 block mb-1';
+  const input = 'w-full bg-sunken border border-line rounded-lg px-3 py-2 text-xs text-fg focus:outline-none focus:border-brand/40';
+  const label = 'text-[11px] font-medium text-muted block mb-1';
 
   return (
-    <div className="bg-slate-950 border border-slate-800 rounded-2xl p-5 shadow-lg">
+    <div className="bg-card border border-line rounded-2xl p-5 shadow-lg">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h3 className="font-bold text-white text-base">Business &amp; bot</h3>
-          <p className="text-xs text-slate-400 mt-1">What customers see in the greeting and sign-off, and what the AI knows about you.</p>
+          <h3 className="font-bold text-fg text-base">Business &amp; bot</h3>
+          <p className="text-xs text-muted mt-1">What customers see in the greeting and sign-off, and what the AI knows about you.</p>
         </div>
         <button type="button" onClick={toggleLive}
           className={`flex items-center space-x-1.5 px-4 py-2 font-bold text-xs rounded-lg border transition ${
-            workspace.botEnabled ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/40 hover:bg-emerald-500/25' : 'bg-amber-500/15 text-amber-300 border-amber-500/40 hover:bg-amber-500/25'}`}>
+            workspace.botEnabled ? 'bg-brand-soft text-brand-text border-brand/40 hover:bg-brand-soft' : 'bg-warn-soft text-warn border-warn-line/40 hover:bg-warn-soft'}`}>
           {workspace.botEnabled ? <Pause className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5" />}
           <span>{workspace.botEnabled ? 'Bot is live · pause' : 'Bot is paused · go live'}</span>
         </button>
@@ -124,89 +124,89 @@ export default function BusinessProfile({ workspace, onSaved }: { workspace: Wor
           <label className={label}>Facts the AI may use when customers ask questions (prices, hours, policies, FAQs)</label>
           <textarea rows={6} value={f.knowledge} maxLength={8000} onChange={set('knowledge')} className={input} placeholder="Opening hours: Mon–Sat 9–6&#10;Consultation costs ₹500…&#10;The AI will not invent anything that is not written here." />
         </div>
-        <div className="sm:col-span-2 border-t border-slate-800 pt-4">
-          <h4 className="text-sm font-bold text-white flex items-center gap-1.5"><Sparkles className="w-4 h-4 text-emerald-400" />How the bot answers questions</h4>
-          <p className="text-[11px] text-slate-500 mt-1">Rules for the style of free answers: length, tone, what to ask back, when to bring in a person. Facts (prices, hours, links) belong in the box above. Describe a change and Gemini rewrites the rules for you to review.</p>
+        <div className="sm:col-span-2 border-t border-line pt-4">
+          <h4 className="text-sm font-bold text-fg flex items-center gap-1.5"><Sparkles className="w-4 h-4 text-brand-text" />How the bot answers questions</h4>
+          <p className="text-[11px] text-muted mt-1">Rules for the style of free answers: length, tone, what to ask back, when to bring in a person. Facts (prices, hours, links) belong in the box above. Describe a change and Gemini rewrites the rules for you to review.</p>
         </div>
         <div className="sm:col-span-2">
           <label className={label}>Answering instructions</label>
           <textarea rows={5} value={f.aiInstructions} maxLength={4000} onChange={set('aiInstructions')} className={input}
             placeholder={'- Keep answers under four short lines\n- Always end by asking which service they are interested in\n- If the customer sounds upset, offer to connect them with a person'} />
         </div>
-        <div className="sm:col-span-2 bg-slate-900 border border-slate-800 rounded-xl p-3">
+        <div className="sm:col-span-2 bg-sunken border border-line rounded-xl p-3">
           <label className={label}>Ask Gemini to change how the bot answers</label>
           <div className="flex gap-2">
             <input value={ask} maxLength={1000} onChange={(e) => setAsk(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); if (ask.trim().length > 2 && !asking) suggest(); } }}
               className={input} placeholder="e.g. Make answers shorter and friendlier, and always ask for the customer's city" />
-            <button type="button" onClick={suggest} disabled={asking || ask.trim().length < 3} className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-emerald-300 text-xs font-semibold rounded-lg border border-slate-700 disabled:opacity-40 whitespace-nowrap">{asking ? 'Thinking…' : 'Suggest change'}</button>
+            <button type="button" onClick={suggest} disabled={asking || ask.trim().length < 3} className="px-4 py-2 bg-subtle hover:bg-subtle text-brand-text text-xs font-semibold rounded-lg border border-line disabled:opacity-40 whitespace-nowrap">{asking ? 'Thinking…' : 'Suggest change'}</button>
           </div>
-          {askError && <p className="text-[11px] text-rose-400 mt-2" role="alert">{askError}</p>}
+          {askError && <p className="text-[11px] text-danger mt-2" role="alert">{askError}</p>}
           {proposal && (
             <div className="mt-3 space-y-2">
-              <p className="text-[11px] text-emerald-300">{proposal.summary}</p>
-              <textarea readOnly rows={Math.min(10, proposal.instructions.split('\n').length + 1)} value={proposal.instructions} className={input + ' bg-slate-950'} />
+              <p className="text-[11px] text-brand-text">{proposal.summary}</p>
+              <textarea readOnly rows={Math.min(10, proposal.instructions.split('\n').length + 1)} value={proposal.instructions} className={input + ' bg-card'} />
               <div className="flex flex-wrap items-center gap-2">
                 <button type="button" onClick={() => { setF((x) => ({ ...x, aiInstructions: proposal.instructions })); setProposal(null); setAsk(''); setNote('Instructions updated below: press Save to keep them, then try them in the Bot Simulator.'); }}
-                  className="px-4 py-2 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs rounded-lg">Use these instructions</button>
-                <button type="button" onClick={() => setProposal(null)} className="px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs rounded-lg border border-slate-700">Discard</button>
-                <span className="text-[11px] text-slate-500">Nothing changes until you press Save.</span>
+                  className="px-4 py-2 bg-brand hover:bg-brand text-on-brand font-bold text-xs rounded-lg">Use these instructions</button>
+                <button type="button" onClick={() => setProposal(null)} className="px-3.5 py-2 bg-subtle hover:bg-subtle text-fg text-xs rounded-lg border border-line">Discard</button>
+                <span className="text-[11px] text-muted">Nothing changes until you press Save.</span>
               </div>
             </div>
           )}
         </div>
-        <div className="sm:col-span-2 border-t border-slate-800 pt-4">
-          <h4 className="text-sm font-bold text-white">Lead alerts</h4>
-          <p className="text-[11px] text-slate-500 mt-1">Get a message the moment a customer finishes the questions, or says they have booked.</p>
+        <div className="sm:col-span-2 border-t border-line pt-4">
+          <h4 className="text-sm font-bold text-fg">Lead alerts</h4>
+          <p className="text-[11px] text-muted mt-1">Get a message the moment a customer finishes the questions, or says they have booked.</p>
         </div>
         <div>
           <label className={label}>Email</label>
           <input type="email" value={f.notifyEmail} onChange={set('notifyEmail')} className={input} placeholder="you@example.com" />
-          {alertInfo && !alertInfo.emailAvailable && <p className="text-[11px] text-amber-400 mt-1">Email sending is not set up on this server yet.</p>}
+          {alertInfo && !alertInfo.emailAvailable && <p className="text-[11px] text-warn mt-1">Email sending is not set up on this server yet.</p>}
         </div>
         <div>
           <label className={label}>WhatsApp number (with country code)</label>
           <input value={f.notifyPhone} onChange={set('notifyPhone')} className={input} placeholder="919876543210" />
-          {alertInfo && !alertInfo.whatsappReady && <p className="text-[11px] text-amber-400 mt-1">Connect WhatsApp first: alerts are sent from your linked number.</p>}
+          {alertInfo && !alertInfo.whatsappReady && <p className="text-[11px] text-warn mt-1">Connect WhatsApp first: alerts are sent from your linked number.</p>}
         </div>
-        <div className="sm:col-span-2 border-t border-slate-800 pt-4">
-          <h4 className="text-sm font-bold text-white">Talk to a person</h4>
-          <p className="text-[11px] text-slate-500 mt-1">When a customer asks for a human, the bot stops replying in that chat, you get a short AI briefing on WhatsApp or email, and the chat shows as &ldquo;Needs a person&rdquo;. Switch the bot back on for that chat when you are done.</p>
+        <div className="sm:col-span-2 border-t border-line pt-4">
+          <h4 className="text-sm font-bold text-fg">Talk to a person</h4>
+          <p className="text-[11px] text-muted mt-1">When a customer asks for a human, the bot stops replying in that chat, you get a short AI briefing on WhatsApp or email, and the chat shows as &ldquo;Needs a person&rdquo;. Switch the bot back on for that chat when you are done.</p>
         </div>
-        <label className="sm:col-span-2 flex items-center gap-2 text-xs text-slate-300">
+        <label className="sm:col-span-2 flex items-center gap-2 text-xs text-fg2">
           <input type="checkbox" checked={f.handoffEnabled} onChange={(e) => setF((x) => ({ ...x, handoffEnabled: e.target.checked }))} />
           <span>Let customers ask for a person</span>
         </label>
         {f.handoffEnabled && (
           <div className="sm:col-span-2"><label className={label}>What the customer is told (optional)</label><input value={f.handoffMessage} maxLength={300} onChange={set('handoffMessage')} className={input} placeholder="Of course. I have asked our team to take over, and a person will reply here shortly." /></div>
         )}
-        <div className="sm:col-span-2 border-t border-slate-800 pt-4">
-          <h4 className="text-sm font-bold text-white">Language and follow-ups</h4>
-          <p className="text-[11px] text-slate-500 mt-1">Ask which language the customer prefers before showing the menu, and nudge people who go quiet.</p>
+        <div className="sm:col-span-2 border-t border-line pt-4">
+          <h4 className="text-sm font-bold text-fg">Language and follow-ups</h4>
+          <p className="text-[11px] text-muted mt-1">Ask which language the customer prefers before showing the menu, and nudge people who go quiet.</p>
         </div>
-        <label className="sm:col-span-2 flex items-center gap-2 text-xs text-slate-300">
+        <label className="sm:col-span-2 flex items-center gap-2 text-xs text-fg2">
           <input type="checkbox" checked={f.languageStep} onChange={(e) => setF((x) => ({ ...x, languageStep: e.target.checked }))} />
           <span>Ask the customer's preferred language first. The menu, questions and replies are then translated by AI (this uses your monthly AI answers)</span>
         </label>
         {f.languageStep && (
           <div className="sm:col-span-2"><label className={label}>First message (asks for the language; empty uses the standard one)</label><textarea value={f.languageWelcome} rows={3} maxLength={500} onChange={set('languageWelcome')} className={`${input} resize-y`} placeholder="Hello! Welcome... Which language would you prefer for our conversation?" /></div>
         )}
-        <label className="sm:col-span-2 flex items-center gap-2 text-xs text-slate-300">
+        <label className="sm:col-span-2 flex items-center gap-2 text-xs text-fg2">
           <input type="checkbox" checked={f.followUpsEnabled} onChange={(e) => setF((x) => ({ ...x, followUpsEnabled: e.target.checked }))} />
           <span>Follow up automatically one day and three days after a customer's last message, in daytime hours only, until they reply, are sent the consultation link (then none for a week), book, say STOP, or the lead is Won or Lost</span>
         </label>
         <div className="sm:col-span-2 flex flex-wrap items-center gap-3">
-          <button type="button" onClick={testAlert} disabled={busy || (!f.notifyEmail && !f.notifyPhone)} className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs rounded-lg border border-slate-700 disabled:opacity-40">Save &amp; send a test alert</button>
+          <button type="button" onClick={testAlert} disabled={busy || (!f.notifyEmail && !f.notifyPhone)} className="px-4 py-2 bg-subtle hover:bg-subtle text-fg text-xs rounded-lg border border-line disabled:opacity-40">Save &amp; send a test alert</button>
           {testResult && (
-            <span className="text-[11px] text-slate-300">
-              WhatsApp: <strong className={testResult.whatsapp === 'sent' ? 'text-emerald-400' : 'text-amber-300'}>{testResult.whatsapp}</strong>
-              {' · '}Email: <strong className={testResult.email === 'sent' ? 'text-emerald-400' : 'text-amber-300'}>{testResult.email}</strong>
+            <span className="text-[11px] text-fg2">
+              WhatsApp: <strong className={testResult.whatsapp === 'sent' ? 'text-brand-text' : 'text-warn'}>{testResult.whatsapp}</strong>
+              {' · '}Email: <strong className={testResult.email === 'sent' ? 'text-brand-text' : 'text-warn'}>{testResult.email}</strong>
             </span>
           )}
         </div>
-        <div className="sm:col-span-2 flex items-center gap-3 sticky bottom-3 z-20 bg-slate-900/95 backdrop-blur border border-slate-800 rounded-xl px-4 py-3">
-          <button disabled={busy} className="px-5 py-2 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs rounded-lg transition disabled:opacity-50">{busy ? 'Saving…' : 'Save'}</button>
-          {note && <span className="text-xs text-emerald-400">{note}</span>}
-          {error && <span className="text-xs text-rose-400" role="alert">{error}</span>}
+        <div className="sm:col-span-2 flex items-center gap-3 sticky bottom-3 z-20 bg-sunken/95 backdrop-blur border border-line rounded-xl px-4 py-3">
+          <button disabled={busy} className="px-5 py-2 bg-brand hover:bg-brand text-on-brand font-bold text-xs rounded-lg transition disabled:opacity-50">{busy ? 'Saving…' : 'Save'}</button>
+          {note && <span className="text-xs text-brand-text">{note}</span>}
+          {error && <span className="text-xs text-danger" role="alert">{error}</span>}
         </div>
       </form>
     </div>

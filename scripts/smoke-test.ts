@@ -163,12 +163,13 @@ async function cleanup() {
   await sleep(600);
   await shot(ow, 'ow-2b-long-name');
   const bar = await ow.evaluate(() => {
+    const side = document.querySelector('aside')!;
+    const name = side.querySelector('.truncate') as HTMLElement;
     const h = document.querySelector('header')!;
-    const name = h.querySelector('.truncate') as HTMLElement;
     const btns = [...h.querySelectorAll('button.h-9, a.h-9')] as HTMLElement[];
-    return { nameLines: Math.round(name.getBoundingClientRect().height / parseFloat(getComputedStyle(name).lineHeight)), heights: [...new Set(btns.map((b) => Math.round(b.getBoundingClientRect().height)))], buttons: btns.length, overflow: document.documentElement.scrollWidth - window.innerWidth };
+    return { nameLines: Math.round(name.getBoundingClientRect().height / parseFloat(getComputedStyle(name).lineHeight)), heights: [...new Set(btns.map((x) => Math.round(x.getBoundingClientRect().height)).filter((n) => n > 0))], buttons: btns.filter((x) => x.getBoundingClientRect().height > 0).length, overflow: document.documentElement.scrollWidth - window.innerWidth };
   });
-  ok(bar.nameLines === 1 && bar.heights.length === 1 && bar.buttons >= 2 && bar.overflow <= 0, `the top bar stays tidy with a long business name (name on ${bar.nameLines} line, ${bar.buttons} buttons all ${bar.heights.join('/')}px, overflow ${bar.overflow}px)`);
+  ok(bar.nameLines === 1 && bar.heights.length === 1 && bar.buttons >= 2 && bar.overflow <= 0, `the layout stays tidy with a long business name (name on ${bar.nameLines} line, ${bar.buttons} top-bar buttons all ${bar.heights.join('/')}px, overflow ${bar.overflow}px)`);
   const bar2 = await ow.evaluate(() => { const hs = [...document.querySelectorAll('main select, main input[type=text], main a[href$="export.csv"]')].map((e) => Math.round((e as HTMLElement).getBoundingClientRect().height)); return [...new Set(hs)]; });
   ok(bar2.length === 1, `the leads filter bar controls share one height (${bar2.join('/')}px)`);
   if (created) await prisma.workspace.update({ where: { id: created.id }, data: { businessName: 'Glow Dental Clinic', tagline: '' } });
@@ -178,7 +179,7 @@ async function cleanup() {
 
   // simulator: chat through the funnel, then ask for a person
   if (created) setTransport(created.id, { sendText: async () => undefined, ready: () => true });
-  await click(ow, 'header button', 'Bot Simulator');
+  await click(ow, 'aside nav button', 'Simulator');
   await ow.waitForSelector('input[placeholder="Type your reply..."]');
   const say = async (m: string) => {
     await ow.type('input[placeholder="Type your reply..."]', m);
@@ -196,30 +197,37 @@ async function cleanup() {
   await shot(ow, 'ow-3-simulator');
 
   // CRM and inbox
-  await click(ow, 'header button', 'Qualified Leads CRM');
+  await click(ow, 'aside nav button', 'Leads');
   await sleep(900);
   ok(!(await text(ow)).includes('Could not load'), 'CRM loads without errors');
   await shot(ow, 'ow-4-crm');
-  await click(ow, 'header button', 'Live Inbox');
+  await click(ow, 'aside nav button', 'Inbox');
   await sleep(900);
   await shot(ow, 'ow-5-inbox');
-  await click(ow, 'header button', 'Analytics');
+  await click(ow, 'aside nav button', 'Analytics');
   await sleep(900);
   ok(!(await text(ow)).includes('Could not load'), 'Analytics loads');
-  await click(ow, 'header button', 'Broadcasts');
+  await click(ow, 'aside nav button', 'Broadcasts');
   await sleep(900);
   ok(!(await text(ow)).includes('Could not load'), 'Broadcasts loads');
 
-  // settings: every card is present
-  await click(ow, 'header button', 'Bot & Settings');
-  await waitText(ow, 'Menu & questions');
-  await sleep(1200);
-  const set = await text(ow);
+  // settings: every section is reachable from the section menu
+  await click(ow, 'aside nav button', 'Settings');
+  await waitText(ow, 'Business & bot');
+  const visit = async (label: string) => {
+    await click(ow, 'nav[aria-label="Settings sections"] button', label);
+    await sleep(700);
+    return text(ow);
+  };
+  const sections: Record<string, string> = {};
+  for (const l of ['WhatsApp', 'Business & bot', 'Menu & questions', 'Appointments', 'Pipeline', 'Integrations', 'Plan & billing', 'Refer & earn', 'Team']) sections[l] = await visit(l);
+  const set = Object.values(sections).join('\n');
   for (const t of ['Talk to a person', 'Appointments', 'Plan & billing', 'Refer & earn', 'Lead alerts', 'Integrations']) ok(set.includes(t) || (t === 'Integrations' && /webhook|API/i.test(set)), `settings shows "${t}"`);
+  await visit('Menu & questions');
   await shot(ow, 'ow-6-settings', true);
-  ok(set.includes('Turn on booking (built-in calendar)'), 'the appointments card offers booking without Google');
-  ok(set.includes('Set up with Gemini'), 'the menu editor has a Set up with Gemini button');
-  ok(set.includes('Ask Gemini to change how the bot answers'), 'the Gemini prompter for the answering rules is on the settings page');
+  ok(sections['Appointments'].includes('Turn on booking (built-in calendar)'), 'the appointments card offers booking without Google');
+  ok(sections['Menu & questions'].includes('Set up with Gemini'), 'the menu editor has a Set up with Gemini button');
+  ok(sections['Business & bot'].includes('Ask Gemini to change how the bot answers'), 'the Gemini prompter for the answering rules is on the business page');
   // a change to the menu shows a Save bar that stays on screen however long the menu is
   await ow.evaluate(() => (document.querySelector('textarea[placeholder="What the bot asks"]') as HTMLElement | null)?.scrollIntoView());
   await ow.type('textarea[placeholder="What the bot asks"]', ' extra');
@@ -232,11 +240,14 @@ async function cleanup() {
   });
   ok(!!menuSaveBar && menuSaveBar.top >= 0 && menuSaveBar.bottom <= menuSaveBar.vh, 'after editing a question the Save changes button is on screen');
   await shot(ow, 'ow-6b-save-bar');
-  ok(set.includes('Google sign-in is not set up'), 'calendar card explains Google keys are missing');
+  await visit('Appointments');
+  ok(sections['Appointments'].includes('Google sign-in is not set up'), 'calendar card explains Google keys are missing');
+  await visit('Refer & earn');
   const refLink = await ow.$$eval('input[readonly]', (els: any[]) => els.map((e) => e.value).find((v) => v.includes('?ref=')) ?? '');
   ok(/\/admin\/\?ref=[A-Z0-9]{7}$/.test(refLink), 'the owner sees their own referral link');
 
   // redeem a code from the billing card
+  await visit('Plan & billing');
   await ow.type('input[placeholder="Have a code?"]', code!.toLowerCase());
   await click(ow, 'button', 'Apply code');
   await waitText(ow, 'Code applied');
@@ -244,11 +255,32 @@ async function cleanup() {
   ok(after?.plan === 'pro' && after.planStatus === 'active', 'applying a code switches the plan on');
 
   // turn hand-off off and back on, save
-  const cb = await ow.$('input[type="checkbox"]');
+  await visit('Business & bot');
+  const cb = await ow.$('form input[type="checkbox"]');
   await cb!.click();
   await click(ow, 'form button', 'Save');
   await sleep(700);
   ok((await prisma.workspace.findUnique({ where: { id: after!.id } }))?.handoffEnabled === false, 'the hand-off switch saves');
+
+  // dark theme: the same screens, and the choice is remembered
+  await ow.evaluate(() => localStorage.setItem('theme', 'dark'));
+  await ow.reload({ waitUntil: 'networkidle0' });
+  await ow.waitForSelector('aside');
+  ok(await ow.evaluate(() => document.documentElement.classList.contains('dark')), 'the dark theme can be chosen and is remembered');
+  for (const [label, file] of [['Leads', 'dark-leads'], ['Inbox', 'dark-inbox'], ['Simulator', 'dark-simulator'], ['Analytics', 'dark-analytics'], ['Broadcasts', 'dark-broadcasts']] as const) {
+    await click(ow, 'aside nav button', label);
+    await sleep(800);
+    await shot(ow, file);
+  }
+  await click(ow, 'aside nav button', 'Settings');
+  for (const [label, file] of [['Business & bot', 'dark-business'], ['Plan & billing', 'dark-billing'], ['Appointments', 'dark-booking']] as const) {
+    await click(ow, 'nav[aria-label="Settings sections"] button', label);
+    await sleep(700);
+    await shot(ow, file);
+  }
+  await ow.evaluate(() => localStorage.setItem('theme', 'light'));
+  await ow.reload({ waitUntil: 'networkidle0' });
+  await ow.waitForSelector('aside');
 
   // mobile width: no horizontal scroll on the operator and owner screens
   await ow.setViewport({ width: 390, height: 800 });

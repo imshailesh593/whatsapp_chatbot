@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { BarChart3, Building2, Megaphone, Calendar, CheckCircle2, Clock, ExternalLink, MessageSquare, ShieldCheck, Smartphone, Users } from 'lucide-react';
+import { BarChart3, Building2, Calendar, CheckCircle2, Clock, ExternalLink, Megaphone, MessageSquare, Settings as Cog, Smartphone, Users } from 'lucide-react';
 import { api, UnauthorizedError } from './api';
 import type { AdminRow, AdminUser, BillingInfo, Contact, Overview } from './types';
 import AccountMenu from './components/AccountMenu';
@@ -15,6 +15,7 @@ import Logo from './components/Logo';
 import PlatformShell from './components/PlatformShell';
 import Broadcasts from './components/Broadcasts';
 import Analytics from './components/Analytics';
+import { AppShell, Banner, Stat, ThemeToggle, type NavGroup } from './components/ui';
 import { BrandContext } from './brand';
 import { StagesContext } from './stages';
 
@@ -34,7 +35,7 @@ export default function App() {
     api.me().then((r) => setUser(r.authed && r.user ? r.user : null)).catch(() => setUser(null));
   }, []);
 
-  if (user === undefined) return <div className="min-h-screen bg-slate-900" />;
+  if (user === undefined) return <div className="min-h-screen bg-app" />;
   if (!user) return <Login onDone={setUser} />;
   const signOut = () => api.logout().finally(() => setUser(null));
   const platformMode = user.isSuperAdmin && mode === 'platform';
@@ -47,9 +48,9 @@ export default function App() {
   }
   if (user.workspace && !user.workspace.onboardingCompleted) {
     return user.role === 'agent' ? (
-      <div className="min-h-screen bg-slate-900 text-slate-200 flex flex-col items-center justify-center gap-3 p-6 text-center">
+      <div className="min-h-screen bg-app text-fg flex flex-col items-center justify-center gap-3 p-6 text-center">
         <p>Your account owner has not finished setting up the chatbot yet.</p>
-        <button onClick={signOut} className="text-xs text-emerald-400">Sign out</button>
+        <button onClick={signOut} className="text-sm text-brand-text font-medium">Sign out</button>
       </div>
     ) : (
       <Onboarding user={user} onDone={reloadUser} onSignOut={signOut} />
@@ -72,33 +73,38 @@ function wantsCheckout(user: AdminUser): boolean {
 
 function CheckoutPage({ user, onSkip, onSignOut }: { user: AdminUser; onSkip: () => void; onSignOut: () => void }) {
   return (
-    <div className="min-h-screen bg-slate-900 text-slate-200 p-4 sm:p-8">
-      <div className="max-w-3xl mx-auto">
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center gap-3">
-          <Logo size={36} />
-          <div>
-            <h1 className="text-xl font-extrabold text-white">Choose your plan</h1>
-            <p className="text-xs text-slate-400 mt-1">Choose your plan and pay to switch your bot on. You can set everything up first, but the bot stays off until you subscribe.</p>
-          </div>
-          </div>
-          <button onClick={onSignOut} className="text-xs text-slate-400 hover:text-slate-200">Sign out</button>
-        </div>
+    <div className="min-h-screen bg-app text-fg">
+      <header className="h-16 bg-card border-b border-line px-4 sm:px-8 flex items-center justify-between">
+        <div className="flex items-center gap-3"><Logo size={34} /><span className="font-semibold">Wappo</span></div>
+        <div className="flex items-center gap-2"><ThemeToggle /><button onClick={onSignOut} className="text-sm text-muted hover:text-fg px-2">Sign out</button></div>
+      </header>
+      <div className="max-w-3xl mx-auto p-4 sm:p-8">
+        <h1 className="text-2xl font-semibold tracking-tight">Choose your plan</h1>
+        <p className="text-sm text-muted mt-1 mb-6 max-w-xl">Subscribe to switch your bot on. You can set everything up first, but the bot stays off until you subscribe.</p>
         <Billing me={user} />
-        <div className="mt-4 text-center">
-          <button onClick={onSkip} className="px-4 py-2 text-sm text-emerald-300 hover:text-emerald-200 border border-slate-700 rounded-lg">Set up my account first</button>
+        <div className="mt-6 text-center">
+          <button onClick={onSkip} className="px-5 py-2.5 text-sm font-medium text-fg2 border border-line-strong rounded-lg hover:bg-subtle transition">Set up my account first</button>
         </div>
       </div>
     </div>
   );
 }
 
-/** Every button in the top bar: same height, border, text size and hover. */
-const topBtn = 'hidden md:inline-flex items-center gap-2 h-9 px-3 rounded-lg border border-slate-800 bg-slate-900/80 text-slate-300 hover:border-slate-600 hover:text-white transition whitespace-nowrap';
+const PAGES: Record<Tab, { title: string; description: string }> = {
+  crm: { title: 'Leads', description: 'Everyone who has chatted with your bot, and how far they got.' },
+  inbox: { title: 'Inbox', description: 'Live conversations. Take over from the bot whenever a person is needed.' },
+  simulator: { title: 'Bot simulator', description: 'Try the bot exactly as a customer sees it. Nothing is sent to real people.' },
+  analytics: { title: 'Analytics', description: 'How your conversations turn into leads and bookings.' },
+  broadcasts: { title: 'Broadcasts', description: 'Send an announcement to people who have chatted with you.' },
+  config: { title: 'Settings', description: 'Connect WhatsApp, shape the bot, and manage your plan and team.' }
+};
 
+const ico = 'w-[18px] h-[18px]';
+const topBtn = 'hidden md:inline-flex items-center gap-2 h-9 px-3 rounded-lg border border-line bg-card text-sm text-fg2 hover:border-line-strong transition whitespace-nowrap';
 
 function Console({ user, onSignedOut, onPlatform }: { user: AdminUser; onSignedOut: () => void; onPlatform?: () => void }) {
   const [tab, setTab] = useState<Tab>('crm');
+  const [section, setSection] = useState('whatsapp');
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [overview, setOverview] = useState<Overview | null>(null);
   const [billing, setBilling] = useState<BillingInfo | null>(null);
@@ -143,141 +149,137 @@ function Console({ user, onSignedOut, onPlatform }: { user: AdminUser; onSignedO
   const isAgent = user.role === 'agent';
   const waReady = overview?.whatsapp === 'ready';
   const selectedContact = contacts.find((c) => c.phone === selected) ?? null;
+  const openSettings = (s: string) => { setSection(s); setTab('config'); };
 
-  const tabBtn = (id: Tab, icon: React.ReactNode, label: string, extra?: React.ReactNode) => (
-    <button
-      onClick={() => setTab(id)}
-      className={`flex items-center space-x-2 px-4 py-2.5 text-xs sm:text-sm font-semibold border-b-2 transition whitespace-nowrap ${
-        tab === id
-          ? 'border-emerald-400 text-emerald-400 bg-slate-900/60'
-          : 'border-transparent text-slate-400 hover:text-slate-200 hover:border-slate-700'
-      }`}
-    >
-      {icon}
-      <span>{label}</span>
-      {extra}
-    </button>
+  const groups: NavGroup[] = [
+    {
+      label: 'Conversations',
+      items: [
+        { id: 'crm', label: 'Leads', icon: <Users className={ico} />, badge: <span className="px-1.5 py-0.5 text-[11px] font-semibold rounded-md bg-subtle text-fg2 tabular-nums">{stats.total}</span> },
+        { id: 'inbox', label: 'Inbox', icon: <MessageSquare className={ico} /> }
+      ]
+    },
+    {
+      label: 'Automation',
+      items: [
+        { id: 'simulator', label: 'Simulator', icon: <Smartphone className={ico} />, badge: <span className="px-1.5 py-0.5 text-[10px] font-bold rounded-md bg-brand-soft text-brand-text">TEST</span> },
+        ...(!isAgent ? [{ id: 'broadcasts', label: 'Broadcasts', icon: <Megaphone className={ico} /> }] : [])
+      ]
+    },
+    ...(!isAgent
+      ? [
+          { label: 'Insights', items: [{ id: 'analytics', label: 'Analytics', icon: <BarChart3 className={ico} /> }] },
+          { label: 'Setup', items: [{ id: 'config', label: 'Settings', icon: <Cog className={ico} /> }] }
+        ]
+      : [])
+  ];
+
+  const waLabel = waReady ? 'Connected' : overview?.whatsapp === 'off' ? 'Disconnected' : overview?.whatsapp ?? '…';
+  const planActive = !!billing?.active && billing.status !== 'past_due';
+
+  const sidebarFooter = (
+    <div className="space-y-2">
+      {billing && billing.plan !== 'internal' && (
+        <button onClick={() => !isAgent && openSettings('billing')} className="w-full text-left rounded-xl border border-line bg-sunken hover:bg-subtle transition p-3">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-semibold text-fg">{billing.planName}</span>
+            <span className={`text-[11px] font-semibold px-1.5 py-0.5 rounded-md ${planActive ? 'bg-brand-soft text-brand-text' : 'bg-danger-soft text-danger'}`}>
+              {planActive ? 'Active' : billing.status === 'past_due' ? 'Payment due' : 'Not subscribed'}
+            </span>
+          </div>
+          {!planActive && !isAgent && <span className="text-xs text-brand-text font-medium mt-1 block">Choose a plan →</span>}
+        </button>
+      )}
+      <div className="text-[11px] text-muted px-1 truncate">{user.role === 'owner' ? 'Owner' : user.role === 'admin' ? 'Admin' : 'Agent'} · {user.email}</div>
+    </div>
   );
 
-  const kpi = (label: string, value: number, color: string, icon: React.ReactNode, tint: string) => (
-    <div className="bg-slate-950/70 border border-slate-800/80 rounded-xl p-3.5 flex items-center justify-between">
-      <div>
-        <p className="text-[11px] font-medium text-slate-400 uppercase tracking-wider">{label}</p>
-        <p className={`text-xl sm:text-2xl font-bold mt-0.5 ${color}`}>{value}</p>
-      </div>
-      <div className={`w-10 h-10 rounded-lg border flex items-center justify-center ${tint}`}>{icon}</div>
-    </div>
+  const topRight = (
+    <>
+      <button onClick={() => !isAgent && openSettings('whatsapp')} title="WhatsApp connection" className="inline-flex items-center gap-2 h-9 px-3 rounded-lg border border-line bg-card text-sm text-fg2 hover:border-line-strong transition whitespace-nowrap">
+        <span className="relative flex h-2 w-2">
+          {waReady && <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-brand opacity-60" />}
+          <span className={`relative inline-flex rounded-full h-2 w-2 ${waReady ? 'bg-brand' : 'bg-danger'}`} />
+        </span>
+        <span className="hidden sm:inline">WhatsApp</span>
+        <strong className="font-semibold text-fg">{waLabel}</strong>
+      </button>
+      {overview?.workspace.bookingUrl && (
+        <a href={overview.workspace.bookingUrl} target="_blank" rel="noreferrer" className={topBtn}>
+          <ExternalLink className="w-3.5 h-3.5" /><span>Booking link</span>
+        </a>
+      )}
+      {onPlatform && (
+        <button onClick={onPlatform} className={topBtn}>
+          <Building2 className="w-3.5 h-3.5" /><span>Platform admin</span>
+        </button>
+      )}
+      <ThemeToggle />
+      <AccountMenu user={user} onSignOut={() => api.logout().finally(onSignedOut)} />
+    </>
+  );
+
+  const banners = (
+    <>
+      {loadError && <Banner tone="danger">Could not load data: {loadError}</Banner>}
+      {billing && billing.plan !== 'internal' && (!billing.active || billing.status === 'past_due') && (
+        <Banner tone={billing.active ? 'warn' : 'danger'} action={!isAgent && <button onClick={() => openSettings('billing')} className="font-semibold underline">Choose a plan</button>}>
+          {!billing.active
+            ? 'Your bot has stopped replying to new customers: ' + (billing.reason === 'unpaid' ? 'choose a plan to switch it on.' : 'the subscription has ended.')
+            : 'Your last payment failed. Update your payment method to keep the bot running.'}
+        </Banner>
+      )}
+      {overview && !overview.workspace.botEnabled && (
+        <Banner tone="warn" action={!isAgent && <button onClick={() => openSettings('business')} className="font-semibold underline">Go live in Settings</button>}>
+          The bot is paused: it is not replying to customers yet.
+        </Banner>
+      )}
+    </>
   );
 
   return (
     <BrandContext.Provider value={brand}>
-    <StagesContext.Provider value={overview?.stages ?? []}>
-    <div className="min-h-screen bg-slate-900 text-slate-100 flex flex-col font-sans">
-      <header className="bg-slate-950 border-b border-slate-800 sticky top-0 z-40">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between gap-4 h-16">
-            <div className="flex items-center gap-3 min-w-0">
-              <Logo size={40} className="shadow-lg shadow-emerald-500/20" />
-              <div className="min-w-0">
-                <div className="font-extrabold text-base leading-tight tracking-tight text-white truncate" title={brand.businessName}>{brand.businessName}</div>
-                <p className="text-[11px] leading-tight text-slate-400 truncate mt-0.5" title={brand.tagline}>{brand.tagline || 'WhatsApp lead console'}</p>
-              </div>
+      <StagesContext.Provider value={overview?.stages ?? []}>
+        <AppShell
+          brand={brand.businessName || 'Wappo'}
+          subtitle={brand.tagline || 'WhatsApp lead console'}
+          groups={groups}
+          active={tab}
+          onSelect={(id) => setTab(id as Tab)}
+          sidebarFooter={sidebarFooter}
+          topRight={topRight}
+          title={PAGES[tab].title}
+          description={PAGES[tab].description}
+          banners={banners}
+        >
+          {tab === 'crm' && (
+            <div className="grid grid-cols-2 xl:grid-cols-4 gap-3 sm:gap-4 mb-6">
+              <Stat label="Total contacts" value={stats.total} icon={<Users className={ico} />} tone="info" />
+              <Stat label="Fully qualified" value={stats.qualified} icon={<CheckCircle2 className={ico} />} tone="brand" />
+              <Stat label="Bookings" value={stats.booked} icon={<Calendar className={ico} />} tone="violet" />
+              <Stat label="In questionnaire" value={stats.inProgress} icon={<Clock className={ico} />} tone="warn" />
             </div>
+          )}
+          {tab === 'crm' && (
+            <Crm contacts={contacts} includeTest={includeTest} onIncludeTest={setIncludeTest} onOpen={setSelected} onChanged={replaceContact} team={team} meId={user.id} />
+          )}
+          {tab === 'inbox' && <Inbox contacts={contacts} waReady={waReady} onChanged={replaceContact} />}
+          {tab === 'simulator' && <Simulator onActivity={refresh} services={overview?.services ?? []} />}
+          {tab === 'analytics' && !isAgent && <Analytics />}
+          {tab === 'broadcasts' && !isAgent && overview && <Broadcasts overview={overview} waReady={waReady} />}
+          {tab === 'config' && !isAgent && overview && <Settings overview={overview} me={user} onChanged={refresh} section={section} onSection={setSection} />}
+        </AppShell>
 
-            <div className="flex items-center gap-2 text-xs shrink-0">
-              <button onClick={() => setTab('config')} title="Manage WhatsApp connection" className={topBtn}>
-                <span className="relative flex h-2 w-2">
-                  {waReady && <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />}
-                  <span className={`relative inline-flex rounded-full h-2 w-2 ${waReady ? 'bg-emerald-500' : 'bg-rose-500'}`} />
-                </span>
-                <span>WhatsApp <strong className="font-semibold text-white">{waReady ? 'Connected' : overview?.whatsapp === 'off' ? 'Disconnected' : overview?.whatsapp ?? '…'}</strong></span>
-              </button>
-              {overview?.workspace.bookingUrl && (
-                <a href={overview.workspace.bookingUrl} target="_blank" rel="noreferrer" className={topBtn}>
-                  <ExternalLink className="w-3.5 h-3.5" />
-                  <span>Booking link</span>
-                </a>
-              )}
-              {onPlatform && (
-                <button onClick={onPlatform} className={topBtn}>
-                  <Building2 className="w-3.5 h-3.5" />
-                  <span>Platform admin</span>
-                </button>
-              )}
-              <AccountMenu user={user} onSignOut={() => api.logout().finally(onSignedOut)} />
-            </div>
-          </div>
-
-          <div className="flex space-x-1 -mb-px border-t border-slate-800/60 pt-1 overflow-x-auto">
-            {tabBtn('crm', <Users className="w-4 h-4" />, 'Qualified Leads CRM', (
-              <span className="ml-1.5 px-1.5 py-0.5 text-[10px] bg-slate-800 text-slate-300 rounded-full">{stats.total}</span>
-            ))}
-            {tabBtn('inbox', <MessageSquare className="w-4 h-4" />, 'Live Inbox & Human Takeover')}
-            {tabBtn('simulator', <Smartphone className="w-4 h-4 text-emerald-400" />, 'Bot Simulator', (
-              <span className="ml-1 px-1.5 rounded text-[9px] bg-emerald-500/20 text-emerald-300 font-bold">TEST</span>
-            ))}
-            {!isAgent && tabBtn('analytics', <BarChart3 className="w-4 h-4" />, 'Analytics')}
-            {!isAgent && tabBtn('broadcasts', <Megaphone className="w-4 h-4" />, 'Broadcasts')}
-            {!isAgent && tabBtn('config', <ShieldCheck className="w-4 h-4" />, 'Bot & Settings')}
-          </div>
-        </div>
-      </header>
-
-      <main className="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 lg:p-8">
-        {loadError && (
-          <div className="mb-4 p-3 rounded-lg bg-rose-950/50 border border-rose-800/60 text-rose-300 text-xs">
-            Could not load data: {loadError}
-          </div>
+        {selectedContact && (
+          <Dossier
+            contact={selectedContact}
+            bookingUrl={overview?.workspace.bookingUrl ?? ''}
+            team={team}
+            onClose={() => setSelected(null)}
+            onChanged={replaceContact}
+          />
         )}
-
-        {billing && billing.plan !== 'internal' && (!billing.active || billing.status === 'past_due') && (
-          <div className={`mb-4 p-3 rounded-lg border text-xs flex flex-wrap items-center justify-between gap-2 ${billing.active ? 'bg-amber-950/40 border-amber-800/60 text-amber-200' : 'bg-rose-950/50 border-rose-800/60 text-rose-200'}`}>
-            <span>
-              {!billing.active
-                ? 'Your bot has stopped replying to new customers: ' + (billing.reason === 'unpaid' ? 'choose a plan to switch it on.' : 'the subscription has ended.')
-                : billing.status === 'past_due'
-                  ? 'Your last payment failed. Update your payment method to keep the bot running.'
-                  : ''}
-            </span>
-            {!isAgent && <button onClick={() => setTab('config')} className="font-semibold underline">Choose a plan</button>}
-          </div>
-        )}
-
-        {overview && !overview.workspace.botEnabled && (
-          <div className="mb-4 p-3 rounded-lg bg-amber-950/40 border border-amber-800/60 text-amber-200 text-xs flex flex-wrap items-center justify-between gap-2">
-            <span>The bot is paused: it is not replying to customers yet.</span>
-            {!isAgent && <button onClick={() => setTab('config')} className="font-semibold underline">Open Bot &amp; Settings to go live</button>}
-          </div>
-        )}
-
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4 mb-6">
-          {kpi('Total Contacts', stats.total, 'text-white', <Users className="w-5 h-5" />, 'bg-blue-500/10 border-blue-500/20 text-blue-400')}
-          {kpi('Fully Qualified', stats.qualified, 'text-emerald-400', <CheckCircle2 className="w-5 h-5" />, 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400')}
-          {kpi('Bookings', stats.booked, 'text-purple-400', <Calendar className="w-5 h-5" />, 'bg-purple-500/10 border-purple-500/20 text-purple-400')}
-          {kpi('In Questionnaire', stats.inProgress, 'text-amber-400', <Clock className="w-5 h-5" />, 'bg-amber-500/10 border-amber-500/20 text-amber-400')}
-        </div>
-
-        {tab === 'crm' && (
-          <Crm contacts={contacts} includeTest={includeTest} onIncludeTest={setIncludeTest} onOpen={setSelected} onChanged={replaceContact} team={team} meId={user.id} />
-        )}
-        {tab === 'inbox' && <Inbox contacts={contacts} waReady={waReady} onChanged={replaceContact} />}
-        {tab === 'simulator' && <Simulator onActivity={refresh} services={overview?.services ?? []} />}
-        {tab === 'analytics' && !isAgent && <Analytics />}
-        {tab === 'broadcasts' && !isAgent && overview && <Broadcasts overview={overview} waReady={waReady} />}
-        {tab === 'config' && !isAgent && overview && <Settings overview={overview} me={user} onChanged={refresh} />}
-      </main>
-
-      {selectedContact && (
-        <Dossier
-          contact={selectedContact}
-          bookingUrl={overview?.workspace.bookingUrl ?? ''}
-          team={team}
-          onClose={() => setSelected(null)}
-          onChanged={replaceContact}
-        />
-      )}
-    </div>
-    </StagesContext.Provider>
+      </StagesContext.Provider>
     </BrandContext.Provider>
   );
 }

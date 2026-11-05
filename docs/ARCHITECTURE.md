@@ -230,7 +230,7 @@ Events (new lead, stage change...) are stored and delivered to each configured w
 
 ### 5.9 Language question, closing messages and follow-ups
 
-Three optional per-business features (Dashboard → Bot & Settings), all off unless the business turns them on:
+Three optional per-business features (Dashboard → Settings), all off unless the business turns them on:
 
 - **Language first** (`languageStep`): the first reply asks which language the customer prefers (the text is `languageWelcome`). The answer ("1", "English", "Hindi", "Tamil"...) is stored on the session; from then on every fixed bot message (menu, questions, closing message, reminders) is translated by Gemini into that language, cached, and falls back to the English original if translation is unavailable or the plan's AI allowance is used up. AI answers to side questions are written in that language directly. English chats never call the translator. `MENU` shows the menu again without asking the language again.
 - **Closing message per service** (`Service.closingMessage`): shown when a customer finishes that service's questions, so each service can point to its own link (jobs website, product site, consultation). Empty means the general thank-you.
@@ -339,7 +339,7 @@ Prices and limits are code, not environment: edit `src/plans.ts` and redeploy, t
 | Health | `GET /health` → `{"ok":true,"whatsapp":"ready",...}` (`off` means no linked/connected number) |
 | Logs | `ssh ... "docker logs --tail 100 mnsbot-bot-1"` |
 | Create or reset an admin | `docker exec mnsbot-bot-1 node dist/cli/adminUser.js <email> <password (10+ chars)>` |
-| Re-link WhatsApp | Dashboard → Bot & Settings → WhatsApp → Connect, or `/qr?token=<ADMIN_TOKEN>` for the default workspace |
+| Re-link WhatsApp | Dashboard → Settings → WhatsApp → Connect, or `/qr?token=<ADMIN_TOKEN>` for the default workspace |
 | Apply the operator's own business setup (menu, questions, AI notes) | `docker exec mnsbot-bot-1 node dist/cli/ownBusiness.js` (replaces the default workspace's menu and notes with `src/ownBusiness.ts`; safe to repeat) |
 | Create PayPal plan + webhook | `docker exec mnsbot-bot-1 node dist/cli/paypalSetup.js` (safe to repeat) |
 | Create the Razorpay plan | `docker exec mnsbot-bot-1 node dist/cli/razorpaySetup.js` (run once only) |

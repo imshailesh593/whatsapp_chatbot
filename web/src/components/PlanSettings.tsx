@@ -2,10 +2,10 @@ import { useCallback, useEffect, useState } from 'react';
 import { api } from '../api';
 import type { ConfigInfo } from '../types';
 
-const card = 'bg-white border border-slate-200 rounded-xl shadow-sm';
-const input = 'border border-slate-300 rounded-lg px-3 py-2 text-sm w-full focus:outline-none focus:border-green-600';
-const btn = 'px-4 py-2 bg-[#4b7f2c] hover:bg-green-800 text-white text-sm font-semibold rounded-lg disabled:opacity-50';
-const btn2 = 'px-4 py-2 bg-white hover:bg-slate-50 text-slate-700 text-sm font-semibold rounded-lg border border-slate-300 disabled:opacity-50';
+const card = 'bg-card border border-line rounded-xl shadow-sm';
+const input = 'border border-line-strong rounded-lg px-3 py-2 text-sm w-full focus:outline-none focus:border-brand/40';
+const btn = 'px-4 py-2 bg-brand hover:bg-brand-strong text-on-brand text-sm font-semibold rounded-lg disabled:opacity-50';
+const btn2 = 'px-4 py-2 bg-card hover:bg-sunken text-fg2 text-sm font-semibold rounded-lg border border-line-strong disabled:opacity-50';
 
 type Plan = Awaited<ReturnType<typeof api.platformPlans>>['plans'][number];
 
@@ -56,32 +56,32 @@ export function PlanEditor({ plan, onChanged }: { plan: Plan; onChanged: () => v
         }),
       'Saved. The website and the dashboard show the new details now.'
     );
-  const lab = 'text-xs text-slate-600 block';
+  const lab = 'text-xs text-fg2 block';
 
   return (
     <div className={card + ' p-5'}>
-      <h3 className="font-bold text-slate-900">Edit the {plan.name} plan</h3>
+      <h3 className="font-bold text-fg">Edit the {plan.name} plan</h3>
       <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-3">
         <label className={lab}>Plan name<input className={input} value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} /></label>
         <label className={lab}>Price in India (₹ per month)<input className={input} type="number" min={1} step="0.01" value={f.priceInr} onChange={(e) => setF({ ...f, priceInr: e.target.value })} /></label>
         <label className={lab + ' sm:col-span-2'}>Description<input className={input} value={f.blurb} onChange={(e) => setF({ ...f, blurb: e.target.value })} /></label>
         <label className={lab}>Price elsewhere ($ per month)<input className={input} type="number" min={1} step="0.01" value={f.priceUsd} onChange={(e) => setF({ ...f, priceUsd: e.target.value })} /></label>
-        <label className="text-xs text-slate-600 flex items-end gap-2 pb-2"><input type="checkbox" checked={f.integrations} onChange={(e) => setF({ ...f, integrations: e.target.checked })} />Includes webhooks and the REST API</label>
+        <label className="text-xs text-fg2 flex items-end gap-2 pb-2"><input type="checkbox" checked={f.integrations} onChange={(e) => setF({ ...f, integrations: e.target.checked })} />Includes webhooks and the REST API</label>
         <label className={lab}>New chats per month<input className={input} type="number" min={1} value={f.conversations} onChange={(e) => setF({ ...f, conversations: e.target.value })} /></label>
         <label className={lab}>AI answers per month<input className={input} type="number" min={0} value={f.aiReplies} onChange={(e) => setF({ ...f, aiReplies: e.target.value })} /></label>
         <label className={lab}>Team members<input className={input} type="number" min={1} value={f.seats} onChange={(e) => setF({ ...f, seats: e.target.value })} /></label>
         <label className={lab}>Broadcast messages per month<input className={input} type="number" min={0} value={f.broadcasts} onChange={(e) => setF({ ...f, broadcasts: e.target.value })} /></label>
       </div>
       {priceChanged && (
-        <p className="mt-3 text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-lg p-3">
+        <p className="mt-3 text-xs text-warn bg-warn-soft border border-warn-line rounded-lg p-3">
           Payment providers cannot change the price of an existing plan. After saving, go to Settings, Payments and email keys, and press <strong>Create plan at the current price</strong> for Razorpay (and PayPal). Until then new subscribers would still be charged the old amount. People who already subscribed keep the price they signed up at.
         </p>
       )}
       <div className="mt-4 flex flex-wrap items-center gap-3">
         <button className={btn} disabled={busy} onClick={save}>{busy ? 'Saving…' : 'Save plan'}</button>
         <button className={btn2} disabled={busy} onClick={() => { if (confirm('Put this plan back to the details in the code?')) run(() => api.platformResetPlan(plan.id), 'Plan reset.'); }}>Reset to default</button>
-        {msg && <span className="text-sm text-green-700">{msg}</span>}
-        {error && <span className="text-sm text-rose-600" role="alert">{error}</span>}
+        {msg && <span className="text-sm text-brand-text">{msg}</span>}
+        {error && <span className="text-sm text-danger" role="alert">{error}</span>}
       </div>
     </div>
   );
@@ -142,30 +142,30 @@ export function KeysCard() {
       setCfg(await api.platformSaveConfig({ [key]: '' }));
       return 'Cleared: the server setting (if any) is used again.';
     });
-  if (!cfg) return <div className={card + ' p-5 text-sm text-slate-500'}>{error || 'Loading…'}</div>;
+  if (!cfg) return <div className={card + ' p-5 text-sm text-muted'}>{error || 'Loading…'}</div>;
   const field = (k: string) => cfg.fields.find((x) => x.key === k)!;
 
   return (
     <div className={card + ' p-5'}>
-      <h3 className="font-bold text-slate-900">Payments and email keys</h3>
-      <p className="text-sm text-slate-500 mt-1">
+      <h3 className="font-bold text-fg">Payments and email keys</h3>
+      <p className="text-sm text-muted mt-1">
         Saved encrypted in the database and used straight away, with no restart. A value saved here wins over the server <code>.env</code>. Saved secrets are never shown again, only their last four characters.
       </p>
       <div className="mt-4 space-y-6">
         {GROUPS.map((g) => (
           <div key={g.title}>
-            <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500">{g.title}</h4>
-            <p className="text-xs text-slate-500 mt-1">{g.hint}</p>
+            <h4 className="text-xs font-bold uppercase tracking-wider text-muted">{g.title}</h4>
+            <p className="text-xs text-muted mt-1">{g.hint}</p>
             <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-3">
               {g.keys.map((k) => {
                 const f = field(k);
                 return (
-                  <label key={k} className="text-xs text-slate-600 block">
+                  <label key={k} className="text-xs text-fg2 block">
                     {f.label}{' '}
                     {f.set ? (
-                      <span className="text-green-700">· set ({f.source === 'panel' ? 'saved here' : 'server .env'}: {f.preview})</span>
+                      <span className="text-brand-text">· set ({f.source === 'panel' ? 'saved here' : 'server .env'}: {f.preview})</span>
                     ) : (
-                      <span className="text-amber-700">· not set</span>
+                      <span className="text-warn">· not set</span>
                     )}
                     <div className="flex gap-2 mt-1">
                       <input
@@ -201,11 +201,11 @@ export function KeysCard() {
               )}
             </div>
             {g.title.startsWith('Razorpay') && (
-              <div className="mt-3 text-xs text-slate-600 space-y-1.5">
+              <div className="mt-3 text-xs text-fg2 space-y-1.5">
                 <p>
                   <strong>Mode:</strong>{' '}
                   <select
-                    className="border border-slate-300 rounded-lg px-2 py-1"
+                    className="border border-line-strong rounded-lg px-2 py-1"
                     value={cfg.razorpayMode}
                     onChange={(e) => act('mode', async () => { setCfg(await api.platformSaveConfig({ RAZORPAY_MODE: e.target.value })); return 'Mode saved.'; })}
                   >
@@ -216,13 +216,13 @@ export function KeysCard() {
                 <p>
                   In Razorpay, Settings, Webhooks, add this address and tick the <em>subscription</em> and <em>payment</em> events: <code className="break-all">{cfg.razorpayWebhook}</code>
                 </p>
-                {secret && <p className="bg-amber-50 border border-amber-200 rounded-lg p-3">Webhook secret (shown only now): <code className="break-all select-all">{secret}</code></p>}
+                {secret && <p className="bg-warn-soft border border-warn-line rounded-lg p-3">Webhook secret (shown only now): <code className="break-all select-all">{secret}</code></p>}
                 <p>A price change needs a new Razorpay plan: press <em>Create plan at the current price</em> after editing the plan. Existing subscribers keep the old price.</p>
               </div>
             )}
             {g.title.startsWith('Email') && (
-              <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-slate-600">
-                <span>Email is <strong className={cfg.email.configured ? 'text-green-700' : 'text-amber-700'}>{cfg.email.configured ? `on (${cfg.email.provider})` : 'off'}</strong>.</span>
+              <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-fg2">
+                <span>Email is <strong className={cfg.email.configured ? 'text-brand-text' : 'text-warn'}>{cfg.email.configured ? `on (${cfg.email.provider})` : 'off'}</strong>.</span>
                 <input className={input + ' !w-64'} placeholder="Send a test to (email)" value={testTo} onChange={(e) => setTestTo(e.target.value)} />
                 <button className={btn2} disabled={!!busy} onClick={() => act('mail', async () => { const r = await api.platformEmailTest(testTo); return `Test email sent to ${r.to}.`; })}>
                   {busy === 'mail' ? 'Sending…' : 'Send test email'}
@@ -232,8 +232,8 @@ export function KeysCard() {
           </div>
         ))}
       </div>
-      {msg && <p className="text-sm text-green-700 mt-3">{msg}</p>}
-      {error && <p className="text-sm text-rose-600 mt-3" role="alert">{error}</p>}
+      {msg && <p className="text-sm text-brand-text mt-3">{msg}</p>}
+      {error && <p className="text-sm text-danger mt-3" role="alert">{error}</p>}
     </div>
   );
 }

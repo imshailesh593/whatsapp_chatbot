@@ -76,33 +76,33 @@ export default function MenuAssistant({ overview, onUse, onClose }: { overview: 
     onUse(draft.services.map((s) => ({ ...s, closingMessage: s.closingMessage || before.get(s.title.trim().toLowerCase()) || '' })));
   }
 
-  const input$ = 'w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2.5 text-sm text-slate-200 focus:outline-none focus:border-emerald-500';
+  const input$ = 'w-full bg-sunken border border-line rounded-lg px-3 py-2.5 text-sm text-fg focus:outline-none focus:border-brand/40';
 
   return (
     <div className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center p-3" role="dialog" aria-modal="true" aria-label="Set up the menu with Gemini">
-      <div className="w-full max-w-5xl max-h-[92vh] bg-slate-950 border border-slate-800 rounded-2xl shadow-2xl flex flex-col overflow-hidden">
-        <div className="px-4 py-3 border-b border-slate-800 flex items-center justify-between">
-          <div className="flex items-center space-x-2 text-sm font-bold text-white"><Sparkles className="w-4 h-4 text-emerald-400" /><span>Set up the menu and questions with Gemini</span></div>
-          <button onClick={onClose} className="p-1.5 text-slate-400 hover:text-white" aria-label="Close"><X className="w-4 h-4" /></button>
+      <div className="w-full max-w-5xl max-h-[92vh] bg-card border border-line rounded-2xl shadow-2xl flex flex-col overflow-hidden">
+        <div className="px-4 py-3 border-b border-line flex items-center justify-between">
+          <div className="flex items-center space-x-2 text-sm font-bold text-fg"><Sparkles className="w-4 h-4 text-brand-text" /><span>Set up the menu and questions with Gemini</span></div>
+          <button onClick={onClose} className="p-1.5 text-muted hover:text-fg" aria-label="Close"><X className="w-4 h-4" /></button>
         </div>
         {available === false ? (
-          <p className="p-6 text-sm text-amber-300">Gemini is not available right now. You can still write the menu and questions by hand, or start from a template.</p>
+          <p className="p-6 text-sm text-warn">Gemini is not available right now. You can still write the menu and questions by hand, or start from a template.</p>
         ) : (
           <div className="grid grid-cols-1 lg:grid-cols-2 min-h-0 flex-1">
-            <div className="flex flex-col min-h-[320px] max-h-[70vh] lg:max-h-none border-b lg:border-b-0 lg:border-r border-slate-800">
+            <div className="flex flex-col min-h-[320px] max-h-[70vh] lg:max-h-none border-b lg:border-b-0 lg:border-r border-line">
               <div className="flex-1 overflow-y-auto p-4 space-y-3">
                 {history.map((m, i) => (
                   <div key={i} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                    <div className={`max-w-[88%] rounded-xl px-3 py-2 text-sm whitespace-pre-wrap break-words ${m.role === 'user' ? 'bg-emerald-600/80 text-white' : 'bg-slate-900 border border-slate-800 text-slate-200'}`}>{m.text}</div>
+                    <div className={`max-w-[88%] rounded-xl px-3 py-2 text-sm whitespace-pre-wrap break-words ${m.role === 'user' ? 'bg-brand text-on-brand' : 'bg-sunken border border-line text-fg'}`}>{m.text}</div>
                   </div>
                 ))}
-                {busy && <div className="flex items-center space-x-2 text-xs text-slate-400"><Loader2 className="w-3.5 h-3.5 animate-spin" /><span>Thinking…</span></div>}
+                {busy && <div className="flex items-center space-x-2 text-xs text-muted"><Loader2 className="w-3.5 h-3.5 animate-spin" /><span>Thinking…</span></div>}
                 <div ref={bottom} />
               </div>
-              {error && <p className="px-4 pb-2 text-xs text-rose-400" role="alert">{error}</p>}
-              <form onSubmit={send} className="p-3 border-t border-slate-800 flex items-center gap-2">
+              {error && <p className="px-4 pb-2 text-xs text-danger" role="alert">{error}</p>}
+              <form onSubmit={send} className="p-3 border-t border-line flex items-center gap-2">
                 <input value={input} onChange={(e) => setInput(e.target.value)} placeholder={hasMenu ? 'What should change?' : 'Describe your business…'} maxLength={1500} className={input$} autoFocus />
-                <button disabled={busy || !input.trim()} className="p-2.5 bg-emerald-500 hover:bg-emerald-400 text-slate-950 rounded-lg disabled:opacity-40" aria-label="Send"><Send className="w-4 h-4" /></button>
+                <button disabled={busy || !input.trim()} className="p-2.5 bg-brand hover:bg-brand text-on-brand rounded-lg disabled:opacity-40" aria-label="Send"><Send className="w-4 h-4" /></button>
               </form>
             </div>
 
@@ -110,28 +110,28 @@ export default function MenuAssistant({ overview, onUse, onClose }: { overview: 
               <div className="flex-1 overflow-y-auto p-4">
                 {draft && draft.services.length > 0 ? (
                   <div className="space-y-3">
-                    <p className="text-[11px] text-slate-500">{changed ? 'Gemini’s proposal' : 'Your current menu'}</p>
+                    <p className="text-[11px] text-muted">{changed ? 'Gemini’s proposal' : 'Your current menu'}</p>
                     {draft.services.map((s, i) => (
-                      <div key={i} className="bg-slate-900 border border-slate-800 rounded-xl p-3">
-                        <div className="text-sm font-semibold text-white">{i + 1}. {s.title}</div>
-                        <ol className="mt-2 space-y-1 list-decimal list-inside text-xs text-slate-300">
+                      <div key={i} className="bg-sunken border border-line rounded-xl p-3">
+                        <div className="text-sm font-semibold text-fg">{i + 1}. {s.title}</div>
+                        <ol className="mt-2 space-y-1 list-decimal list-inside text-xs text-fg2">
                           {s.questions.map((q, j) => <li key={j}>{q.prompt}</li>)}
                         </ol>
                       </div>
                     ))}
                   </div>
                 ) : (
-                  <div className="h-full min-h-[200px] flex flex-col items-center justify-center text-center text-slate-500 text-sm px-6">
-                    <Sparkles className="w-8 h-8 mb-3 text-slate-700" />
+                  <div className="h-full min-h-[200px] flex flex-col items-center justify-center text-center text-muted text-sm px-6">
+                    <Sparkles className="w-8 h-8 mb-3 text-fg2" />
                     <p>The menu and questions appear here as soon as Gemini knows enough about your business.</p>
                   </div>
                 )}
               </div>
-              <div className="p-3 border-t border-slate-800 flex flex-wrap items-center gap-2">
-                <button disabled={!draft || !changed || busy} onClick={use} className="px-4 py-2 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs rounded-lg disabled:opacity-40">Use this menu</button>
-                {hasMenu && <button onClick={startOver} disabled={busy} className="px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs rounded-lg border border-slate-700 disabled:opacity-40">Start from scratch</button>}
-                <button onClick={onClose} className="px-3.5 py-2 text-slate-400 hover:text-white text-xs">Cancel</button>
-                <span className="text-[11px] text-slate-500">It goes into the editor first; nothing changes for customers until you press Save changes.</span>
+              <div className="p-3 border-t border-line flex flex-wrap items-center gap-2">
+                <button disabled={!draft || !changed || busy} onClick={use} className="px-4 py-2 bg-brand hover:bg-brand text-on-brand font-bold text-xs rounded-lg disabled:opacity-40">Use this menu</button>
+                {hasMenu && <button onClick={startOver} disabled={busy} className="px-3.5 py-2 bg-subtle hover:bg-subtle text-fg text-xs rounded-lg border border-line disabled:opacity-40">Start from scratch</button>}
+                <button onClick={onClose} className="px-3.5 py-2 text-muted hover:text-fg text-xs">Cancel</button>
+                <span className="text-[11px] text-muted">It goes into the editor first; nothing changes for customers until you press Save changes.</span>
               </div>
             </div>
           </div>
