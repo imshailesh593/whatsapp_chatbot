@@ -93,7 +93,7 @@ const GROUPS: { title: string; hint: string; keys: string[] }[] = [
     hint: 'From the Razorpay dashboard: Account & Settings, API keys. The webhook secret is the one you set when you add the webhook below.',
     keys: ['RAZORPAY_KEY_ID', 'RAZORPAY_KEY_SECRET', 'RAZORPAY_WEBHOOK_SECRET', 'RAZORPAY_PLAN_PRO']
   },
-  { title: 'PayPal plan ($)', hint: 'The PayPal keys stay in the server settings. The plan id is filled in for you by the button below.', keys: ['PAYPAL_PLAN_PRO'] },
+  { title: 'PayPal plan ($)', hint: 'The PayPal keys stay in the server settings. The plan id is filled in for you by the button below.', keys: ['PAYPAL_PLAN_PRO', 'PAYPAL_PLAN_PRO_YEARLY'] },
   {
     title: 'Email (Resend)',
     hint: 'Used for lead alerts and for payment receipts and reminders to your customers. Verify your sending domain in Resend first.',

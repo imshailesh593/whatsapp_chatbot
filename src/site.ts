@@ -1,4 +1,6 @@
 import { SITE_JS } from './siteScript';
+import fastifyStatic from '@fastify/static';
+import path from 'path';
 import type { FastifyInstance, FastifyReply } from 'fastify';
 import { PRODUCT_NAME } from './brand';
 import { PLANS, GRACE_DAYS } from './plans';
@@ -84,6 +86,7 @@ h3{font-size:19px;margin:0 0 8px;letter-spacing:-.02em;font-weight:650}
 .pill{font-style:normal;font-size:12px;font-weight:600;padding:3px 11px;border-radius:99px;background:var(--alt);color:var(--ink2);border:1px solid var(--line);white-space:nowrap}
 .pill.hot{background:#ffe8e3;color:#b3261e;border-color:#ffd0c8}.pill.ok{background:var(--soft);color:var(--brand);border-color:color-mix(in srgb,var(--brand) 25%,transparent)}
 .phone{background:#0b141a;border-radius:30px;padding:10px;max-width:300px;box-shadow:0 40px 70px -20px rgba(0,0,0,.55),0 0 0 1px rgba(255,255,255,.07) inset}
+.phone video.reel{display:block;width:100%;aspect-ratio:9/16;object-fit:cover;border-radius:21px;background:#0b141a}
 .stage .phone{position:absolute;right:-30px;bottom:0;width:230px;transform:rotate(3deg);z-index:2}
 .phone .bar{background:#075e54;color:#fff;border-radius:20px 20px 0 0;padding:11px 14px;font-weight:600;font-size:13.5px;display:flex;align-items:center;gap:9px}
 .phone .bar:before{content:"";width:26px;height:26px;border-radius:50%;background:rgba(255,255,255,.22)}
@@ -384,7 +387,7 @@ function planCardsHtml(region: Region, path: string): string {
     const l = p.limits;
     const price = rupees
       ? `<div class="price">${inr(p.price.INR)}<small> / month</small></div><div class="fine" style="margin-top:4px">Shown in Indian rupees. <a href="${path}?region=world${anchor}">Show US dollars (${usd(p.price.USD)})</a></div>`
-      : `<div class="price">${usd(p.price.USD)}<small> / month</small></div><div class="fine" style="margin-top:4px">Shown in US dollars. <a href="${path}?region=in${anchor}">Paying from India? Show rupees (${inr(p.price.INR)})</a></div>`;
+      : `<div class="price">${usd(p.price.USD)}<small> / month</small></div><div class="fine" style="margin-top:4px">or ${usd(p.yearlyUSD)} a year (save ${Math.round(100 - (p.yearlyUSD / (p.price.USD * 12)) * 100)}%). Shown in US dollars. <a href="${path}?region=in${anchor}">Paying from India? Show rupees (${inr(p.price.INR)})</a></div>`;
     return `<div class="card plan pop">
 <h3>${esc(p.name)}</h3><p class="fine" style="margin:0 0 8px">${esc(p.blurb)}</p>
 ${price}
@@ -416,7 +419,7 @@ function landing(region: Region): string {
     ['What does the AI do, and what does it not do?', 'It answers questions from the facts you give it (prices, hours, policies), in the language the customer writes in. If the answer is not in your notes it does not guess. It also writes the short briefing when a customer asks for a person, and helps you set up. The questions customers must answer are always the ones you wrote.'],
     ['Can customers talk to a real person?', 'Yes. If a customer asks for a human, the bot stops replying in that chat and alerts you with a summary. You reply from your phone or the dashboard, then hand the chat back to the bot when you are done.'],
     ['How does appointment booking work?', 'Set your working days, hours and appointment length once. The customer replies BOOK, picks a date, then picks a time. The bot books it, confirms it to them on WhatsApp, alerts you and reminds them before it starts. You can use the built-in calendar or connect Google Calendar.'],
-    ['How much does it cost, and can I cancel?', `One plan with everything included: ${inr(PLANS[0].price.INR)} a month in India, ${usd(PLANS[0].price.USD)} a month everywhere else. It is a monthly subscription that renews automatically. Cancel any time from your dashboard and keep access until the end of the period you paid for. See the <a href="/refunds">refund and cancellation policy</a>.`],
+    ['How much does it cost, and can I cancel?', `One plan with everything included: ${inr(PLANS[0].price.INR)} a month in India, ${usd(PLANS[0].price.USD)} a month or ${usd(PLANS[0].yearlyUSD)} a year everywhere else. It is a monthly subscription that renews automatically. Cancel any time from your dashboard and keep access until the end of the period you paid for. See the <a href="/refunds">refund and cancellation policy</a>.`],
     ['How does the monthly auto-debit work?', `You subscribe once and approve the recurring payment: in India with UPI AutoPay or a card (through Razorpay), elsewhere with PayPal or a card. After that the monthly amount is debited automatically on the same date, and you are notified before each debit. Nothing is charged until you approve. To stop, cancel under Plan &amp; billing (or from your UPI app or PayPal) and no further payments are taken.`],
     ['What happens when my plan ends?', `The bot stops replying to new messages, but your leads and settings stay safe. A paid plan whose renewal fails keeps working for a ${GRACE_DAYS}-day grace period so you can fix the payment.`],
     ['Who can see my customers\' chats?', `Only you and the team members you add. We process the messages to run the service and never sell them. Read the <a href="/privacy">privacy policy</a> for details, including which providers are involved.`],
@@ -441,11 +444,7 @@ function landing(region: Region): string {
 <div class="row"><span class="av">RM</span><div><b>Rohan M.</b><small>Braces · asked for a person</small></div><em class="pill">Follow-up</em></div>
 <div class="row"><span class="av">ND</span><div><b>Neha D.</b><small>Check-up · reminder sent</small></div><em class="pill ok">Booked Tue 11:00</em></div>
 </div></div>
-<div class="phone"><div class="bar">Glow Dental Clinic</div><div class="chat">
-<div class="b out">Hi, do you do teeth whitening?</div>
-<div class="b in">Welcome! Reply with a number:<br>1️⃣ Check-up 2️⃣ Whitening 3️⃣ Braces</div>
-<div class="b out">2</div>
-<div class="b in">Great! Reply <b>BOOK</b> to pick a date and time.</div></div></div>
+<div class="phone"><video class="reel" src="/media/hero.mp4" poster="/media/hero-poster.jpg" autoplay muted loop playsinline preload="metadata"></video></div></div>
 </div>
 </div></section>
 
@@ -916,7 +915,7 @@ function pricing(region: Region): string {
   const p = esc(PRODUCT_NAME);
   return page({
     title: `Pricing | ${PRODUCT_NAME}`,
-    description: `${PRODUCT_NAME} pricing: ${inr(PLANS[0].price.INR)} a month in India, ${usd(PLANS[0].price.USD)} a month elsewhere.`,
+    description: `${PRODUCT_NAME} pricing: ${inr(PLANS[0].price.INR)} a month in India, ${usd(PLANS[0].price.USD)} a month or ${usd(PLANS[0].yearlyUSD)} a year elsewhere.`,
     path: '/pricing',
     body: `<main class="doc" style="max-width:760px"><h1>Pricing</h1>
 <p>${pricingLead(region)} Customers in India pay in Indian rupees by subscription (UPI AutoPay or card, through Razorpay); customers elsewhere pay in US dollars (PayPal or card).</p>
@@ -949,7 +948,7 @@ export function registerSite(app: FastifyInstance): void {
       .header('Content-Type', 'text/html; charset=utf-8')
       .header('Cache-Control', perVisitor ? 'private, no-cache' : 'public, max-age=300')
       .header('Vary', perVisitor ? 'Cookie, X-Real-Ip, X-Forwarded-For' : 'Accept-Encoding')
-      .header('Content-Security-Policy', "default-src 'none'; script-src 'self'; style-src 'unsafe-inline'; font-src 'self'; img-src 'self' data:; base-uri 'none'; form-action 'self'; frame-ancestors 'none'")
+      .header('Content-Security-Policy', "default-src 'none'; script-src 'self'; style-src 'unsafe-inline'; font-src 'self'; img-src 'self' data:; media-src 'self'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'")
       .header('X-Content-Type-Options', 'nosniff')
       .header('Referrer-Policy', 'strict-origin-when-cross-origin')
       .send(html);
@@ -959,6 +958,9 @@ export function registerSite(app: FastifyInstance): void {
     if (d.setCookie) reply.header('Set-Cookie', d.setCookie);
     return d.region;
   };
+
+  // Hero video and poster (range requests supported, so playback starts quickly)
+  app.register(fastifyStatic, { root: path.join(__dirname, '..', 'public'), prefix: '/media/', decorateReply: false, maxAge: '7d' });
 
   app.get('/', async (req, reply) => send(reply, landing(regionOf(req, reply)), 200, true));
   app.get('/privacy', async (_req, reply) => send(reply, privacy()));

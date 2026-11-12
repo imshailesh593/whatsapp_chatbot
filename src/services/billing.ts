@@ -7,7 +7,7 @@ import { prisma } from '../lib/prisma';
 import { invalidateConfig } from './botConfig';
 import { PLANS, planById } from '../plans';
 import { PRODUCT_NAME } from '../brand';
-import { cancelPaypalSubscription, createSubscription, getSubscription, paypalKeys, paypalPlanEnv, planFromPaypal, verifyPaypalWebhook } from './paypal';
+import { type Period, cancelPaypalSubscription, createSubscription, getSubscription, paypalKeys, paypalPlanEnv, planFromPaypal, verifyPaypalWebhook } from './paypal';
 
 export type Provider = 'stripe' | 'razorpay' | 'paypal';
 
@@ -60,7 +60,7 @@ const razorpay = <T>(path: string, body: unknown) =>
   });
 
 /** Starts a subscription purchase and returns the provider-hosted page to send the owner to. */
-export async function startCheckout(ws: Workspace, planId: string, provider: Provider, email: string, baseUrl: string): Promise<{ url: string }> {
+export async function startCheckout(ws: Workspace, planId: string, provider: Provider, email: string, baseUrl: string, period: Period = 'month'): Promise<{ url: string }> {
   const plan = planById(planId);
   if (!plan) throw new Error('Unknown plan');
   if (!providersAvailable()[provider]) throw new Error('This payment method is not set up yet');
@@ -82,7 +82,9 @@ export async function startCheckout(ws: Workspace, planId: string, provider: Pro
     return { url: s.url };
   }
   if (provider === 'paypal') {
+    if (period === 'year' && !env(paypalPlanEnv(plan.id, 'year'))) throw new Error('Yearly billing is not set up yet');
     const sub = await createSubscription({
+      period,
       ourPlanId: plan.id,
       workspaceId: ws.id,
       email,

@@ -19,6 +19,7 @@ COPY prisma ./prisma
 RUN npx prisma generate
 COPY tsconfig.json ./
 COPY src ./src
+COPY public ./public
 COPY --from=web /web/dist ./web/dist
 RUN npm run build && npm prune --omit=dev
 

@@ -41,7 +41,7 @@ import { authUrl, cancelAppointment, cleanRules, completeConnection, disconnect 
 import { admitAiReply, getUsage } from './services/usage';
 import { suggestInstructions } from './services/gemini';
 import { checkRazorpay, createPlans as createRazorpayPlans } from './services/razorpaySetup';
-import { checkPaypal, createPaypalPlans } from './services/paypal';
+import { checkPaypal, createPaypalPlans, paypalPlanEnv } from './services/paypal';
 import { describeRuntimeConfig, newWebhookSecret, saveRuntimeConfig } from './services/runtimeConfig';
 import { resetPlan, updatePlan } from './services/planConfig';
 import { emailConfigured, emailProvider, sendEmail } from './services/mailer';
@@ -516,21 +516,21 @@ export function registerAdmin(app: FastifyInstance, opts: { getQr: (workspaceId:
       provider: w.billingProvider,
       limits: { conversations: num(access.limits.conversations), aiReplies: num(access.limits.aiReplies), seats: num(access.limits.seats), broadcasts: num(access.limits.broadcasts) },
       usage: { ...usage, seats },
-      providers: providersAvailable(),
+      providers: { ...providersAvailable(), paypalYearly: !!process.env[paypalPlanEnv('pro', 'year')] },
       // Which currency to lead with, from the owner's IP address (they can switch it on the page)
       currency: currencyOf(detectRegion(req.headers, req.ip).region),
-      plans: PLANS.map((p) => ({ id: p.id, name: p.name, blurb: p.blurb, price: p.price, limits: p.limits })),
+      plans: PLANS.map((p) => ({ id: p.id, name: p.name, blurb: p.blurb, price: p.price, yearlyUSD: p.yearlyUSD, limits: p.limits })),
       payments: payments.map((p) => ({ id: p.id, amount: p.amount, currency: p.currency, status: p.status, plan: p.plan, at: p.createdAt.toISOString() }))
     };
   });
 
   app.post('/admin/api/billing/checkout', { preHandler: ownerOnly }, async (req, reply) => {
-    const b = (req.body ?? {}) as { plan?: string; provider?: string };
+    const b = (req.body ?? {}) as { plan?: string; provider?: string; period?: string };
     const w = await prisma.workspace.findUniqueOrThrow({ where: { id: wsId(req) } });
     if (w.plan === 'internal') return reply.status(400).send({ error: 'This workspace is not billed' });
     if (b.provider !== 'stripe' && b.provider !== 'razorpay' && b.provider !== 'paypal') return reply.status(400).send({ error: 'Choose a payment method' });
     try {
-      return await startCheckout(w, String(b.plan), b.provider, me(req).email, publicUrl(req));
+      return await startCheckout(w, String(b.plan), b.provider, me(req).email, publicUrl(req), b.period === 'year' ? 'year' : 'month');
     } catch (err) {
       return reply.status(400).send({ error: (err as Error).message });
     }
@@ -1137,7 +1137,7 @@ export function registerAdmin(app: FastifyInstance, opts: { getQr: (workspaceId:
   app.post('/admin/api/super/paypal/create-plan', { preHandler: superOnly }, async (req, reply) => {
     try {
       const made = await createPaypalPlans(true);
-      await saveRuntimeConfig(Object.fromEntries(made.map((m) => [`PAYPAL_PLAN_${m.plan.toUpperCase()}`, m.paypalPlanId])));
+      await saveRuntimeConfig(Object.fromEntries(made.map((m) => [paypalPlanEnv(m.plan, m.period), m.paypalPlanId])));
       await audit(req, 'paypal.plan', null, made.map((m) => m.paypalPlanId).join(', '));
       return { plans: made };
     } catch (err) {

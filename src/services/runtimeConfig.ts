@@ -24,6 +24,7 @@ export const MANAGED_KEYS: KeyDef[] = [
   { key: 'RAZORPAY_PLAN_PRO', label: 'Razorpay plan id', secret: false, check: prefix('plan_', 'The plan id') },
   { key: 'RAZORPAY_MODE', label: 'Razorpay mode', secret: false, check: (v) => (['subscription', 'link'].includes(v) ? null : 'Mode must be subscription or link') },
   { key: 'PAYPAL_PLAN_PRO', label: 'PayPal plan id', secret: false, check: prefix('P-', 'The plan id') },
+  { key: 'PAYPAL_PLAN_PRO_YEARLY', label: 'PayPal yearly plan id', secret: false, check: prefix('P-', 'The plan id') },
   { key: 'RESEND_API_KEY', label: 'Resend API key', secret: true, check: prefix('re_', 'The API key') },
   { key: 'MAIL_FROM', label: 'Email sender', secret: false, check: (v) => (/@/.test(v) && v.length <= 200 ? null : 'Use an address like: Wappo <hello@wappoai.com>') }
 ];

@@ -7,7 +7,9 @@ const env = (k: string) => (process.env[k] ?? '').trim();
 export const paypalMode = (): 'live' | 'sandbox' => (env('PAYPAL_MODE') === 'sandbox' ? 'sandbox' : 'live');
 const apiBase = () => (paypalMode() === 'sandbox' ? 'https://api-m.sandbox.paypal.com' : 'https://api-m.paypal.com');
 export const paypalKeys = () => !!env('PAYPAL_CLIENT_ID') && !!env('PAYPAL_CLIENT_SECRET');
-export const paypalPlanEnv = (planId: string) => `PAYPAL_PLAN_${planId.toUpperCase()}`;
+export type Period = 'month' | 'year';
+export const paypalPlanEnv = (planId: string, period: Period = 'month') => `PAYPAL_PLAN_${planId.toUpperCase()}${period === 'year' ? '_YEARLY' : ''}`;
+const priceFor = (p: { price: { USD: number }; yearlyUSD: number }, period: Period) => (period === 'year' ? p.yearlyUSD : p.price.USD);
 
 /** Billing events we need PayPal to send to /webhooks/paypal. */
 export const PAYPAL_EVENTS = [
@@ -61,12 +63,12 @@ export async function pp<T = any>(method: 'GET' | 'POST' | 'PATCH', path: string
 const money = (cents: number) => (cents / 100).toFixed(2);
 
 /** A hosted PayPal page where the owner approves a recurring monthly payment. */
-export async function createSubscription(opts: { ourPlanId: string; workspaceId: string; email: string; brand: string; returnUrl: string; cancelUrl: string }): Promise<{ id: string; approveUrl: string }> {
-  const plan = env(paypalPlanEnv(opts.ourPlanId));
+export async function createSubscription(opts: { period?: Period; ourPlanId: string; workspaceId: string; email: string; brand: string; returnUrl: string; cancelUrl: string }): Promise<{ id: string; approveUrl: string }> {
+  const plan = env(paypalPlanEnv(opts.ourPlanId, opts.period ?? 'month'));
   if (!plan) throw new Error('This plan is not set up in PayPal yet');
   const sub = await pp<{ id: string; links?: { rel: string; href: string }[] }>('POST', '/v1/billing/subscriptions', {
     plan_id: plan,
-    custom_id: `${opts.workspaceId}:${opts.ourPlanId}`,
+    custom_id: `${opts.workspaceId}:${opts.ourPlanId}:${opts.period ?? 'month'}`,
     subscriber: { email_address: opts.email },
     application_context: {
       brand_name: opts.brand.slice(0, 127),
@@ -113,14 +115,14 @@ export async function verifyPaypalWebhook(headers: Record<string, string | strin
  * they belong to. Stable request ids make a repeated run return the same objects instead of creating duplicates.
  */
 /** With `force` a new PayPal plan is created even when one is configured (after a price change: PayPal plans cannot change price). */
-export async function createPaypalPlans(force = false): Promise<{ plan: string; paypalPlanId: string; created: boolean }[]> {
+export async function createPaypalPlans(force = false): Promise<{ plan: string; period: Period; paypalPlanId: string; created: boolean }[]> {
   if (!paypalKeys()) throw new Error('Set PAYPAL_CLIENT_ID and PAYPAL_CLIENT_SECRET first');
-  const out: { plan: string; paypalPlanId: string; created: boolean }[] = [];
+  const out: { plan: string; period: Period; paypalPlanId: string; created: boolean }[] = [];
   let productId = env('PAYPAL_PRODUCT_ID');
-  for (const p of PLANS) {
-    const existing = force ? '' : env(paypalPlanEnv(p.id));
+  for (const [p, period] of PLANS.flatMap((x) => (['month', 'year'] as Period[]).map((per) => [x, per] as const))) {
+    const existing = force ? '' : env(paypalPlanEnv(p.id, period));
     if (existing) {
-      out.push({ plan: p.id, paypalPlanId: existing, created: false });
+      out.push({ plan: p.id, period, paypalPlanId: existing, created: false });
       continue;
     }
     if (!productId) {
@@ -132,23 +134,23 @@ export async function createPaypalPlans(force = false): Promise<{ plan: string; 
       '/v1/billing/plans',
       {
         product_id: productId,
-        name: `${p.name} plan (monthly)`,
+        name: `${p.name} plan (${period === 'year' ? 'yearly' : 'monthly'})`,
         description: p.blurb.slice(0, 120),
         status: 'ACTIVE',
         billing_cycles: [
           {
-            frequency: { interval_unit: 'MONTH', interval_count: 1 },
+            frequency: { interval_unit: period === 'year' ? 'YEAR' : 'MONTH', interval_count: 1 },
             tenure_type: 'REGULAR',
             sequence: 1,
             total_cycles: 0,
-            pricing_scheme: { fixed_price: { value: money(p.price.USD), currency_code: 'USD' } }
+            pricing_scheme: { fixed_price: { value: money(priceFor(p, period)), currency_code: 'USD' } }
           }
         ],
         payment_preferences: { auto_bill_outstanding: true, setup_fee_failure_action: 'CANCEL', payment_failure_threshold: 3 }
       },
-      { 'PayPal-Request-Id': `lead-console-plan-${p.id}-${p.price.USD}`, Prefer: 'return=representation' }
+      { 'PayPal-Request-Id': `lead-console-plan-${p.id}-${period}-${priceFor(p, period)}`, Prefer: 'return=representation' }
     );
-    out.push({ plan: p.id, paypalPlanId: made.id, created: true });
+    out.push({ plan: p.id, period, paypalPlanId: made.id, created: true });
   }
   return out;
 }
@@ -174,9 +176,11 @@ export async function checkPaypal(live: boolean): Promise<SetupCheck[]> {
   const keys = paypalKeys();
   checks.push({ label: 'API credentials', ok: keys, detail: keys ? `Set (${paypalMode().toUpperCase()} mode${paypalMode() === 'sandbox' ? ': no real money moves' : ''})` : 'Add PAYPAL_CLIENT_ID and PAYPAL_CLIENT_SECRET to the server .env' });
   checks.push({ label: 'Webhook id', ok: !!env('PAYPAL_WEBHOOK_ID'), detail: env('PAYPAL_WEBHOOK_ID') ? 'Set' : 'Without it payments can never switch a plan on. Run: node dist/cli/paypalSetup.js, then add PAYPAL_WEBHOOK_ID' });
-  for (const p of PLANS) {
-    const id = env(paypalPlanEnv(p.id));
-    checks.push({ label: `${p.name} plan id`, ok: !!id, detail: id ? id : `Run: node dist/cli/paypalSetup.js, then add ${paypalPlanEnv(p.id)}` });
+  const PERIODS: Period[] = ['month', 'year'];
+  const pname = (n: string, per: Period) => `${n} ${per === 'year' ? 'yearly' : 'monthly'}`;
+  for (const p of PLANS) for (const per of PERIODS) {
+    const id = env(paypalPlanEnv(p.id, per));
+    checks.push({ label: `${pname(p.name, per)} plan id`, ok: !!id, detail: id ? id : `Run: node dist/cli/paypalSetup.js, then add ${paypalPlanEnv(p.id, per)}` });
   }
   if (!live || !keys) return checks;
 
@@ -187,21 +191,23 @@ export async function checkPaypal(live: boolean): Promise<SetupCheck[]> {
     checks.push({ label: 'PayPal connection', ok: false, detail: (err as Error).message });
     return checks;
   }
-  for (const p of PLANS) {
-    const id = env(paypalPlanEnv(p.id));
+  for (const p of PLANS) for (const per of PERIODS) {
+    const id = env(paypalPlanEnv(p.id, per));
     if (!id) continue;
+    const unit = per === 'year' ? 'YEAR' : 'MONTH';
+    const want = priceFor(p, per);
     try {
       const plan = await pp<any>('GET', `/v1/billing/plans/${encodeURIComponent(id)}`);
       const cycle = plan.billing_cycles?.find((c: any) => c.tenure_type === 'REGULAR');
       const price = cycle?.pricing_scheme?.fixed_price;
-      const good = plan.status === 'ACTIVE' && cycle?.frequency?.interval_unit === 'MONTH' && cycle?.frequency?.interval_count === 1 && price?.currency_code === 'USD' && Number(price?.value) === p.price.USD / 100; // PayPal may return 19.0 for 19.00
+      const good = plan.status === 'ACTIVE' && cycle?.frequency?.interval_unit === unit && cycle?.frequency?.interval_count === 1 && price?.currency_code === 'USD' && Number(price?.value) === want / 100; // PayPal may return 9.0 for 9.00
       checks.push({
-        label: `${p.name} plan in PayPal`,
+        label: `${pname(p.name, per)} plan in PayPal`,
         ok: good,
-        detail: good ? `Active, $${price.value} every month` : `Must be ACTIVE and $${money(p.price.USD)} USD monthly; found ${plan.status} ${price?.value ?? '?'} ${price?.currency_code ?? ''} per ${cycle?.frequency?.interval_unit ?? '?'}. Create a new plan and update ${paypalPlanEnv(p.id)}`
+        detail: good ? `Active, $${price.value} every ${per}` : `Must be ACTIVE and $${money(want)} USD per ${per}; found ${plan.status} ${price?.value ?? '?'} ${price?.currency_code ?? ''} per ${cycle?.frequency?.interval_unit ?? '?'}. Create a new plan and update ${paypalPlanEnv(p.id, per)}`
       });
     } catch (err) {
-      checks.push({ label: `${p.name} plan in PayPal`, ok: false, detail: (err as Error).message });
+      checks.push({ label: `${pname(p.name, per)} plan in PayPal`, ok: false, detail: (err as Error).message });
     }
   }
   return checks;
@@ -210,5 +216,5 @@ export async function checkPaypal(live: boolean): Promise<SetupCheck[]> {
 export const planFromPaypal = (customId?: string, planId?: string): string | undefined => {
   const fromCustom = customId?.split(':')[1];
   if (fromCustom && planById(fromCustom)) return fromCustom;
-  return PLANS.find((p) => env(paypalPlanEnv(p.id)) === planId)?.id;
+  return PLANS.find((p) => env(paypalPlanEnv(p.id)) === planId || env(paypalPlanEnv(p.id, 'year')) === planId)?.id;
 };

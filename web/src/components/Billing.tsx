@@ -133,7 +133,7 @@ export default function Billing({ me }: { me: AdminUser }) {
                     {current && <span className="text-[10px] text-brand-text">Current plan</span>}
                   </div>
                   <div className="mt-1 text-xs text-muted">{p.blurb}</div>
-                  <div className="mt-3 text-lg font-extrabold text-fg">{money(p.price[currency], currency)}<span className="text-xs font-medium text-muted"> /month</span></div>
+                  <div className="mt-3 text-lg font-extrabold text-fg">{money(p.price[currency], currency)}<span className="text-xs font-medium text-muted"> /month</span>{currency === 'USD' && <span className="text-xs font-medium text-muted"> or {money(p.yearlyUSD, 'USD')} /year</span>}</div>
                   <button type="button" onClick={() => setChosen(currency === 'INR' ? 'USD' : 'INR')} className="text-[11px] text-muted hover:text-fg2 underline">
                     {currency === 'INR' ? `Not in India? Show ${money(p.price.USD, 'USD')}` : `Paying from India? Show ${money(p.price.INR, 'INR')}`}
                   </button>
@@ -150,9 +150,13 @@ export default function Billing({ me }: { me: AdminUser }) {
                         className="py-2 bg-brand hover:bg-brand text-on-brand font-bold text-xs rounded-lg disabled:opacity-40 flex items-center justify-center space-x-1.5">
                         {busy === `rz-${p.id}` && <Loader2 className="w-3.5 h-3.5 animate-spin" />}<span>{current ? 'Renew for 30 days (₹)' : 'Subscribe in ₹ (UPI AutoPay, cards)'}</span>
                       </button>}
-                      {!current && currency === 'USD' && b.providers.paypal && <button disabled={!!busy} onClick={() => go(`pp-${p.id}`, () => api.checkout(p.id, 'paypal'))}
+                      {!current && currency === 'USD' && b.providers.paypal && <button disabled={!!busy} onClick={() => go(`pp-${p.id}`, () => api.checkout(p.id, 'paypal', 'month'))}
                         className="py-2 bg-subtle hover:bg-subtle text-fg text-xs rounded-lg border border-line disabled:opacity-40 flex items-center justify-center space-x-1.5">
-                        {busy === `pp-${p.id}` && <Loader2 className="w-3.5 h-3.5 animate-spin" />}<span>Subscribe in $ (PayPal)</span>
+                        {busy === `pp-${p.id}` && <Loader2 className="w-3.5 h-3.5 animate-spin" />}<span>Subscribe {money(p.price.USD, 'USD')}/month (PayPal)</span>
+                      </button>}
+                      {!current && currency === 'USD' && b.providers.paypal && b.providers.paypalYearly && <button disabled={!!busy} onClick={() => go(`ppy-${p.id}`, () => api.checkout(p.id, 'paypal', 'year'))}
+                        className="py-2 bg-subtle hover:bg-subtle text-fg text-xs rounded-lg border border-line disabled:opacity-40 flex items-center justify-center space-x-1.5">
+                        {busy === `ppy-${p.id}` && <Loader2 className="w-3.5 h-3.5 animate-spin" />}<span>Subscribe {money(p.yearlyUSD, 'USD')}/year (PayPal), save {Math.round(100 - (p.yearlyUSD / (p.price.USD * 12)) * 100)}%</span>
                       </button>}
                       {!current && currency === 'USD' && (b.providers.stripe || !b.providers.paypal) && <button disabled={!b.providers.stripe || !!busy} onClick={() => go(`st-${p.id}`, () => api.checkout(p.id, 'stripe'))}
                         className="py-2 bg-subtle hover:bg-subtle text-fg text-xs rounded-lg border border-line disabled:opacity-40 flex items-center justify-center space-x-1.5">
