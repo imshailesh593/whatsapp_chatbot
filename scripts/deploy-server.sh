@@ -10,11 +10,12 @@ HEALTH_URL=${HEALTH_URL:-https://wappoai.com/health}
 DC="docker compose -p mnsbot -f docker-compose.yml -f docker-compose.vps.yml"
 
 cd "$APP"
-mkdir -p backups
+install -d -m 700 backups   # dumps hold customer data: root only
+chmod 700 backups
 stamp=$(date +%Y%m%d-%H%M%S)
 
 echo "== backup"
-$DC exec -T db pg_dump -U postgres -Fc mns_bot > "backups/pre-deploy-$stamp.dump" </dev/null
+( umask 077; $DC exec -T db pg_dump -U postgres -Fc mns_bot > "backups/pre-deploy-$stamp.dump" </dev/null )
 [ -s "backups/pre-deploy-$stamp.dump" ] || { echo "backup is empty, stopping"; exit 1; }
 ls -t backups/pre-deploy-*.dump | tail -n +11 | xargs -r rm -f --   # keep the 10 newest
 

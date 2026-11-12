@@ -26,6 +26,10 @@ jobs:
 
   deploy:
     needs: check
+    # Only main may deploy, so a branch cannot send its own copy of the script to the server
+    if: github.ref == 'refs/heads/main'
+    # Optional: in Settings > Environments > production, add a required reviewer and move DEPLOY_KEY there
+    environment: production
     runs-on: ubuntu-latest
     env:
       DEPLOY_HOST: 201.18.198.8
