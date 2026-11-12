@@ -86,6 +86,7 @@ h3{font-size:19px;margin:0 0 8px;letter-spacing:-.02em;font-weight:650}
 .pill{font-style:normal;font-size:12px;font-weight:600;padding:3px 11px;border-radius:99px;background:var(--alt);color:var(--ink2);border:1px solid var(--line);white-space:nowrap}
 .pill.hot{background:#ffe8e3;color:#b3261e;border-color:#ffd0c8}.pill.ok{background:var(--soft);color:var(--brand);border-color:color-mix(in srgb,var(--brand) 25%,transparent)}
 .phone{background:#0b141a;border-radius:30px;padding:10px;max-width:300px;box-shadow:0 40px 70px -20px rgba(0,0,0,.55),0 0 0 1px rgba(255,255,255,.07) inset}
+.snd{position:absolute;left:18px;bottom:18px;z-index:3;display:inline-flex;align-items:center;gap:6px;border:0;border-radius:99px;padding:8px 13px;background:rgba(11,20,26,.78);color:#fff;font:600 12.5px/1 inherit;cursor:pointer;backdrop-filter:blur(6px)}.snd:hover{background:rgba(11,20,26,.92)}.snd:focus-visible{outline:2px solid #fff;outline-offset:2px}
 .phone video.reel{display:block;width:100%;aspect-ratio:9/16;object-fit:cover;border-radius:21px;background:#0b141a}
 .stage .phone{position:absolute;right:-30px;bottom:0;width:230px;transform:rotate(3deg);z-index:2}
 .phone .bar{background:#075e54;color:#fff;border-radius:20px 20px 0 0;padding:11px 14px;font-weight:600;font-size:13.5px;display:flex;align-items:center;gap:9px}
@@ -436,8 +437,8 @@ function landing(region: Region): string {
 <div class="fine">${signupOpen() ? 'No card needed to start. ' : ''}Set up in about ten minutes.</div>
 <div class="chips"><span>Your own number</span><span>Replies in the customer's language</span><span>Book dates and times in chat</span><span>Built-in CRM</span></div>
 </div>
-<div class="stage" aria-hidden="true">
-<div class="win"><div class="win-bar"><i></i><i></i><i></i><span>Leads · Glow Dental Clinic</span></div>
+<div class="stage">
+<div class="win" aria-hidden="true"><div class="win-bar"><i></i><i></i><i></i><span>Leads · Glow Dental Clinic</span></div>
 <div class="win-body">
 <div class="win-stats"><div><b>128</b><span>Conversations</span></div><div><b>46</b><span>Qualified</span></div><div><b>19</b><span>Booked</span></div></div>
 <div class="row"><span class="av">PS</span><div><b>Priya S.</b><small>Whitening · all 4 answers saved</small></div><em class="pill hot">Hot lead</em></div>

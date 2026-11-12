@@ -16,6 +16,43 @@ export const SITE_JS = `(function () {
   }
   window.addEventListener('scroll', onScroll, { passive: true });
   onScroll();
+
+  // hero video: browsers only allow sound after a click or tap, so it starts muted and unmutes on the first one
+  var reel = d.querySelector('video.reel');
+  if (reel) {
+    var snd = d.createElement('button');
+    snd.type = 'button';
+    snd.className = 'snd';
+    var chose = false;
+    function label() {
+      snd.textContent = reel.muted ? '\\uD83D\\uDD07 Tap for sound' : '\\uD83D\\uDD0A Sound on';
+      snd.setAttribute('aria-label', reel.muted ? 'Turn the video sound on' : 'Turn the video sound off');
+    }
+    function setMuted(m) {
+      reel.muted = m;
+      if (!m) { reel.volume = 1; var p = reel.play(); if (p && p.catch) p.catch(function () { reel.muted = true; label(); }); }
+      label();
+    }
+    snd.addEventListener('click', function (e) { e.stopPropagation(); chose = true; setMuted(!reel.muted); });
+    var holder = reel.parentNode;
+    holder.appendChild(snd);
+    label();
+    function firstGesture(e) {
+      if (!chose && !snd.contains(e.target)) setMuted(false);
+      ['pointerdown', 'keydown', 'touchend'].forEach(function (t) { d.removeEventListener(t, firstGesture, true); });
+    }
+    ['pointerdown', 'keydown', 'touchend'].forEach(function (t) { d.addEventListener(t, firstGesture, true); });
+    // no sound from a video nobody can see
+    if ('IntersectionObserver' in window) {
+      var wasPlaying = true;
+      new IntersectionObserver(function (entries) {
+        entries.forEach(function (en) {
+          if (en.isIntersecting) { if (wasPlaying) { var p = reel.play(); if (p && p.catch) p.catch(function () {}); } }
+          else { wasPlaying = !reel.paused; reel.pause(); }
+        });
+      }, { threshold: 0.25 }).observe(reel);
+    }
+  }
   if (reduce) return;
 
   // sections and cards rise into view as they appear
