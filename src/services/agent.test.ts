@@ -188,7 +188,7 @@ test('answerSupported tolerates paraphrase and other scripts but not invention',
 
 test('the prompt carries the guardrails, the next question and the facts, and never the closing text as a script', () => {
   const p = buildSystemPrompt(ctx({ service: jobs, answers: { name: 'Asha' }, firstReply: false }));
-  for (const must of ['You are an AI assistant', 'ONE question per message', 'GUARDRAILS', 'Never promise or guarantee', 'OTPs', 'The next question to ask is "profession"', 'says goodbye', 'never add questions of your own', 'one entry per question', '✔ ANSWERED: Asha', 'BUSINESS NOTES', 'Keep answers short', '+919876543210', 'never paste it']) {
+  for (const must of ['You are an AI assistant', 'ONE question per message', 'GUARDRAILS', 'Never promise or guarantee', 'OTPs', 'Your reply must ask the question "profession"', 'and no other question', 'must produce two entries', 'says goodbye', 'never add questions of your own', 'one entry per question', '✔ ANSWERED: Asha', 'BUSINESS NOTES', 'Keep answers short', '+919876543210', 'never paste it']) {
     assert.ok(p.includes(must), `missing: ${must}`);
   }
 });
@@ -196,6 +196,7 @@ test('the prompt carries the guardrails, the next question and the facts, and ne
 test('before a service is chosen the prompt lists the services and asks for the need', () => {
   const p = buildSystemPrompt(ctx());
   assert.ok(p.includes('key "jobs": Overseas jobs') && p.includes('find out which service they need'));
+  assert.ok(p.includes('key "profession": What is your profession?') && p.includes('FIRST unanswered question'));
   assert.ok(p.includes('short form link'));
 });
 
@@ -217,7 +218,7 @@ test('the contact footer leaves out what the business has not set', () => {
   const none = { ...cfg, ws: { ...ws, notifyPhone: '', bookingUrl: '' } as Workspace };
   assert.equal(contactFooter(none), '');
   const noLink = contactFooter(cfg, { skipLink: true });
-  assert.ok(noLink.includes('+919876543210') && !noLink.includes('topmate'));
+  assert.ok(noLink.includes('+919876543210') && noLink.includes('priority assistance') && noLink.includes('using the link above') && !noLink.includes('https://'));
 });
 
 test('footerRecentlySent notices the link in the recent chat', () => {

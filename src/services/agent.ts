@@ -94,10 +94,16 @@ export function contactFooter(cfg: BotConfig, opts: { skipLink?: boolean } = {})
   const url = ws.bookingUrl.trim();
   const parts: string[] = [];
   if (phone) parts.push(`You can also WhatsApp or call our team directly on ${phone}.`);
-  if (url && !opts.skipLink) {
+  if (url) {
     const via = /topmate\./i.test(url) ? ' on Topmate' : '';
-    parts.push(`If you need priority assistance, you can book a ${ws.bookingLabel.trim() || 'one-to-one meeting with our team'}${via}:\n👉 ${url}`);
-    if (ws.bookingNote.trim()) parts.push(`*Note: ${ws.bookingNote.trim()}*`);
+    const what = ws.bookingLabel.trim() || 'one-to-one meeting with our team';
+    if (opts.skipLink) {
+      // the closing message already carries the link: point to it instead of repeating it
+      parts.push(`If you need priority assistance, you can book a ${what}${via} using the link above.`);
+    } else {
+      parts.push(`If you need priority assistance, you can book a ${what}${via}:\n👉 ${url}`);
+      if (ws.bookingNote.trim()) parts.push(`*Note: ${ws.bookingNote.trim()}*`);
+    }
   }
   return parts.join('\n\n');
 }
@@ -164,8 +170,11 @@ export function buildSystemPrompt(c: AgentContext): string {
   if (!service) {
     L.push(
       'Services you can help with (put the key in "service" as soon as the customer\'s need is clear):',
-      ...services.map((s) => `- key "${s.key}": ${s.title}${s.keywords.length ? ` (also called: ${s.keywords.join(', ')})` : ''}`),
-      'Your goal now: find out which service they need. If their message already makes it clear, set "service" and move straight to that service\'s first question next. If not, ask one friendly open question about what they are looking for. If it could be several, ask which matters most to start with. Do not make up services.'
+      ...services.flatMap((s) => [
+        `- key "${s.key}": ${s.title}${s.keywords.length ? ` (also called: ${s.keywords.join(', ')})` : ''}`,
+        ...s.questions.map((q, i) => `    ${i + 1}. key "${q.key}": ${q.prompt}`)
+      ]),
+      'Your goal now: find out which service they need. If their message already makes it clear, set "service" and, in the same reply, ask that service\'s FIRST unanswered question from the list above (skip any the message already answers, and return those answers under their own keys). If it is not clear, ask one friendly open question about what they are looking for; if it could be several services, ask which matters most to start with. Never ask a question that is not on the list. Do not make up services.'
     );
   } else {
     const pending = service.questions.filter((q) => !answers[q.key]);
@@ -177,9 +186,9 @@ export function buildSystemPrompt(c: AgentContext): string {
     if (pending.length) {
       L.push(
         `Still unanswered, in order: ${pending.map((q) => `"${q.key}"`).join(', ')}.`,
-        `Your goal now: collect the remaining details one at a time. The next question to ask is "${pending[0].key}". If the customer already gave some answers (even out of order, or earlier in the chat and not yet recorded above), return them in "answers" now and skip those questions. If their message does not answer the current question (a side question, a doubt, small talk), answer it first from the facts below, then come back to the pending question. If their message answers every question still unanswered, write a short warm thank-you and ask NOTHING more: the system sends the team's summary and next steps right after your message.`,
+        `Your goal now: collect the remaining details one at a time. Your reply must ask the question "${pending[0].key}" (the next one) and no other question. If the customer already gave some answers (even out of order, or earlier in the chat and not yet recorded above), return them in "answers" now and skip those questions. If their message does not answer the current question (a side question, a doubt, small talk), answer it first from the facts below, then come back to the pending question. If their message answers every question still unanswered, write a short warm thank-you and ask NOTHING more: the system sends the team's summary and next steps right after your message.`,
         '- If the customer says goodbye, thanks you and leaves, or says they will continue later, thank them warmly in one short line and set "action" to "wrap_up": the system then adds the team\'s contact details and the priority booking link.',
-        '- Ask ONLY the questions on the list above, in that wording and meaning; never add questions of your own (no extra details such as country, budget, age or documents unless a listed question asks for it). You may add a tiny clarification when an answer is unclear. If one message answers several questions, return one entry per question, each under its own key (for example "no gap" goes under the gap question, not under experience).',
+        `- Ask ONLY the questions on the list above, in that wording and meaning; never add questions of your own (no extra details such as country, budget, age or documents unless a listed question asks for it). You may add a tiny clarification when an answer is unclear. If one message answers several questions, return one entry per question, each under its own key${pending.length >= 2 ? ` (for example, one message answering both "${pending[0].key}" and "${pending[pending.length - 1].key}" must produce two entries; a detail that belongs to one question never goes into another question's answer)` : ''}.`,
         '- Record "answers" only for what the customer actually said in this chat, in their own words, briefly. Never guess, never invent, never copy an answer from another question. If they decline or say they do not know after you asked once, accept it kindly and record "Not provided".'
       );
     } else {
