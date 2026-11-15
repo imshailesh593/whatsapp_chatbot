@@ -174,7 +174,7 @@ export function buildSystemPrompt(c: AgentContext): string {
         `- key "${s.key}": ${s.title}${s.keywords.length ? ` (also called: ${s.keywords.join(', ')})` : ''}`,
         ...s.questions.map((q, i) => `    ${i + 1}. key "${q.key}": ${q.prompt}`)
       ]),
-      'Your goal now: find out which service they need. If their message already makes it clear, set "service" and, in the same reply, ask that service\'s FIRST unanswered question from the list above (skip any the message already answers, and return those answers under their own keys). If it is not clear, ask one friendly open question about what they are looking for; if it could be several services, ask which matters most to start with. Never ask a question that is not on the list. Do not make up services.'
+      'Your goal now: find out which service they need. If their message already makes it clear, set "service" and, in the same reply, ask that service\'s FIRST unanswered question from the list above (skip any the message already answers, and return those answers under their own keys). If it is not clear, ask one friendly open question about what they are looking for; if it could be several services, ask which matters most to start with. If their first message already answers every question of that service, write a short warm thank-you and ask NOTHING more: the system sends the team\'s summary and next steps right after your message. Never ask a question that is not on the list. Do not make up services.'
     );
   } else {
     const pending = service.questions.filter((q) => !answers[q.key]);

@@ -200,7 +200,7 @@ test('the prompt carries the guardrails, the next question and the facts, and ne
 test('before a service is chosen the prompt lists the services and asks for the need', () => {
   const p = buildSystemPrompt(ctx());
   assert.ok(p.includes('key "jobs": Overseas jobs') && p.includes('find out which service they need'));
-  assert.ok(p.includes('key "profession": What is your profession?') && p.includes('FIRST unanswered question'));
+  assert.ok(p.includes('key "profession": What is your profession?') && p.includes('FIRST unanswered question') && p.includes('already answers every question'));
   assert.ok(p.includes('short form link'));
 });
 
