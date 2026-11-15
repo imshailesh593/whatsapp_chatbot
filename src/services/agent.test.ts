@@ -182,6 +182,10 @@ test('answerSupported tolerates paraphrase and other scripts but not invention',
   assert.equal(answerSupported('Staff Nurse', 'i work as a nurse'), true);
   assert.equal(answerSupported('Germany', 'i want to go to canada'), false);
   assert.equal(answerSupported('Nurse', 'நான் ஒரு செவிலியர்'), true);
+  assert.equal(answerSupported('5 years', 'mai nurse hu, 5 saal ka experience hai'), true); // the number the customer typed
+  assert.equal(answerSupported('7 years', 'mai nurse hu, 5 saal ka experience hai'), false);
+  assert.equal(answerSupported('Germany', 'jarmani jana hai', true), true); // non-English chat: trust the model
+  assert.equal(answerSupported('Germany', 'i want to go to canada', false), false);
 });
 
 // ---------- the prompt ----------

@@ -425,8 +425,13 @@ export function guardReply(reply: string, cfg: BotConfig, customerText = ''): Gu
 const clean = (v: string) => clip(oneLine(v.replace(/[\u0000-\u001f\u007f]/g, ' ')), 400);
 
 /** Is this answer something the customer plausibly said? Guards against the model filling answers in on its own. */
-export function answerSupported(value: string, customerCorpus: string): boolean {
+export function answerSupported(value: string, customerCorpus: string, relaxed = false): boolean {
   if (/^not provided$/i.test(value)) return true;
+  // Hinglish, Hindi, Tamil...: the model writes the answer in English from words spelled any which way, so only the model's own report counts
+  if (relaxed) return true;
+  // a number the customer typed ("5 saal ka experience" -> "5 years") proves the answer came from them
+  const numbers = value.match(/\d+/g);
+  if (numbers && numbers.every((n) => new RegExp(`(^|\\D)${n}(\\D|$)`).test(customerCorpus))) return true;
   // text typed in another script (Tamil, Hindi...) may legitimately come back transliterated or translated
   if (/[^\u0000-ɏ -⁯₠-⃏℀-⅏\s]/.test(customerCorpus)) return true;
   const tokens = (value.toLowerCase().match(/[a-z0-9]{3,}/g) ?? []).filter((w, i, a) => a.indexOf(w) === i);
@@ -476,7 +481,7 @@ export function applyTurn(c: Pick<AgentContext, 'cfg' | 'service' | 'answers' | 
       if (!service.questions.some((q) => q.key === a.key)) continue;
       const v = clean(a.value);
       if (!v || /^(null|undefined)$/i.test(v)) continue;
-      if (!answerSupported(v, customerCorpus)) {
+      if (!answerSupported(v, customerCorpus, !!(t.language ?? c.language) && !/^english$/i.test(String(t.language ?? c.language)))) {
         rejected.push(a.key);
         continue;
       }
