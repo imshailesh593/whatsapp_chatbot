@@ -1,5 +1,6 @@
 import { AsyncLocalStorage } from 'async_hooks';
 import { prisma } from '../lib/prisma';
+import { isSocial } from '../lib/channel';
 
 /** Thin seam between the conversation engine and whatever actually delivers messages (a WhatsApp link per workspace, or a fake in tests). */
 export interface Transport {
@@ -10,6 +11,12 @@ export interface Transport {
 
 const transports = new Map<string, Transport>();
 const capture = new AsyncLocalStorage<string[]>();
+
+/** Instagram and Facebook Messenger go out through Meta, not WhatsApp (registered by services/meta.ts). */
+let social: ((workspaceId: string, to: string, text: string) => Promise<void>) | null = null;
+export const setSocialSender = (fn: typeof social) => {
+  social = fn;
+};
 
 export function setTransport(workspaceId: string, t: Transport | null): void {
   if (t) transports.set(workspaceId, t);
@@ -56,6 +63,12 @@ export async function sendTextMessage(workspaceId: string, to: string, text: str
   const buf = capture.getStore();
   if (buf) {
     buf.push(text);
+    return;
+  }
+  if (isSocial(to)) {
+    if (!social) throw new Error('Instagram / Facebook is not set up on this server');
+    await social(workspaceId, to, text);
+    await logMessage(workspaceId, to, 'OUTBOUND', text);
     return;
   }
   const t = transports.get(workspaceId);

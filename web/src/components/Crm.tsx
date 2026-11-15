@@ -3,7 +3,7 @@ import { Clock, Download, LayoutGrid, List, Phone, Search, UserCheck, Zap } from
 import { api } from '../api';
 import type { AdminRow, Contact } from '../types';
 import { useStages } from '../stages';
-import { serviceStyle, stageBadge, ago, displayPhone, waLink } from '../config';
+import { serviceStyle, stageBadge, ago, displayPhone, waLink, isSocialChat } from '../config';
 
 interface Props {
   contacts: Contact[];
@@ -242,7 +242,7 @@ export default function Crm({ contacts, includeTest, onIncludeTest, onOpen, onCh
                     </td>
                     <td className="py-3.5 px-4 text-right" onClick={(e) => e.stopPropagation()}>
                       <div className="flex items-center justify-end space-x-2">
-                        {!c.isTest && (
+                        {!c.isTest && !isSocialChat(c.phone) && (
                           <a
                             href={waLink(c.phone)}
                             target="_blank"

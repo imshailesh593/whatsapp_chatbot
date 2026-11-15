@@ -1,4 +1,4 @@
-import type { ConfigInfo, PaymentsSetup, AffiliateAdmin, ReferralInfo, CalendarInfo, CouponInfo, PlatformSettingsInfo, AuditEntry, PlatformDetail, PlatformOverview, LeadEventInfo, AnalyticsData, ApiKeyInfo, IntegrationsInfo, WebhookInfo, BroadcastInfo, StageDef, BillingInfo, AdminRow, AdminUser, ChatMessage, ChatTurn, Contact, Draft, Overview, PatchBody, PlatformWorkspace, ServiceDef, TemplateInfo, WaSnapshot, Workspace } from './types';
+import type { CommentEvent, CommentSettings, MetaStatus, ConfigInfo, PaymentsSetup, AffiliateAdmin, ReferralInfo, CalendarInfo, CouponInfo, PlatformSettingsInfo, AuditEntry, PlatformDetail, PlatformOverview, LeadEventInfo, AnalyticsData, ApiKeyInfo, IntegrationsInfo, WebhookInfo, BroadcastInfo, StageDef, BillingInfo, AdminRow, AdminUser, ChatMessage, ChatTurn, Contact, Draft, Overview, PatchBody, PlatformWorkspace, ServiceDef, TemplateInfo, WaSnapshot, Workspace } from './types';
 
 export class UnauthorizedError extends Error {}
 
@@ -48,6 +48,11 @@ export const api = {
   leadEvents: (phone: string) => request<{ events: LeadEventInfo[] }>(`/admin/api/contacts/${encodeURIComponent(phone)}/events`).then((r) => r.events),
   alertInfo: () => request<{ emailAvailable: boolean; whatsappReady: boolean }>('/admin/api/alerts'),
   testAlert: () => post<{ whatsapp: string; email: string }>('/admin/api/alerts/test', {}),
+  metaStatus: () => request<MetaStatus>('/admin/api/meta/status'),
+  metaConnect: () => request<{ url: string }>('/admin/api/meta/connect'),
+  metaDisconnect: (pageId: string) => post<{ ok: true }>('/admin/api/meta/disconnect', { pageId }),
+  metaComments: () => request<{ settings: CommentSettings; events: CommentEvent[] }>('/admin/api/meta/comments'),
+  saveMetaComments: (s: CommentSettings) => request<{ settings: CommentSettings }>('/admin/api/meta/comments', { method: 'PUT', body: JSON.stringify(s) }),
   calendar: () => request<CalendarInfo>('/admin/api/calendar'),
   calendarBuiltin: () => post<{ ok: true }>('/admin/api/calendar/builtin', {}),
   calendarConnect: () => request<{ url: string }>('/admin/api/calendar/connect'),

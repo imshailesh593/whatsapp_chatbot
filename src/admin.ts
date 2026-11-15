@@ -1,3 +1,4 @@
+import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
 import { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
@@ -47,6 +48,8 @@ import { describeRuntimeConfig, newWebhookSecret, saveRuntimeConfig } from './se
 import { resetPlan, updatePlan } from './services/planConfig';
 import { emailConfigured, emailProvider, sendEmail } from './services/mailer';
 import { currencyOf, detectRegion } from './lib/geo';
+import { isSocial } from './lib/channel';
+import { completeMetaConnection, disconnectMeta, metaAuthUrl, metaConfigured, metaStatus, processWebhook, readMetaState, readSignedRequest, signatureOk, verifyChallenge } from './services/meta';
 import { cancelSubscription, handlePaypalWebhook, handleRazorpayWebhook, handleStripeWebhook, openPortal, providersAvailable, startCheckout } from './services/billing';
 
 const SIM_PREFIX = 'SIM-';
@@ -215,6 +218,8 @@ export function registerAdmin(app: FastifyInstance, opts: { getQr: (workspaceId:
   const signups = new Map<string, { n: number; reset: number }>();
 
   // Accept an empty body with Content-Type: application/json (DELETE/POST without payload) instead of failing with 400
+  // Meta's data-deletion request is a form post
+  app.addContentTypeParser('application/x-www-form-urlencoded', { parseAs: 'string' }, (_req, body, done) => done(null, Object.fromEntries(new URLSearchParams(String(body ?? '')))));
   app.removeContentTypeParser('application/json');
   app.addContentTypeParser('application/json', { parseAs: 'string' }, (_req, body, done) => {
     (_req as any).rawBody = body;
@@ -573,6 +578,89 @@ export function registerAdmin(app: FastifyInstance, opts: { getQr: (workspaceId:
       return { status: 500, body: 'error' };
     });
     return reply.status(r.status).send(r.body);
+  });
+
+  // ---- Instagram and Facebook (Meta) ----
+  // Meta checks the address once when the webhook is added in the app dashboard...
+  app.get('/webhooks/meta', async (req, reply) => {
+    const challenge = verifyChallenge(req.query as Record<string, unknown>);
+    return challenge === null ? reply.status(403).send('forbidden') : reply.type('text/plain').send(challenge);
+  });
+  // ...then posts every message and comment here, signed with the app secret
+  app.post('/webhooks/meta', async (req, reply) => {
+    if (!signatureOk((req as any).rawBody ?? '', req.headers['x-hub-signature-256'] as string | undefined)) return reply.status(401).send({ error: 'bad signature' });
+    // answered at once: Meta wants a reply within seconds, the AI and the reply back can take longer
+    void processWebhook(req.body).catch((e) => console.error('[meta webhook]', (e as Error).message));
+    return reply.status(200).send('EVENT_RECEIVED');
+  });
+
+  app.get('/admin/api/meta/status', { preHandler: guard }, async (req) => metaStatus(wsId(req)));
+
+  app.get('/admin/api/meta/connect', { preHandler: manager }, async (req, reply) => {
+    if (!metaConfigured()) return reply.status(400).send({ error: 'Instagram and Facebook are not set up on this server yet. Ask the platform operator to add the Meta app keys.' });
+    return { url: metaAuthUrl(wsId(req), publicUrl(req)) };
+  });
+
+  // Facebook sends the owner back here. No session cookie is needed: the signed state says which business it is.
+  app.get('/admin/api/meta/callback', async (req, reply) => {
+    const q = req.query as { code?: string; state?: string; error?: string };
+    const w = readMetaState(String(q.state ?? ''));
+    if (!w || q.error || !q.code) return reply.redirect('/admin/?meta=denied');
+    try {
+      const r = await completeMetaConnection(w, q.code, publicUrl(req));
+      await prisma.auditLog.create({ data: { actor: 'meta', action: 'meta.connect', workspaceId: w, detail: r.connected.map((c) => c.pageName).join(', ').slice(0, 300) } }).catch(() => undefined);
+      return reply.redirect(`/admin/?meta=connected&n=${r.connected.length}${r.skipped.length ? `&skipped=${r.skipped.length}` : ''}`);
+    } catch (err) {
+      console.error('[meta] connect failed:', (err as Error).message);
+      return reply.redirect(`/admin/?meta=error&why=${encodeURIComponent((err as Error).message.slice(0, 160))}`);
+    }
+  });
+
+  app.post('/admin/api/meta/disconnect', { preHandler: manager }, async (req) => {
+    await disconnectMeta(wsId(req), String(((req.body ?? {}) as { pageId?: string }).pageId ?? '') || undefined);
+    await prisma.auditLog.create({ data: { actor: me(req).email, action: 'meta.disconnect', workspaceId: wsId(req), detail: '' } }).catch(() => undefined);
+    return { ok: true };
+  });
+
+  const commentSettings = (w: { commentRepliesEnabled: boolean; commentReplyMode: string; commentKeywords: string; commentSendDm: boolean; commentReplyTemplate: string }) => ({
+    enabled: w.commentRepliesEnabled,
+    mode: w.commentReplyMode === 'all' ? 'all' : 'keywords',
+    keywords: w.commentKeywords,
+    sendDm: w.commentSendDm,
+    template: w.commentReplyTemplate
+  });
+
+  app.get('/admin/api/meta/comments', { preHandler: guard }, async (req) => {
+    const w = await prisma.workspace.findUniqueOrThrow({ where: { id: wsId(req) } });
+    const events = await prisma.commentEvent.findMany({ where: { workspaceId: w.id }, orderBy: { createdAt: 'desc' }, take: 30 });
+    return {
+      settings: commentSettings(w),
+      events: events.map((e) => ({ id: e.id, channel: e.channel, commenter: e.commenterName, text: e.text, reply: e.replyText, dm: e.dmText, status: e.status, note: e.note, at: e.createdAt.toISOString() }))
+    };
+  });
+
+  app.put('/admin/api/meta/comments', { preHandler: manager }, async (req, reply) => {
+    const b = (req.body ?? {}) as Record<string, unknown>;
+    const data: Record<string, unknown> = {};
+    if (typeof b.enabled === 'boolean') data.commentRepliesEnabled = b.enabled;
+    if (b.mode === 'all' || b.mode === 'keywords') data.commentReplyMode = b.mode;
+    if (typeof b.keywords === 'string') data.commentKeywords = b.keywords.replace(/\r/g, '').trim().slice(0, 500);
+    if (typeof b.sendDm === 'boolean') data.commentSendDm = b.sendDm;
+    if (typeof b.template === 'string') data.commentReplyTemplate = b.template.replace(/\s+/g, ' ').trim().slice(0, 300);
+    if (data.commentReplyMode === 'keywords' && typeof data.commentKeywords === 'string' && !data.commentKeywords) return reply.status(400).send({ error: 'Add at least one keyword, or reply to all comments' });
+    const w = await prisma.workspace.update({ where: { id: wsId(req) }, data });
+    invalidateConfig(w.id);
+    return { settings: commentSettings(w) };
+  });
+
+  // Meta requires a way for people to ask for their data to be deleted. We keep no profile of a commenter beyond the chat,
+  // so the request is recorded and the page it points to explains how the business removes the chat.
+  app.post('/meta/data-deletion', async (req, reply) => {
+    const data = readSignedRequest(String(((req.body ?? {}) as { signed_request?: string }).signed_request ?? ''));
+    if (!data) return reply.status(400).send({ error: 'bad request' });
+    const code = crypto.randomBytes(8).toString('hex');
+    await prisma.auditLog.create({ data: { actor: 'meta', action: 'meta.data_deletion', workspaceId: null, detail: `user ${String(data.user_id ?? '').slice(0, 40)} · ${code}` } }).catch(() => undefined);
+    return { url: `${publicUrl(req)}/data-deletion?code=${code}`, confirmation_code: code };
   });
 
   app.post('/webhooks/paypal', async (req, reply) => {
@@ -990,7 +1078,7 @@ export function registerAdmin(app: FastifyInstance, opts: { getQr: (workspaceId:
     const session = await prisma.session.findUnique({ where: { workspaceId_phoneNumber: { workspaceId: w, phoneNumber: phone } } });
     if (!session) return reply.status(404).send({ error: 'Contact not found' });
     if (!session.isAgentPaused) return reply.status(409).send({ error: 'Pause the bot for this chat before replying manually' });
-    if (waFor(w).status !== 'ready') return reply.status(503).send({ error: 'WhatsApp is not connected' });
+    if (isSocial(phone) ? !(await metaStatus(w)).connected : waFor(w).status !== 'ready') return reply.status(503).send({ error: isSocial(phone) ? 'Instagram / Facebook is not connected' : 'WhatsApp is not connected' });
     try {
       await sendTextMessage(w, phone, text);
     } catch (err) {

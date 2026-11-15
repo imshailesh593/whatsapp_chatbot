@@ -3,7 +3,7 @@ import { Calendar, Phone, UserCheck, Zap } from 'lucide-react';
 import { api } from '../api';
 import type { AdminRow, Contact, LeadEventInfo } from '../types';
 import { useStages } from '../stages';
-import { serviceStyle, humanize, displayPhone, waLink } from '../config';
+import { serviceStyle, humanize, displayPhone, waLink, isSocialChat } from '../config';
 
 interface Props {
   contact: Contact;
@@ -189,7 +189,7 @@ export default function Dossier({ contact, bookingUrl, onClose, onChanged, team 
 
         <div className="p-4 border-t border-line bg-card/80 flex items-center justify-between flex-wrap gap-2">
           <div className="flex items-center space-x-2">
-            {!contact.isTest && (
+            {!contact.isTest && !isSocialChat(contact.phone) && (
               <a href={waLink(contact.phone)} target="_blank" rel="noreferrer"
                 className="px-3 py-2 bg-brand-soft text-brand-text hover:bg-brand-soft border border-brand/40 rounded-xl text-xs font-semibold flex items-center space-x-1.5 transition">
                 <Phone className="w-3.5 h-3.5" /><span>WhatsApp Chat</span>

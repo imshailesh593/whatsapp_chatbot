@@ -379,3 +379,29 @@ export interface AffiliateAdmin {
   affiliates: { id: string; businessName: string; code: string | null; payoutDetails: string; referred: number; totals: Totals }[];
   commissions: { id: string; affiliate: string; payoutDetails: string; referred: string; amount: number; currency: string; status: string; at: string; paidAt: string | null }[];
 }
+
+export interface MetaStatus {
+  configured: boolean;
+  connected: boolean;
+  accounts: { pageId: string; pageName: string; igUsername: string; hasInstagram: boolean }[];
+}
+
+export interface CommentSettings {
+  enabled: boolean;
+  mode: 'all' | 'keywords';
+  keywords: string;
+  sendDm: boolean;
+  template: string;
+}
+
+export interface CommentEvent {
+  id: string;
+  channel: 'ig' | 'fb';
+  commenter: string;
+  text: string;
+  reply: string;
+  dm: string;
+  status: 'replied' | 'skipped' | 'failed' | 'processing';
+  note: string;
+  at: string;
+}

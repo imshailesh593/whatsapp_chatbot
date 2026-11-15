@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ExternalLink, Phone, Send, UserCheck, Zap } from 'lucide-react';
 import { api } from '../api';
 import type { ChatMessage, Contact } from '../types';
-import { serviceStyle, stageBadge, ago, displayPhone, humanize, waLink } from '../config';
+import { serviceStyle, stageBadge, ago, displayPhone, humanize, waLink, isSocialChat } from '../config';
 
 const CANNED = [
   'Hello! I am a team member taking over this conversation from the assistant.',
@@ -232,10 +232,12 @@ export default function Inbox({ contacts, waReady, onChanged }: Props) {
           </div>
         </div>
         <div className="pt-4 border-t border-line space-y-2">
-          <a href={waLink(active.phone)} target="_blank" rel="noreferrer"
-            className="w-full flex items-center justify-center space-x-2 bg-brand hover:bg-brand text-on-brand font-bold py-2 rounded-xl text-xs transition">
-            <Phone className="w-3.5 h-3.5" /><span>Open in WhatsApp</span><ExternalLink className="w-3 h-3" />
-          </a>
+          {!isSocialChat(active.phone) && (
+            <a href={waLink(active.phone)} target="_blank" rel="noreferrer"
+              className="w-full flex items-center justify-center space-x-2 bg-brand hover:bg-brand text-on-brand font-bold py-2 rounded-xl text-xs transition">
+              <Phone className="w-3.5 h-3.5" /><span>Open in WhatsApp</span><ExternalLink className="w-3 h-3" />
+            </a>
+          )}
         </div>
       </div>
     </div>

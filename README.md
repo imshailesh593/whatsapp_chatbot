@@ -62,6 +62,9 @@ With **AI conversation** on (Business & bot settings), Gemini writes every reply
 
 Check it against a business's real settings without sending anything: `docker compose exec -T bot node dist/cli/aiDemo.js <workspaceId> "hi" "I am a nurse looking for work abroad"`.
 
+## Instagram and Facebook
+The same AI conversation answers the direct messages of Facebook Pages and Instagram accounts through Meta's official API, and can reply to comments on their posts (with a private message that starts the chat). One Meta app belongs to the platform; each business connects its own Pages from Settings, Instagram & Facebook. See the [Owner Guide](docs/OWNER_GUIDE.md#19-instagram-and-facebook-direct-messages-and-comment-replies) for the one-time Meta setup and Meta's app review.
+
 ## Behaviour
 - `menu` / `reset` restarts the funnel. "3", "option 3", "jobs", "visa" all select a service.
 - A question (contains `?`) mid-funnel or after completion is answered by Gemini, then the pending question is repeated. No `GEMINI_API_KEY` means static replies.

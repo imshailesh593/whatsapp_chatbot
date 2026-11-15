@@ -47,5 +47,6 @@ export function ago(iso: string): string {
   return new Date(iso).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' });
 }
 
-export const displayPhone = (p: string) => (/^\d+$/.test(p) ? `+${p}` : p);
+export const isSocialChat = (p: string) => p.startsWith('ig:') || p.startsWith('fb:');
+export const displayPhone = (p: string) => (/^\d+$/.test(p) ? `+${p}` : p.startsWith('ig:') ? 'Instagram' : p.startsWith('fb:') ? 'Facebook Messenger' : p);
 export const waLink = (p: string) => `https://wa.me/${p.replace(/\D/g, '')}`;

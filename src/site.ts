@@ -728,6 +728,7 @@ function privacy(): string {
 <tr><td>Google (Gemini AI)</td><td>Generates answers, onboarding suggestions and hand-off briefings. The text of the relevant conversation and your business notes are sent to the model to produce a reply.</td></tr>
 <tr><td>Google (Sign-in and Calendar)</td><td>Only if you connect a calendar. We use the access only to read free/busy times and create or delete booking events.</td></tr>
 <tr><td>Razorpay, Stripe and PayPal</td><td>Payment processing for subscriptions.</td></tr>
+<tr><td>Meta (Instagram and Facebook)</td><td>Delivering the direct messages and comments of the business accounts that connect them.</td></tr>
 <tr><td>Resend or another email provider</td><td>Sends alert emails, if you enable email alerts.</td></tr>
 <tr><td>Cloud hosting provider</td><td>Servers and storage on which the Service and its database run.</td></tr>
 </table>
@@ -900,6 +901,26 @@ ${contactLines()}
   });
 }
 
+/** Where Meta's data-deletion request sends a person: what is kept and how to have it removed. */
+function dataDeletion(): string {
+  const p = esc(PRODUCT_NAME);
+  return page({
+    title: `Delete your data | ${PRODUCT_NAME}`,
+    description: `How to have your Instagram or Facebook messages and comments removed from ${PRODUCT_NAME}.`,
+    path: '/data-deletion',
+    body: `<main class="doc"><h1>Delete your data</h1><p class="meta">Instagram and Facebook messages handled by ${p}</p>
+<p>${p} is a service used by businesses to answer their customers' messages. When you message or comment on a business's Instagram account or Facebook Page that uses ${p}, the business receives your message, your public name and the id Meta gives us for you, and the answers you gave to its questions. We do not collect anything else from your Facebook or Instagram profile.</p>
+<h2>How to have it removed</h2>
+<ol>
+<li>Ask the business whose account you messaged to delete your conversation and lead from its ${p} dashboard (Contacts, then delete), or</li>
+<li>contact us with the name of the business and your Instagram or Facebook name, and we will remove it for you within 30 days. Details are on the <a href="/contact">contact page</a>.</li>
+</ol>
+<p>If you started the request from Facebook or Instagram settings (Settings, Apps and websites, remove ${p}), it has been recorded and the steps above complete it. See our <a href="/privacy">Privacy Policy</a> for more.</p>
+${contactLines()}
+</main>`
+  });
+}
+
 function shipping(): string {
   const p = esc(PRODUCT_NAME);
   return doc('Shipping & Delivery Policy', '/shipping', `How ${PRODUCT_NAME} is delivered: it is a digital subscription service with no physical shipping.`, `
@@ -1000,6 +1021,7 @@ export function registerSite(app: FastifyInstance): void {
   app.get('/about', async (_req, reply) => send(reply, about()));
   app.get('/pricing', async (req, reply) => send(reply, pricing(regionOf(req, reply)), 200, true));
   app.get('/shipping', async (_req, reply) => send(reply, shipping()));
+  app.get('/data-deletion', async (_req, reply) => send(reply, dataDeletion()));
 
   app.get('/site.js', async (_req, reply) => reply.header('Content-Type', 'application/javascript; charset=utf-8').header('Cache-Control', 'public, max-age=300').header('X-Content-Type-Options', 'nosniff').send(SITE_JS));
 

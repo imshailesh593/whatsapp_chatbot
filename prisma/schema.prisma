@@ -88,6 +88,17 @@ model Workspace {
   couponRedemptions CouponRedemption[]
 
   @@map("saas_workspaces")
+  metaConnections        MetaConnection[]
+  commentEvents          CommentEvent[]
+  /// Reply to comments on the business's Facebook and Instagram posts, and message the commenter privately
+  commentRepliesEnabled  Boolean   @default(false) @map("comment_replies_enabled")
+  /// 'all' comments, or only those that contain one of the keywords
+  commentReplyMode       String    @default("keywords") @map("comment_reply_mode")
+  commentKeywords        String    @default("price, cost, fee, fees, info, details, interested, how much, dm") @map("comment_keywords")
+  /// Also send the commenter a private message that starts the conversation
+  commentSendDm          Boolean   @default(true) @map("comment_send_dm")
+  /// The public reply to use when the AI is not available (empty: a standard one)
+  commentReplyTemplate   String    @default("") @map("comment_reply_template")
 }
 
 /// A menu option ("Coaching", "Book a viewing", ...) with its own question list.
@@ -492,4 +503,46 @@ model Appointment {
   @@index([workspaceId, startsAt])
   @@index([status, startsAt])
   @@map("saas_appointments")
+}
+
+/// A Facebook Page (and the Instagram account linked to it) of a business, whose direct messages the bot answers.
+/// A business can connect several: every Page and Instagram handle it shares when it logs in with Facebook.
+model MetaConnection {
+  pageId      String    @id @map("page_id")
+  workspaceId String    @map("workspace_id")
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  pageName    String    @default("") @map("page_name")
+  /// The Instagram professional account linked to the Page, when there is one
+  igUserId    String?   @unique @map("ig_user_id")
+  igUsername  String    @default("") @map("ig_username")
+  /// The Page access token, encrypted (same scheme as the Google tokens)
+  tokenEnc    String    @map("token_enc")
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  @@index([workspaceId])
+  @@map("saas_meta_connections")
+}
+
+/// One comment on a Facebook or Instagram post and what we did about it (also stops a resent webhook being answered twice)
+model CommentEvent {
+  /// The comment's id from Meta
+  id            String    @id
+  workspaceId   String    @map("workspace_id")
+  workspace     Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  channel       String
+  accountId     String    @map("account_id")
+  postId        String    @default("") @map("post_id")
+  commenterId   String    @default("") @map("commenter_id")
+  commenterName String    @default("") @map("commenter_name")
+  text          String    @default("")
+  replyText     String    @default("") @map("reply_text")
+  dmText        String    @default("") @map("dm_text")
+  /// replied | skipped | failed
+  status        String
+  note          String    @default("")
+  createdAt     DateTime  @default(now()) @map("created_at")
+
+  @@index([workspaceId, createdAt])
+  @@index([accountId, createdAt])
+  @@map("saas_comment_events")
 }

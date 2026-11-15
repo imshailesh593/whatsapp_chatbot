@@ -7,6 +7,7 @@ import { logLeadEvent } from './crm';
 import { startHandoff } from './handoff';
 import { localize } from './language';
 import { calendarConnected, handleBookingMessage, markLeadBooked } from './calendar';
+import { channelOf } from '../lib/channel';
 import { bookingReminderMessage, completionMessage, type BotConfig } from './botConfig';
 import {
   AgentError,
@@ -115,7 +116,7 @@ export async function handleAiTurn(a: AiTurnArgs): Promise<boolean> {
   let turn;
   try {
     turn = await runAgentTurn(
-      { cfg, service, answers, completed: wasCompleted, language: session.language, calendarOn, firstReply: !before.some((t) => t.who === 'You'), freshStart: a.freshStart },
+      { cfg, service, answers, completed: wasCompleted, language: session.language, calendarOn, firstReply: !before.some((t) => t.who === 'You'), freshStart: a.freshStart, channel: channelOf(phone) },
       before,
       latest
     );

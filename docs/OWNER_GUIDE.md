@@ -389,3 +389,32 @@ npx tsx scripts/calendar-test.ts      # Google Calendar booking against a fake G
 npx tsx scripts/smoke-test.ts <dir>   # real browser walk-through, saves screenshots to <dir>
 ```
 All of them must pass before deploying. The smoke test needs Edge or Chrome (set `BROWSER_PATH` if it is installed elsewhere).
+
+---
+
+## 19. Instagram and Facebook (direct messages and comment replies)
+
+The same AI chatbot can answer the direct messages of your clients' Facebook Pages and Instagram accounts, and reply to comments on their posts. It uses Meta's official API, so it works differently from WhatsApp: there is **one Meta app owned by you**, and each client signs in with Facebook from their own dashboard (Settings, Instagram & Facebook) and chooses which Pages and Instagram accounts to share. Nothing is scanned and you do nothing per client.
+
+**Cost:** Meta charges nothing for Messenger or Instagram messaging, for the app, or for app review. The only running cost is the AI (the same small Gemini cost per answer as on WhatsApp, counted in the plan's "AI answers").
+
+### One-time setup (you)
+1. At developers.facebook.com create an app of type **Business**. Add the products **Facebook Login for Business**, **Messenger**, **Instagram** (Instagram API with Facebook Login) and **Webhooks**.
+2. App settings, Basic: note the **App ID** and **App Secret**. Fill in the Privacy Policy URL (`https://<your domain>/privacy`), Terms URL (`/terms`), and the **Data deletion** callback URL `https://<your domain>/meta/data-deletion`. Add your domain under App domains.
+3. Facebook Login settings: add `https://<your domain>/admin/api/meta/callback` as a **Valid OAuth Redirect URI**.
+4. Webhooks: for **Page**, add the callback URL `https://<your domain>/webhooks/meta` with a verify token of your choice (a long random text) and subscribe to `messages`, `messaging_postbacks` and `feed`. For **Instagram**, use the same callback URL and token and subscribe to `messages` and `comments`.
+5. In the platform admin panel (Plans & settings), under **Instagram & Facebook (Meta app)**, enter the App ID, App Secret and the same verify token. Meta's check passes as soon as they are saved.
+6. Test with your own Page and Instagram account while the app is in development mode (you are the app's admin).
+
+### Going live for clients (Meta's approval)
+While the app is in development mode only people with a role on the app can connect. To serve other businesses you need **Advanced Access**: complete **Business Verification**, switch the app to Live, and pass **App Review** for these permissions (Meta asks for a short screen recording of each use): `pages_show_list`, `pages_messaging`, `pages_manage_metadata`, `pages_read_engagement`, `pages_manage_engagement`, `instagram_basic`, `instagram_manage_messages`, `instagram_manage_comments` and, for Pages owned by a Business Manager, `business_management`. Review takes days to weeks and Meta can ask for changes. The permission names and screens follow Meta's documentation at the time of writing: check them in the Meta app dashboard, which is the authority. The Graph API version can be changed with `META_GRAPH_VERSION` (default v24.0).
+
+### What each client needs
+Admin access to the Facebook Page. For Instagram: a **Professional** (business or creator) account linked to that Page, and "Allow access to messages" switched on in Instagram (Settings, Messages and story replies, Message controls, Connected tools). When they press **Connect with Facebook**, Facebook asks which Pages and Instagram accounts to share; every one they share is connected (a client can connect several). A Page can belong to one business only.
+
+### How it behaves
+- Chats are separate per customer and per connected account, and appear in the same Leads and Inbox. The AI, questions, closing messages, booking and hand-off work as on WhatsApp.
+- Meta only allows a reply within **24 hours** of the customer's last message, so these chats get no follow-up nudges and no broadcasts, and a team member replying from the Inbox after 24 hours will get an error from Meta.
+- Messages are plain text (no bold), and long ones are split to fit Meta's limits.
+- **Comment replies** (off by default, set per business): the AI answers under the comment and can send the commenter a private message (Meta allows one private reply per comment, within 7 days), which starts the normal chat. Settings: all comments or only those with a keyword, private message on or off, and a standard reply for when the AI is unavailable. Complaints, spam, emoji-only comments and links are left for the team; it replies at most once per person per post and 60 times an hour per account. Every comment and what was done is listed in the dashboard.
+- If a client's Page login expires (Meta error 190) their replies fail until they press Connect again.

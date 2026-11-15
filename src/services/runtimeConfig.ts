@@ -26,6 +26,9 @@ export const MANAGED_KEYS: KeyDef[] = [
   { key: 'PAYPAL_PLAN_PRO', label: 'PayPal plan id', secret: false, check: prefix('P-', 'The plan id') },
   { key: 'PAYPAL_PLAN_PRO_YEARLY', label: 'PayPal yearly plan id', secret: false, check: prefix('P-', 'The plan id') },
   { key: 'RESEND_API_KEY', label: 'Resend API key', secret: true, check: prefix('re_', 'The API key') },
+  { key: 'META_APP_ID', label: 'Meta app id', secret: false, check: (v) => (/^\d{8,20}$/.test(v) ? null : 'The app id is a number of 8 to 20 digits') },
+  { key: 'META_APP_SECRET', label: 'Meta app secret', secret: true, check: (v) => (/^[a-f0-9]{32}$/i.test(v) ? null : 'The app secret is 32 letters and digits (a-f, 0-9)') },
+  { key: 'META_VERIFY_TOKEN', label: 'Meta webhook verify token', secret: true, check: (v) => (v.length >= 12 && v.length <= 100 && !/\s/.test(v) ? null : 'Use 12 to 100 characters with no spaces') },
   { key: 'MAIL_FROM', label: 'Email sender', secret: false, check: (v) => (/@/.test(v) && v.length <= 200 ? null : 'Use an address like: Wappo <hello@wappoai.com>') }
 ];
 

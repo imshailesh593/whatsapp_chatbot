@@ -103,8 +103,10 @@ const ico = 'w-[18px] h-[18px]';
 const topBtn = 'hidden md:inline-flex items-center gap-2 h-9 px-3 rounded-lg border border-line bg-card text-sm text-fg2 hover:border-line-strong transition whitespace-nowrap';
 
 function Console({ user, onSignedOut, onPlatform }: { user: AdminUser; onSignedOut: () => void; onPlatform?: () => void }) {
-  const [tab, setTab] = useState<Tab>('crm');
-  const [section, setSection] = useState('whatsapp');
+  // back from Facebook (/admin/?meta=...): open Settings on the Instagram & Facebook page
+  const fromMeta = new URLSearchParams(window.location.search).has('meta');
+  const [tab, setTab] = useState<Tab>(fromMeta ? 'config' : 'crm');
+  const [section, setSection] = useState(fromMeta ? 'social' : 'whatsapp');
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [overview, setOverview] = useState<Overview | null>(null);
   const [billing, setBilling] = useState<BillingInfo | null>(null);

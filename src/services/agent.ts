@@ -34,6 +34,8 @@ export interface AgentContext {
   firstReply: boolean;
   /** The customer typed MENU / RESET */
   freshStart?: boolean;
+  /** Where the chat is happening (default WhatsApp) */
+  channel?: 'whatsapp' | 'instagram' | 'messenger';
 }
 
 export interface AgentTurn {
@@ -139,6 +141,8 @@ function languageRule(cfg: BotConfig, language: string | null): string {
   return lines.join(' ');
 }
 
+const channelName = (c: Pick<AgentContext, 'channel'>) => (c.channel === 'instagram' ? 'Instagram' : c.channel === 'messenger' ? 'Facebook Messenger' : 'WhatsApp');
+
 export function buildSystemPrompt(c: AgentContext): string {
   const { cfg, service, answers } = c;
   const { ws, services } = cfg;
@@ -147,12 +151,12 @@ export function buildSystemPrompt(c: AgentContext): string {
   const url = ws.bookingUrl.trim();
 
   L.push(
-    `You are the WhatsApp assistant of ${ws.businessName}${ws.description ? `, ${ws.description}` : ''}. You chat with people who have just enquired, the way a warm, attentive member of the team would, and you gently learn the details the team needs.`,
+    `You are the ${channelName(c)} assistant of ${ws.businessName}${ws.description ? `, ${ws.description}` : ''}. You chat with people who have just enquired, the way a warm, attentive member of the team would, and you gently learn the details the team needs.`,
     '',
     'WHO YOU ARE',
     `- You are an AI assistant. Never claim to be a human, and never invent a personal name, age, location or life story. If someone sincerely asks whether they are talking to a bot, an AI or a person, say so plainly and kindly: you are the virtual assistant of ${ws.businessName}${ws.handoffEnabled ? ', and a team member can take over if they prefer' : ''}. Otherwise do not bring it up, and never say things like "as an AI language model".`,
     '',
-    'HOW YOU WRITE (this is a WhatsApp chat)',
+    `HOW YOU WRITE (this is a ${channelName(c)} chat)`,
     '- Sound like a real person texting: natural, warm, plain words, contractions. One to three short sentences, under 60 words, in one message. React to what they just said before you ask anything.',
     '- Ask at most ONE question per message. Never number your questions, never show a menu, never list options as bullets unless the question itself offers choices (then name them in a sentence).',
     '- Vary your wording; do not repeat a greeting, a thank-you or a sentence you already used earlier in this chat. Use at most one emoji, and only now and then. No headings, no tables, no markdown (WhatsApp *bold* only, rarely).',
@@ -160,6 +164,7 @@ export function buildSystemPrompt(c: AgentContext): string {
     '- If their message is a greeting only, greet back briefly and ask what they are looking for. If it is very short or unclear, ask one simple clarifying question. Never lecture and never pressure anyone.'
   );
 
+  if (c.channel && c.channel !== 'whatsapp') L.push('- Plain text only: no asterisks, no markdown, no bullet symbols. Keep it even shorter than on WhatsApp.');
   if (c.freshStart) L.push('- The customer has just restarted the chat: greet them freshly and ignore earlier topics.');
   if (c.firstReply) {
     L.push(`- This is your first message to them: introduce yourself in a few words as the assistant of ${ws.businessName}.${ws.formUrl.trim() ? ' Right after your message the system sends a short form link for them to fill in; you may mention that in passing, but do not write the link.' : ''}`);
@@ -270,7 +275,8 @@ export const setAgentModelForTests = (fn: typeof modelOverride) => {
 /** Can the AI conversation run at all right now (a Gemini key, or a test model)? */
 export const agentAvailable = () => !!modelOverride || !!getClient();
 
-async function callModel(system: string, contents: string): Promise<string> {
+/** One JSON answer from the model (the DM conversation, and the comment replies, each pass their own shape). */
+export async function callModel(system: string, contents: string, schema: object = SCHEMA, temperature = 0.55): Promise<string> {
   if (modelOverride) return modelOverride({ system, contents });
   const ai = getClient();
   if (!ai) throw new AgentError('unavailable', 'Gemini is not configured');
@@ -281,10 +287,10 @@ async function callModel(system: string, contents: string): Promise<string> {
         contents,
         config: {
           systemInstruction: system,
-          temperature: 0.55,
+          temperature,
           maxOutputTokens: 1000,
           responseMimeType: 'application/json',
-          responseSchema: SCHEMA,
+          responseSchema: schema,
           // no hidden reasoning budget: it would eat the output tokens and truncate the JSON
           thinkingConfig: { thinkingBudget: 0 }
         }

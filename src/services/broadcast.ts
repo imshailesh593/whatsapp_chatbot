@@ -39,6 +39,7 @@ function audienceWhere(workspaceId: string, f: Required<AudienceFilters>): Prism
   return {
     workspaceId,
     phoneNumber: { not: { startsWith: 'SIM-' } },
+    NOT: [{ phoneNumber: { startsWith: 'ig:' } }, { phoneNumber: { startsWith: 'fb:' } }], // Instagram and Facebook chats cannot be broadcast to
     optedOut: false,
     ...outsideLinkQuiet(),
     lastInteractionAt: { gte: new Date(Date.now() - f.activeWithinDays * 86_400_000) },
