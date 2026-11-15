@@ -72,6 +72,7 @@ export interface Workspace {
   languageStep: boolean;
   languageWelcome: string;
   followUpsEnabled: boolean;
+  aiConversation: boolean;
   onboardingCompleted: boolean;
   botEnabled: boolean;
 }

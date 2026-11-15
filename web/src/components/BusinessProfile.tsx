@@ -6,13 +6,13 @@ import type { Workspace } from '../types';
 
 type Fields = Pick<
   Workspace,
-  'timezone' | 'businessName' | 'tagline' | 'description' | 'welcomeIntro' | 'tone' | 'languages' | 'bookingLabel' | 'bookingUrl' | 'bookingNote' | 'formUrl' | 'knowledge' | 'aiInstructions' | 'notifyEmail' | 'notifyPhone' | 'handoffEnabled' | 'handoffMessage' | 'languageStep' | 'languageWelcome' | 'followUpsEnabled'
+  'timezone' | 'businessName' | 'tagline' | 'description' | 'welcomeIntro' | 'tone' | 'languages' | 'bookingLabel' | 'bookingUrl' | 'bookingNote' | 'formUrl' | 'knowledge' | 'aiInstructions' | 'notifyEmail' | 'notifyPhone' | 'handoffEnabled' | 'handoffMessage' | 'languageStep' | 'languageWelcome' | 'followUpsEnabled' | 'aiConversation'
 >;
 
 const pick = (w: Workspace): Fields => ({
   timezone: w.timezone, businessName: w.businessName, tagline: w.tagline, description: w.description, welcomeIntro: w.welcomeIntro, tone: w.tone,
   languages: w.languages, bookingLabel: w.bookingLabel, bookingUrl: w.bookingUrl, bookingNote: w.bookingNote, formUrl: w.formUrl,
-  knowledge: w.knowledge, aiInstructions: w.aiInstructions ?? '', notifyEmail: w.notifyEmail, notifyPhone: w.notifyPhone, handoffEnabled: w.handoffEnabled, handoffMessage: w.handoffMessage, languageStep: w.languageStep, languageWelcome: w.languageWelcome, followUpsEnabled: w.followUpsEnabled
+  knowledge: w.knowledge, aiInstructions: w.aiInstructions ?? '', notifyEmail: w.notifyEmail, notifyPhone: w.notifyPhone, handoffEnabled: w.handoffEnabled, handoffMessage: w.handoffMessage, languageStep: w.languageStep, languageWelcome: w.languageWelcome, followUpsEnabled: w.followUpsEnabled, aiConversation: w.aiConversation
 });
 
 export default function BusinessProfile({ workspace, onSaved }: { workspace: Workspace; onSaved: () => void }) {
@@ -190,6 +190,10 @@ export default function BusinessProfile({ workspace, onSaved }: { workspace: Wor
         {f.languageStep && (
           <div className="sm:col-span-2"><label className={label}>First message (asks for the language; empty uses the standard one)</label><textarea value={f.languageWelcome} rows={3} maxLength={500} onChange={set('languageWelcome')} className={`${input} resize-y`} placeholder="Hello! Welcome... Which language would you prefer for our conversation?" /></div>
         )}
+        <label className="sm:col-span-2 flex items-center gap-2 text-xs text-fg2">
+          <input type="checkbox" checked={f.aiConversation} onChange={(e) => setF((x) => ({ ...x, aiConversation: e.target.checked }))} />
+          <span><b>AI conversation.</b> The AI writes every reply like a person on your team, following your services and questions, using only your facts. Switch off to use the fixed numbered menu instead. It also falls back to the menu if the AI is unavailable or the plan&apos;s AI allowance is used up.</span>
+        </label>
         <label className="sm:col-span-2 flex items-center gap-2 text-xs text-fg2">
           <input type="checkbox" checked={f.followUpsEnabled} onChange={(e) => setF((x) => ({ ...x, followUpsEnabled: e.target.checked }))} />
           <span>Follow up automatically one day and three days after a customer's last message, in daytime hours only, until they reply, are sent the consultation link (then none for a week), book, say STOP, or the lead is Won or Lost</span>

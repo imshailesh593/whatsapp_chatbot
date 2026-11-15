@@ -2,6 +2,7 @@ import { SessionStage } from '@prisma/client';
 import { prisma } from '../lib/prisma';
 import { sendTextMessage, logMessage, isCapturing } from './transport';
 import { answerFreeform } from './gemini';
+import { aiModeOn, handleAiTurn } from './aiChat';
 import { accessState } from '../plans';
 import { admitAiReply, admitConversation } from './usage';
 import { notifyBooked, notifyNewLead } from './alerts';
@@ -95,6 +96,8 @@ export async function handleIncomingMessage(
   if (!cfg.ws.botEnabled && !isCapturing()) return;
   if (!isCapturing() && !accessState(cfg.ws).active) return;
   if (cfg.services.length === 0) return;
+  // The whole conversation is written by the AI around the business's questions; without it (switched off, no key, plan allowance used) the fixed menu flow below answers
+  const aiOn = aiModeOn(cfg);
 
   /** Bot copy in the language the customer chose (businesses that ask for it); plain English otherwise */
   const speak = async (body: string) => {
@@ -113,7 +116,7 @@ export async function handleIncomingMessage(
   };
 
   // A language this business does not offer (an old wrong answer, or the list changed): ask again instead of translating into it
-  if (cfg.ws.languageStep && session.language && !offeredLanguages(cfg.ws.languages).includes(session.language) && !OPT_OUT_COMMANDS.includes(lower)) {
+  if (!aiOn && cfg.ws.languageStep && session.language && !offeredLanguages(cfg.ws.languages).includes(session.language) && !OPT_OUT_COMMANDS.includes(lower)) {
     session = await prisma.session.update({ where: key, data: { language: null, stage: SessionStage.AWAITING_LANGUAGE, selectedService: null, currentStep: 0, answers: {} } });
     await send(phoneNumber, languagePrompt(cfg));
     return;
@@ -133,7 +136,7 @@ export async function handleIncomingMessage(
   }
 
   // Customers can change the language at any time (workspaces that ask for it)
-  if (cfg.ws.languageStep && LANGUAGE_COMMANDS.includes(lower)) {
+  if (!aiOn && cfg.ws.languageStep && LANGUAGE_COMMANDS.includes(lower)) {
     await prisma.session.update({ where: key, data: { stage: SessionStage.AWAITING_LANGUAGE, language: null, selectedService: null, currentStep: 0, answers: {} } });
     session.language = null;
     await send(phoneNumber, languagePrompt(cfg));
@@ -146,6 +149,7 @@ export async function handleIncomingMessage(
       where: key,
       data: { stage: SessionStage.AWAITING_SERVICE_SELECTION, selectedService: null, currentStep: 0, answers: {}, optedOut: false }
     });
+    if (aiOn && (await handleAiTurn({ cfg, workspaceId, phone: phoneNumber, text: 'Hi', send, capturing: isCapturing(), freshStart: true }))) return;
     await entry();
     return;
   }
@@ -155,7 +159,10 @@ export async function handleIncomingMessage(
   // BOOK on its own starts booking from the menu too
   if (session.stage === SessionStage.AWAITING_SERVICE_SELECTION && BOOK_COMMAND_RE.test(lower) && (await calendarConnected(workspaceId)) && (await handleBookingMessage(cfg, session, 'book an appointment', isCapturing()))) return;
 
-  // 3. Stage state machine
+  // 3. The AI conversation (replies, questions, lead, booking and hand-off all follow from what the customer writes)
+  if (aiOn && (await handleAiTurn({ cfg, workspaceId, phone: phoneNumber, text, send, capturing: isCapturing() }))) return;
+
+  // Stage state machine of the fixed menu flow
   switch (session.stage) {
     case SessionStage.WELCOME: {
       await prisma.session.update({ where: key, data: { stage: SessionStage.AWAITING_SERVICE_SELECTION } });

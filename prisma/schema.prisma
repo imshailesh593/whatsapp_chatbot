@@ -52,6 +52,8 @@ model Workspace {
   languageWelcome        String    @default("") @map("language_welcome")
   /// Automatic nudges to customers who go quiet (1, 3, 6 and 48 hours after their last message)
   followUpsEnabled       Boolean   @default(false) @map("follow_ups_enabled")
+  /// The whole chat is written by the AI around the business's questions (falls back to the fixed menu when the AI is unavailable)
+  aiConversation         Boolean   @default(true) @map("ai_conversation")
   /// Short code in this business referral link
   referralCode           String?   @unique @map("referral_code")
   /// Workspace that referred this one (plain text so deleting a referrer does not touch the referred)

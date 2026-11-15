@@ -18,6 +18,7 @@ import {
 } from './lib/auth';
 import { createWorkspaceWithOwner } from './lib/workspaces';
 import { handleIncomingMessage } from './services/engine';
+import { clearSimHistory } from './services/aiChat';
 import { captureReplies, sendTextMessage } from './services/transport';
 import { invalidateConfig, loadConfig, saveServices, seedDefaultWorkspace, type BotConfig } from './services/botConfig';
 import { onboardingAvailable, onboardingTurn, parseDraft, type ChatTurn, type Draft } from './services/onboarding';
@@ -203,6 +204,7 @@ const publicWorkspace = (w: Workspace) => ({
   languageStep: w.languageStep,
   languageWelcome: w.languageWelcome,
   followUpsEnabled: w.followUpsEnabled,
+  aiConversation: w.aiConversation,
   onboardingCompleted: w.onboardingCompleted,
   botEnabled: w.botEnabled
 });
@@ -597,7 +599,7 @@ export function registerAdmin(app: FastifyInstance, opts: { getQr: (workspaceId:
     if ('error' in picked) return reply.status(400).send({ error: picked.error });
     const b = (req.body ?? {}) as Record<string, unknown>;
     const flags: Record<string, boolean> = {};
-    for (const f of ['handoffEnabled', 'languageStep', 'followUpsEnabled']) if (typeof b[f] === 'boolean') flags[f] = b[f] as boolean;
+    for (const f of ['handoffEnabled', 'languageStep', 'followUpsEnabled', 'aiConversation']) if (typeof b[f] === 'boolean') flags[f] = b[f] as boolean;
     const w = await prisma.workspace.update({ where: { id: wsId(req) }, data: { ...picked.data, ...flags } });
     invalidateConfig(w.id);
     return { workspace: publicWorkspace(w) };
@@ -1022,6 +1024,7 @@ export function registerAdmin(app: FastifyInstance, opts: { getQr: (workspaceId:
 
   app.post('/admin/api/simulate/reset', { preHandler: guard }, async (req) => {
     const phone = simPhone((req.body as any)?.id);
+    clearSimHistory(wsId(req), phone);
     await prisma.webhookLog.deleteMany({ where: { workspaceId: wsId(req), phoneNumber: phone } });
     await prisma.session.deleteMany({ where: { workspaceId: wsId(req), phoneNumber: phone } });
     return { ok: true };
