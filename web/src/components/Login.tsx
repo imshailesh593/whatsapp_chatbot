@@ -31,6 +31,8 @@ export default function Login({ onDone }: { onDone: (user: AdminUser) => void })
       const q = new URLSearchParams(window.location.search);
       const want = q.has('plan') || q.get('signup') === '1';
       if (want) sessionStorage.setItem('lk_checkout', '1');
+      const period = q.get('period');
+      if (period === 'month' || period === 'year') sessionStorage.setItem('lk_period', period);
       return want;
     } catch {
       return false;

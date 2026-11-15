@@ -50,6 +50,7 @@ const ok = (c: any, m: string) => { if (!c) throw new Error('FAIL: ' + m); conso
   const l = html['/'];
   ok(/<h1>[^<]*WhatsApp[^<]*<\/h1>/.test(l), 'a clear headline about WhatsApp leads');
   for (const p of PLANS) ok(l.includes(p.name) && l.includes('₹' + (p.price.INR / 100).toLocaleString('en-IN')) && l.includes('$' + p.price.USD / 100), `pricing shows ${p.name} in rupees and dollars`);
+  ok(/class="plans"/.test(l) && (l.match(/class="card plan/g) ?? []).length === 2 && l.includes('Choose Monthly') && l.includes('Choose Yearly') && l.includes('$' + PLANS[0].yearlyUSD / 100) && l.includes('Best value'), 'two plans side by side: Monthly and Yearly, the yearly one marked best value');
   ok(!/free trial/i.test(l), 'there is no free trial on the landing page');
   for (const f of ['Capture and qualify', 'Answer and hand over', 'Book and follow up', 'Manage your leads (CRM)', 'Grow and measure', 'Connect your tools']) ok(l.includes(f), `feature group "${f}" is listed`);
   for (const w of ['Google Calendar', 'Broadcasts', 'Webhooks', 'REST API', 'simulator', 'Analytics', 'real person']) ok(l.toLowerCase().includes(w.toLowerCase()), `the page mentions ${w}`);

@@ -29,6 +29,8 @@ export default function Billing({ me }: { me: AdminUser }) {
   const [chosen, setChosen] = useState<'INR' | 'USD' | null>(null);
   const [error, setError] = useState('');
   const owner = me.role === 'owner';
+  // "Choose Monthly" or "Choose Yearly" on the website: that card is highlighted
+  const preferred = (() => { try { const v = sessionStorage.getItem('lk_period'); return v === 'month' || v === 'year' ? v : null; } catch { return null; } })();
   const [code, setCode] = useState('');
   const [redeemed, setRedeemed] = useState('');
 
@@ -123,52 +125,70 @@ export default function Billing({ me }: { me: AdminUser }) {
 
       {!internal && (
         <>
-          <div className="mt-6 grid grid-cols-1 max-w-sm gap-4">
-            {b.plans.map((p) => {
-              const current = b.plan !== 'internal' && b.status === 'active'; // there is one plan; older plan names count as it
-              return (
-                <div key={p.id} className={`rounded-xl border p-4 ${current ? 'border-brand/60 bg-brand-soft' : 'border-line bg-sunken'}`}>
-                  <div className="flex items-baseline justify-between">
-                    <div className="font-bold text-fg">{p.name}</div>
-                    {current && <span className="text-[10px] text-brand-text">Current plan</span>}
-                  </div>
-                  <div className="mt-1 text-xs text-muted">{p.blurb}</div>
-                  <div className="mt-3 text-lg font-extrabold text-fg">{money(p.price[currency], currency)}<span className="text-xs font-medium text-muted"> /month</span>{currency === 'USD' && <span className="text-xs font-medium text-muted"> or {money(p.yearlyUSD, 'USD')} /year</span>}</div>
-                  <button type="button" onClick={() => setChosen(currency === 'INR' ? 'USD' : 'INR')} className="text-[11px] text-muted hover:text-fg2 underline">
+          <div className="mt-6 grid grid-flow-col auto-cols-[86%] sm:grid-flow-row sm:grid-cols-2 sm:auto-cols-auto gap-4 max-w-3xl overflow-x-auto sm:overflow-visible snap-x snap-mandatory pt-3 pb-2">
+            {b.plans.flatMap((p) => {
+              const current = b.plan !== 'internal' && b.status === 'active'; // one plan sold monthly or yearly; older plan names count as it
+              const save = Math.round(100 - (p.yearlyUSD / (p.price.USD * 12)) * 100);
+              const yearlyReady = b.providers.paypal && b.providers.paypalYearly;
+              const features = (
+                <ul className="mt-4 space-y-1.5 text-xs text-fg2 flex-1">
+                  <li>✓ {p.limits.conversations.toLocaleString()} new conversations / month</li>
+                  <li>✓ {p.limits.aiReplies.toLocaleString()} AI answers / month</li>
+                  <li>✓ {p.limits.seats} team members</li>
+                  <li>✓ {p.limits.broadcasts.toLocaleString()} broadcast messages / month</li>
+                  <li>✓ 1 WhatsApp number, CRM, inbox, booking and hand-off</li>
+                </ul>
+              );
+              const btn = 'py-2.5 text-xs font-bold rounded-lg border disabled:opacity-40 flex items-center justify-center space-x-1.5';
+              const wanted = (period: 'month' | 'year') => (preferred === period ? 'border-brand ring-2 ring-brand/40' : null);
+              return [
+                <div key={`${p.id}-month`} className={`snap-center rounded-2xl border p-5 flex flex-col bg-sunken ${wanted('month') ?? 'border-line'}`}>
+                  <div className="font-bold text-fg">Monthly</div>
+                  <div className="mt-1 text-xs text-muted">Pay month by month. Cancel any time.</div>
+                  <div className="mt-4 text-3xl font-extrabold text-fg tracking-tight">{money(p.price[currency], currency)}<span className="text-sm font-medium text-muted"> /month</span></div>
+                  <button type="button" onClick={() => setChosen(currency === 'INR' ? 'USD' : 'INR')} className="mt-1 self-start text-[11px] text-muted hover:text-fg2 underline">
                     {currency === 'INR' ? `Not in India? Show ${money(p.price.USD, 'USD')}` : `Paying from India? Show ${money(p.price.INR, 'INR')}`}
                   </button>
-                  <ul className="mt-3 space-y-1 text-xs text-fg2">
-                    <li>{p.limits.conversations.toLocaleString()} new conversations / month</li>
-                    <li>{p.limits.aiReplies.toLocaleString()} AI answers / month</li>
-                    <li>{p.limits.seats} team members</li>
-                    <li>{p.limits.broadcasts.toLocaleString()} broadcast messages / month</li>
-                    <li>1 WhatsApp number</li>
-                  </ul>
+                  {features}
                   {owner && (!current || linkPaid) && (
                     <div className="mt-4 flex flex-col gap-2">
                       {currency === 'INR' && <button disabled={!b.providers.razorpay || !!busy} onClick={() => go(`rz-${p.id}`, () => api.checkout(p.id, 'razorpay'))}
-                        className="py-2 bg-brand hover:bg-brand text-on-brand font-bold text-xs rounded-lg disabled:opacity-40 flex items-center justify-center space-x-1.5">
-                        {busy === `rz-${p.id}` && <Loader2 className="w-3.5 h-3.5 animate-spin" />}<span>{current ? 'Renew for 30 days (₹)' : 'Subscribe in ₹ (UPI AutoPay, cards)'}</span>
+                        className={`${btn} bg-brand hover:bg-brand text-on-brand border-transparent`}>
+                        {busy === `rz-${p.id}` && <Loader2 className="w-3.5 h-3.5 animate-spin" />}<span>{current ? 'Renew for 30 days (₹)' : 'Choose Monthly (UPI AutoPay, cards)'}</span>
                       </button>}
                       {!current && currency === 'USD' && b.providers.paypal && <button disabled={!!busy} onClick={() => go(`pp-${p.id}`, () => api.checkout(p.id, 'paypal', 'month'))}
-                        className="py-2 bg-subtle hover:bg-subtle text-fg text-xs rounded-lg border border-line disabled:opacity-40 flex items-center justify-center space-x-1.5">
-                        {busy === `pp-${p.id}` && <Loader2 className="w-3.5 h-3.5 animate-spin" />}<span>Subscribe {money(p.price.USD, 'USD')}/month (PayPal)</span>
-                      </button>}
-                      {!current && currency === 'USD' && b.providers.paypal && b.providers.paypalYearly && <button disabled={!!busy} onClick={() => go(`ppy-${p.id}`, () => api.checkout(p.id, 'paypal', 'year'))}
-                        className="py-2 bg-subtle hover:bg-subtle text-fg text-xs rounded-lg border border-line disabled:opacity-40 flex items-center justify-center space-x-1.5">
-                        {busy === `ppy-${p.id}` && <Loader2 className="w-3.5 h-3.5 animate-spin" />}<span>Subscribe {money(p.yearlyUSD, 'USD')}/year (PayPal), save {Math.round(100 - (p.yearlyUSD / (p.price.USD * 12)) * 100)}%</span>
+                        className={`${btn} bg-subtle hover:bg-subtle text-fg border-line`}>
+                        {busy === `pp-${p.id}` && <Loader2 className="w-3.5 h-3.5 animate-spin" />}<span>Choose Monthly (PayPal)</span>
                       </button>}
                       {!current && currency === 'USD' && (b.providers.stripe || !b.providers.paypal) && <button disabled={!b.providers.stripe || !!busy} onClick={() => go(`st-${p.id}`, () => api.checkout(p.id, 'stripe'))}
-                        className="py-2 bg-subtle hover:bg-subtle text-fg text-xs rounded-lg border border-line disabled:opacity-40 flex items-center justify-center space-x-1.5">
-                        {busy === `st-${p.id}` && <Loader2 className="w-3.5 h-3.5 animate-spin" />}<span>Subscribe in $ (card)</span>
+                        className={`${btn} bg-subtle hover:bg-subtle text-fg border-line`}>
+                        {busy === `st-${p.id}` && <Loader2 className="w-3.5 h-3.5 animate-spin" />}<span>Choose Monthly (card)</span>
                       </button>}
                     </div>
                   )}
                   {owner && !current && currency === 'INR' && !b.providers.razorpay && (
                     <p className="mt-2 text-[11px] text-warn">Subscriptions in rupees are being set up. <button type="button" onClick={() => setChosen('USD')} className="underline">Subscribe in dollars instead</button></p>
                   )}
+                </div>,
+                <div key={`${p.id}-year`} className={`snap-center relative rounded-2xl border p-5 flex flex-col bg-brand-soft ${wanted('year') ?? 'border-brand/60'}`}>
+                  <span className="absolute -top-3 left-5 text-[10px] font-bold px-2.5 py-1 rounded-full bg-brand text-on-brand whitespace-nowrap">Best value · Save {save}%</span>
+                  <div className="font-bold text-fg">Yearly</div>
+                  <div className="mt-1 text-xs text-muted">Pay once a year and save {money(p.price.USD * 12 - p.yearlyUSD, 'USD')}.</div>
+                  <div className="mt-4 text-3xl font-extrabold text-fg tracking-tight">{money(p.yearlyUSD, 'USD')}<span className="text-sm font-medium text-muted"> /year</span></div>
+                  <div className="mt-1 text-[11px] text-muted">Just ${(p.yearlyUSD / 1200).toFixed(2)} a month, billed in US dollars</div>
+                  {features}
+                  {owner && !current && (
+                    yearlyReady ? (
+                      <button disabled={!!busy} onClick={() => go(`ppy-${p.id}`, () => api.checkout(p.id, 'paypal', 'year'))}
+                        className={`mt-4 ${btn} bg-brand hover:bg-brand text-on-brand border-transparent`}>
+                        {busy === `ppy-${p.id}` && <Loader2 className="w-3.5 h-3.5 animate-spin" />}<span>Choose Yearly (PayPal)</span>
+                      </button>
+                    ) : (
+                      <p className="mt-4 text-[11px] text-warn">Yearly billing is not set up yet.</p>
+                    )
+                  )}
                 </div>
-              );
+              ];
             })}
           </div>
           {owner && (
@@ -179,7 +199,7 @@ export default function Billing({ me }: { me: AdminUser }) {
               {redeemed && <span className="text-xs text-brand-text">{redeemed}</span>}
             </div>
           )}
-          {anyProvider && owner && <p className="text-[11px] text-muted mt-3">You approve the monthly payment (UPI AutoPay, card or PayPal) on the payment provider&apos;s secure page. It is then debited automatically every month, and you can cancel any time here. After approving, come back: your plan switches on as soon as the first payment is confirmed (usually within a minute; refresh if it still shows no plan).</p>}
+          {anyProvider && owner && <p className="text-[11px] text-muted mt-3">You approve the recurring payment (UPI AutoPay, card or PayPal) on the payment provider&apos;s secure page. It is then debited automatically every month, or every year on the yearly plan, and you can cancel any time here. After approving, come back: your plan switches on as soon as the first payment is confirmed (usually within a minute; refresh if it still shows no plan).</p>}
           {!anyProvider && <p className="text-[11px] text-muted mt-3">Online payment is not switched on for this account yet. Contact support to activate a plan.</p>}
           {!owner && <p className="text-[11px] text-muted mt-3">Only the account owner can change the plan.</p>}
           {owner && b.status === 'active' && !b.cancelAtPeriodEnd && b.provider && !linkPaid && (
