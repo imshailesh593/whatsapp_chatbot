@@ -282,9 +282,14 @@ async function callModel(system: string, contents: string): Promise<string> {
     ]);
     return res.text ?? '';
   } catch (err) {
-    throw new AgentError('error', (err as Error).message);
+    const message = (err as Error).message;
+    throw new AgentError(modelErrorKind(message), message);
   }
 }
+
+/** No credit left, quota or rate limit hit, a bad or blocked key: the AI cannot answer anyone for now ('unavailable'), so the menu flow must. */
+export const modelErrorKind = (message: string): 'unavailable' | 'error' =>
+  /\b(402|429|401|403)\b|RESOURCE_EXHAUSTED|PERMISSION_DENIED|UNAUTHENTICATED|credits|quota|billing|API key/i.test(message) ? 'unavailable' : 'error';
 
 /** The model's JSON, cleaned into a well-formed turn. Throws AgentError('bad_output') when there is no usable reply. */
 export function parseTurn(raw: string): AgentTurn {

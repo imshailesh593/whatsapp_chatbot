@@ -121,9 +121,10 @@ export async function handleAiTurn(a: AiTurnArgs): Promise<boolean> {
     );
   } catch (err) {
     const e = err as AgentError;
-    if (e.kind === 'unavailable') return false;
-    console.error(`[ai ${workspaceId.slice(0, 8)}] turn failed (${e.kind}):`, e.message);
-    // say so once instead of going quiet, but never repeat the apology back to back
+    console.error(`[ai ${workspaceId.slice(0, 8)}] turn failed (${e.kind}):`, e.message.slice(0, 200));
+    // The AI could not answer (no credit, outage, timeout): the fixed menu flow answers, so the customer is never left without a reply
+    if (e.kind !== 'bad_output') return false;
+    // The AI answered with something unusable twice: say so once instead of going quiet, but never repeat the apology back to back
     if (before[before.length - 1]?.text !== HICCUP_MESSAGE) await out(HICCUP_MESSAGE);
     return true;
   }
