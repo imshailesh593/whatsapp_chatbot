@@ -207,8 +207,8 @@ export async function handleAiTurn(a: AiTurnArgs): Promise<boolean> {
   } else if (turn.action === 'booked' && hasBooking && applied.completed) {
     const moved = await markLeadBooked(workspaceId, phone, session.id, 'customer confirmed', !capturing);
     if (!capturing && moved) void notifyBooked(workspaceId, phone);
-  } else if (turn.action === 'wrap_up' && applied.completed && !footerRecentlySent(cfg, [...before, ...(reply ? [{ who: 'You' as const, text: reply }] : [])])) {
-    // the conversation is ending: the team's number, and the priority 1:1 booking link
+  } else if (turn.action === 'wrap_up' && !footerRecentlySent(cfg, [...before, ...(reply ? [{ who: 'You' as const, text: reply }] : [])])) {
+    // the conversation is ending (even if the customer leaves before the last question): the team's number, and the priority 1:1 booking link
     const footer = contactFooter(cfg);
     if (footer) await out(await fixed(footer));
   }

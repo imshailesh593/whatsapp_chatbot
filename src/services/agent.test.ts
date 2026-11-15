@@ -188,7 +188,7 @@ test('answerSupported tolerates paraphrase and other scripts but not invention',
 
 test('the prompt carries the guardrails, the next question and the facts, and never the closing text as a script', () => {
   const p = buildSystemPrompt(ctx({ service: jobs, answers: { name: 'Asha' }, firstReply: false }));
-  for (const must of ['You are an AI assistant', 'ONE question per message', 'GUARDRAILS', 'Never promise or guarantee', 'OTPs', 'The next question to ask is "profession"', '✔ ANSWERED: Asha', 'BUSINESS NOTES', 'Keep answers short', '+919876543210', 'never paste it']) {
+  for (const must of ['You are an AI assistant', 'ONE question per message', 'GUARDRAILS', 'Never promise or guarantee', 'OTPs', 'The next question to ask is "profession"', 'says goodbye', '✔ ANSWERED: Asha', 'BUSINESS NOTES', 'Keep answers short', '+919876543210', 'never paste it']) {
     assert.ok(p.includes(must), `missing: ${must}`);
   }
 });
