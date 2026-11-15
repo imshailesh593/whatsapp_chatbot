@@ -49,7 +49,7 @@ import { resetPlan, updatePlan } from './services/planConfig';
 import { emailConfigured, emailProvider, sendEmail } from './services/mailer';
 import { currencyOf, detectRegion } from './lib/geo';
 import { isSocial } from './lib/channel';
-import { completeMetaConnection, disconnectMeta, metaAuthUrl, metaConfigured, metaStatus, processWebhook, readMetaState, readSignedRequest, signatureOk, verifyChallenge } from './services/meta';
+import { NONCE_COOKIE, completeMetaConnection, disconnectMeta, metaAuthUrl, metaConfigured, metaStatus, newNonce, processWebhook, readMetaState, readSignedRequest, signatureOk, verifyChallenge } from './services/meta';
 import { cancelSubscription, handlePaypalWebhook, handleRazorpayWebhook, handleStripeWebhook, openPortal, providersAvailable, startCheckout } from './services/billing';
 
 const SIM_PREFIX = 'SIM-';
@@ -218,8 +218,6 @@ export function registerAdmin(app: FastifyInstance, opts: { getQr: (workspaceId:
   const signups = new Map<string, { n: number; reset: number }>();
 
   // Accept an empty body with Content-Type: application/json (DELETE/POST without payload) instead of failing with 400
-  // Meta's data-deletion request is a form post
-  app.addContentTypeParser('application/x-www-form-urlencoded', { parseAs: 'string' }, (_req, body, done) => done(null, Object.fromEntries(new URLSearchParams(String(body ?? '')))));
   app.removeContentTypeParser('application/json');
   app.addContentTypeParser('application/json', { parseAs: 'string' }, (_req, body, done) => {
     (_req as any).rawBody = body;
@@ -598,13 +596,18 @@ export function registerAdmin(app: FastifyInstance, opts: { getQr: (workspaceId:
 
   app.get('/admin/api/meta/connect', { preHandler: manager }, async (req, reply) => {
     if (!metaConfigured()) return reply.status(400).send({ error: 'Instagram and Facebook are not set up on this server yet. Ask the platform operator to add the Meta app keys.' });
-    return { url: metaAuthUrl(wsId(req), publicUrl(req)) };
+    // the same random value goes into the state and into this browser's cookie, so only this browser can finish the connection
+    const nonce = newNonce();
+    reply.header('Set-Cookie', `${NONCE_COOKIE}=${nonce}; Max-Age=600; Path=/admin/api/meta; HttpOnly; SameSite=Lax${publicUrl(req).startsWith('https://') ? '; Secure' : ''}`);
+    return { url: metaAuthUrl(wsId(req), publicUrl(req), nonce) };
   });
 
   // Facebook sends the owner back here. No session cookie is needed: the signed state says which business it is.
   app.get('/admin/api/meta/callback', async (req, reply) => {
     const q = req.query as { code?: string; state?: string; error?: string };
-    const w = readMetaState(String(q.state ?? ''));
+    const cookieNonce = /(?:^|;\s*)meta_nonce=([a-f0-9]{32})/.exec(String(req.headers.cookie ?? ''))?.[1] ?? '';
+    const w = readMetaState(String(q.state ?? ''), cookieNonce);
+    reply.header('Set-Cookie', `${NONCE_COOKIE}=; Max-Age=0; Path=/admin/api/meta; HttpOnly; SameSite=Lax`); // one use
     if (!w || q.error || !q.code) return reply.redirect('/admin/?meta=denied');
     try {
       const r = await completeMetaConnection(w, q.code, publicUrl(req));
@@ -654,13 +657,17 @@ export function registerAdmin(app: FastifyInstance, opts: { getQr: (workspaceId:
   });
 
   // Meta requires a way for people to ask for their data to be deleted. We keep no profile of a commenter beyond the chat,
-  // so the request is recorded and the page it points to explains how the business removes the chat.
-  app.post('/meta/data-deletion', async (req, reply) => {
-    const data = readSignedRequest(String(((req.body ?? {}) as { signed_request?: string }).signed_request ?? ''));
-    if (!data) return reply.status(400).send({ error: 'bad request' });
-    const code = crypto.randomBytes(8).toString('hex');
-    await prisma.auditLog.create({ data: { actor: 'meta', action: 'meta.data_deletion', workspaceId: null, detail: `user ${String(data.user_id ?? '').slice(0, 40)} · ${code}` } }).catch(() => undefined);
-    return { url: `${publicUrl(req)}/data-deletion?code=${code}`, confirmation_code: code };
+  // so the request is recorded and the page it points to explains how the business removes the chat. Meta posts it as a form,
+  // so the form parser lives in its own small scope: no other route accepts form bodies.
+  app.register(async (scope) => {
+    scope.addContentTypeParser('application/x-www-form-urlencoded', { parseAs: 'string' }, (_req, body, done) => done(null, Object.fromEntries(new URLSearchParams(String(body ?? '')))));
+    scope.post('/meta/data-deletion', async (req, reply) => {
+      const data = readSignedRequest(String(((req.body ?? {}) as { signed_request?: string }).signed_request ?? ''));
+      if (!data) return reply.status(400).send({ error: 'bad request' });
+      const code = crypto.randomBytes(8).toString('hex');
+      await prisma.auditLog.create({ data: { actor: 'meta', action: 'meta.data_deletion', workspaceId: null, detail: `user ${String(data.user_id ?? '').slice(0, 40)} · ${code}` } }).catch(() => undefined);
+      return { url: `${publicUrl(req)}/data-deletion?code=${code}`, confirmation_code: code };
+    });
   });
 
   app.post('/webhooks/paypal', async (req, reply) => {

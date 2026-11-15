@@ -90,18 +90,23 @@ test('long replies are split at paragraph or sentence ends and nothing is lost',
 
 // ---------- connecting ----------
 
-test('the connect state is signed, expires and cannot be reused for another business', async () => {
-  const { makeMetaState, readMetaState } = await metaP;
-  const s = makeMetaState('workspace-1');
-  assert.equal(readMetaState(s), 'workspace-1');
+test('the connect state is signed, expires, and works only in the browser that started it', async () => {
+  const { makeMetaState, readMetaState, newNonce } = await metaP;
+  const nonce = newNonce();
+  assert.match(nonce, /^[a-f0-9]{32}$/);
+  const s = makeMetaState('workspace-1', nonce);
+  assert.equal(readMetaState(s, nonce), 'workspace-1');
+  // another browser (a different or missing cookie) cannot finish this connection
+  assert.equal(readMetaState(s, newNonce()), null);
+  assert.equal(readMetaState(s, ''), null);
   const [body, sig] = s.split('.');
-  const other = Buffer.from(JSON.stringify({ w: 'workspace-2', exp: Date.now() + 60_000 })).toString('base64url');
-  assert.equal(readMetaState(`${other}.${sig}`), null);
-  assert.equal(readMetaState(`${body}.${sig.slice(0, -2)}xx`), null);
-  assert.equal(readMetaState('garbage'), null);
-  const expired = Buffer.from(JSON.stringify({ w: 'workspace-1', exp: Date.now() - 1 })).toString('base64url');
+  const other = Buffer.from(JSON.stringify({ w: 'workspace-2', exp: Date.now() + 60_000, n: nonce })).toString('base64url');
+  assert.equal(readMetaState(`${other}.${sig}`, nonce), null); // signature belongs to another body
+  assert.equal(readMetaState(`${body}.${sig.slice(0, -2)}xx`, nonce), null);
+  assert.equal(readMetaState('garbage', nonce), null);
+  const expired = Buffer.from(JSON.stringify({ w: 'workspace-1', exp: Date.now() - 1, n: nonce })).toString('base64url');
   const realSig = crypto.createHmac('sha256', process.env.SESSION_SECRET!).update('meta-state:' + expired).digest('base64url');
-  assert.equal(readMetaState(`${expired}.${realSig}`), null);
+  assert.equal(readMetaState(`${expired}.${realSig}`, nonce), null);
 });
 
 test('the data-deletion request is read only when Meta signed it', async () => {

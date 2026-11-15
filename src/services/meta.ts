@@ -292,8 +292,9 @@ export async function handleComment(conn: { workspaceId: string; pageId: string;
   const ws = cfg.ws;
   if (!ws.commentRepliesEnabled || !ws.botEnabled || !accessState(ws).active) return;
   // claim the comment first: a webhook Meta sends again finds the row and stops
+  let claim: { id: string; createdAt: Date };
   try {
-    await prisma.commentEvent.create({ data: { id: c.commentId, workspaceId: conn.workspaceId, channel: c.channel, accountId: c.accountId, postId: c.postId, commenterId: c.commenterId, commenterName: c.commenterName.slice(0, 80), text: c.text, status: 'processing' } });
+    claim = await prisma.commentEvent.create({ data: { id: c.commentId, workspaceId: conn.workspaceId, channel: c.channel, accountId: c.accountId, postId: c.postId, commenterId: c.commenterId, commenterName: c.commenterName.slice(0, 80), text: c.text, status: 'processing' } });
   } catch {
     return;
   }
@@ -301,9 +302,13 @@ export async function handleComment(conn: { workspaceId: string; pageId: string;
 
   if (looksLikeNoise(c.text)) return void (await finish('skipped', { note: 'Only an emoji, a link or tags: nothing to answer' }));
   if (ws.commentReplyMode !== 'all' && !matchesKeywords(c.text, ws.commentKeywords)) return void (await finish('skipped', { note: 'No keyword in the comment' }));
+  // Comments are handled in parallel, so the limits count the ones still in flight too, and only those that arrived before this
+  // one (same moment: the lower id first): of two simultaneous comments exactly one goes ahead, and a burst cannot overshoot.
+  const live = { in: ['replied', 'processing'] };
+  const before = { OR: [{ createdAt: { lt: claim.createdAt } }, { createdAt: claim.createdAt, id: { lt: claim.id } }] };
   const hourAgo = new Date(Date.now() - 3_600_000);
-  if ((await prisma.commentEvent.count({ where: { accountId: c.accountId, status: 'replied', createdAt: { gte: hourAgo } } })) >= HOURLY_LIMIT) return void (await finish('skipped', { note: `Hourly limit of ${HOURLY_LIMIT} replies reached` }));
-  const already = await prisma.commentEvent.findFirst({ where: { accountId: c.accountId, postId: c.postId, commenterId: c.commenterId, status: 'replied', createdAt: { gte: new Date(Date.now() - 86_400_000) } }, select: { id: true } });
+  if ((await prisma.commentEvent.count({ where: { accountId: c.accountId, status: live, AND: [{ createdAt: { gte: hourAgo } }, before] } })) >= HOURLY_LIMIT) return void (await finish('skipped', { note: `Hourly limit of ${HOURLY_LIMIT} replies reached` }));
+  const already = await prisma.commentEvent.findFirst({ where: { accountId: c.accountId, postId: c.postId, commenterId: c.commenterId, status: live, AND: [{ createdAt: { gte: new Date(Date.now() - 86_400_000) } }, before] }, select: { id: true } });
   if (already) return void (await finish('skipped', { note: 'Already answered this person on this post today' }));
 
   const sendDm = ws.commentSendDm;
@@ -353,26 +358,36 @@ const stateSecret = () => process.env.SESSION_SECRET || process.env.ADMIN_TOKEN 
 const signState = (body: string) => crypto.createHmac('sha256', stateSecret()).update('meta-state:' + body).digest('base64url');
 
 /** Signed, short-lived state so the callback knows which business started the connection. */
-export function makeMetaState(workspaceId: string): string {
-  const body = Buffer.from(JSON.stringify({ w: workspaceId, exp: Date.now() + 10 * 60_000, n: crypto.randomBytes(6).toString('hex') })).toString('base64url');
+export function makeMetaState(workspaceId: string, nonce: string): string {
+  const body = Buffer.from(JSON.stringify({ w: workspaceId, exp: Date.now() + 10 * 60_000, n: nonce })).toString('base64url');
   return `${body}.${signState(body)}`;
 }
 
-export function readMetaState(state: string): string | null {
+/** A fresh random value for one connect attempt: it goes in the state and in an HttpOnly cookie of the browser that started it. */
+export const newNonce = () => crypto.randomBytes(16).toString('hex');
+export const NONCE_COOKIE = 'meta_nonce';
+
+/**
+ * The business the state was made for, when the signature is genuine, it has not expired and its nonce equals the one in the
+ * browser's cookie: a callback link started in another browser (or forged) is refused.
+ */
+export function readMetaState(state: string, cookieNonce: string): string | null {
   const [body, sig] = String(state ?? '').split('.');
   if (!body || !sig) return null;
   const want = signState(body);
   if (sig.length !== want.length || !crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(want))) return null;
   try {
-    const p = JSON.parse(Buffer.from(body, 'base64url').toString('utf8')) as { w?: string; exp?: number };
-    return p.w && p.exp && p.exp > Date.now() ? p.w : null;
+    const p = JSON.parse(Buffer.from(body, 'base64url').toString('utf8')) as { w?: string; exp?: number; n?: string };
+    const n = String(p.n ?? '');
+    if (!p.w || !p.exp || p.exp <= Date.now() || !n || n.length !== cookieNonce.length || !crypto.timingSafeEqual(Buffer.from(n), Buffer.from(cookieNonce))) return null;
+    return p.w;
   } catch {
     return null;
   }
 }
 
-export function metaAuthUrl(workspaceId: string, publicUrl: string): string {
-  const q = new URLSearchParams({ client_id: env('META_APP_ID'), redirect_uri: redirectUri(publicUrl), state: makeMetaState(workspaceId), response_type: 'code', scope: SCOPES.join(',') });
+export function metaAuthUrl(workspaceId: string, publicUrl: string, nonce: string): string {
+  const q = new URLSearchParams({ client_id: env('META_APP_ID'), redirect_uri: redirectUri(publicUrl), state: makeMetaState(workspaceId, nonce), response_type: 'code', scope: SCOPES.join(',') });
   return `https://www.facebook.com/${env('META_GRAPH_VERSION') || 'v24.0'}/dialog/oauth?${q}`;
 }
 
