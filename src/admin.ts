@@ -42,7 +42,7 @@ import { affiliateAdminOverview, getAffiliateSettings, referralOverview, referre
 import { authUrl, cancelAppointment, cleanRules, completeConnection, disconnect as disconnectCalendar, formatSlot, googleConfigured, readState } from './services/calendar';
 import { admitAiReply, getUsage } from './services/usage';
 import { suggestInstructions } from './services/gemini';
-import { checkRazorpay, createPlans as createRazorpayPlans } from './services/razorpaySetup';
+import { checkRazorpay, createPlans as createRazorpayPlans, planEnvName as razorpayPlanEnv } from './services/razorpaySetup';
 import { checkPaypal, createPaypalPlans, paypalPlanEnv } from './services/paypal';
 import { describeRuntimeConfig, newWebhookSecret, saveRuntimeConfig } from './services/runtimeConfig';
 import { resetPlan, updatePlan } from './services/planConfig';
@@ -50,7 +50,7 @@ import { emailConfigured, emailProvider, sendEmail } from './services/mailer';
 import { currencyOf, detectRegion } from './lib/geo';
 import { isSocial } from './lib/channel';
 import { NONCE_COOKIE, completeMetaConnection, disconnectMeta, metaAuthUrl, metaConfigured, metaStatus, newNonce, processWebhook, readMetaState, readSignedRequest, signatureOk, verifyChallenge } from './services/meta';
-import { cancelSubscription, handlePaypalWebhook, handleRazorpayWebhook, handleStripeWebhook, openPortal, providersAvailable, startCheckout } from './services/billing';
+import { cancelSubscription, handlePaypalWebhook, handleRazorpayWebhook, handleStripeWebhook, openPortal, providersAvailable, razorpayLinkMode, startCheckout } from './services/billing';
 
 const SIM_PREFIX = 'SIM-';
 const WEB_DIST = path.join(__dirname, '..', 'web', 'dist');
@@ -521,10 +521,10 @@ export function registerAdmin(app: FastifyInstance, opts: { getQr: (workspaceId:
       provider: w.billingProvider,
       limits: { conversations: num(access.limits.conversations), aiReplies: num(access.limits.aiReplies), seats: num(access.limits.seats), broadcasts: num(access.limits.broadcasts) },
       usage: { ...usage, seats },
-      providers: { ...providersAvailable(), paypalYearly: !!process.env[paypalPlanEnv('pro', 'year')] },
+      providers: { ...providersAvailable(), paypalYearly: !!process.env[paypalPlanEnv('pro', 'year')], razorpayYearly: !!process.env[razorpayPlanEnv('pro', 'year')] && !razorpayLinkMode() },
       // Which currency to lead with, from the owner's IP address (they can switch it on the page)
       currency: currencyOf(detectRegion(req.headers, req.ip).region),
-      plans: PLANS.map((p) => ({ id: p.id, name: p.name, blurb: p.blurb, price: p.price, yearlyUSD: p.yearlyUSD, limits: p.limits })),
+      plans: PLANS.map((p) => ({ id: p.id, name: p.name, blurb: p.blurb, price: p.price, yearlyUSD: p.yearlyUSD, yearlyINR: p.yearlyINR, limits: p.limits })),
       payments: payments.map((p) => ({ id: p.id, amount: p.amount, currency: p.currency, status: p.status, plan: p.plan, at: p.createdAt.toISOString() }))
     };
   });
@@ -1224,7 +1224,7 @@ export function registerAdmin(app: FastifyInstance, opts: { getQr: (workspaceId:
   app.post('/admin/api/super/razorpay/create-plan', { preHandler: superOnly }, async (req, reply) => {
     try {
       const made = await createRazorpayPlans(true);
-      await saveRuntimeConfig(Object.fromEntries(made.map((m) => [`RAZORPAY_PLAN_${m.plan.toUpperCase()}`, m.razorpayPlanId])));
+      await saveRuntimeConfig(Object.fromEntries(made.map((m) => [razorpayPlanEnv(m.plan, m.period), m.razorpayPlanId])));
       await audit(req, 'razorpay.plan', null, made.map((m) => m.razorpayPlanId).join(', '));
       return { plans: made };
     } catch (err) {
@@ -1295,7 +1295,7 @@ export function registerAdmin(app: FastifyInstance, opts: { getQr: (workspaceId:
   app.get('/admin/api/super/plans', { preHandler: superOnly }, async () => {
     const counts = await prisma.workspace.groupBy({ by: ['plan'], _count: { _all: true } });
     const n = new Map(counts.map((c) => [c.plan, c._count._all]));
-    return { plans: PLANS.map((p) => ({ id: p.id, name: p.name, blurb: p.blurb, price: p.price, limits: p.limits, integrations: p.integrations, clients: n.get(p.id) ?? 0 })), internal: n.get('internal') ?? 0 };
+    return { plans: PLANS.map((p) => ({ id: p.id, name: p.name, blurb: p.blurb, price: p.price, yearlyUSD: p.yearlyUSD, yearlyINR: p.yearlyINR, limits: p.limits, integrations: p.integrations, clients: n.get(p.id) ?? 0 })), internal: n.get('internal') ?? 0 };
   });
 
   const platformSettings = async () => ({ platformSender: await getSetting<boolean>('platformSender', false), ...(await connectionSlots()), ...serverMemory() });

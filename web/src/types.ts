@@ -215,6 +215,7 @@ export interface BillingPlan {
   blurb: string;
   price: { INR: number; USD: number };
   yearlyUSD: number;
+  yearlyINR: number;
   limits: { conversations: number; aiReplies: number; seats: number; broadcasts: number };
 }
 
@@ -257,7 +258,7 @@ export interface BillingInfo {
   provider: string | null;
   limits: { conversations: number | null; aiReplies: number | null; seats: number | null; broadcasts: number | null };
   usage: { conversations: number; aiReplies: number; seats: number; broadcasts: number };
-  providers: { stripe: boolean; razorpay: boolean; paypal: boolean; paypalYearly: boolean };
+  providers: { stripe: boolean; razorpay: boolean; paypal: boolean; paypalYearly: boolean; razorpayYearly: boolean };
   /** The currency to lead with, from the owner's IP address */
   currency: 'INR' | 'USD';
   plans: BillingPlan[];

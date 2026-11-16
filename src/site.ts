@@ -174,16 +174,26 @@ table.cmp .us{background:var(--soft);font-weight:600;color:var(--ink)}
 .plan li:before{content:"✓";position:absolute;left:0;top:2px;width:19px;height:19px;border-radius:50%;background:var(--soft);color:var(--brand);font-weight:800;font-size:11px;display:flex;align-items:center;justify-content:center}
 .plan li.no{color:var(--mute)}.plan li.no:before{content:"–";color:var(--mute);background:transparent}
 .plan .btn{width:100%}
-/* two plans side by side; on a phone they scroll sideways, one card at a time */
-.plans{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:22px;max-width:920px;margin:0 auto;align-items:stretch}
-.plans .plan{display:flex;flex-direction:column;padding:34px}
-.plans .plan.pop{padding:34px}
-.plans .plan ul{grid-template-columns:1fr;flex:1}
-.plans .price{font-size:54px}
-.plans .plan .btn{margin-top:auto}
-.plans .plan{position:relative}
-.best{position:absolute;top:-14px;left:34px;font-size:12px;font-weight:700;letter-spacing:.01em;padding:6px 14px;border-radius:99px;background:linear-gradient(135deg,var(--g1),var(--g2));color:#064e3b;box-shadow:0 6px 16px -6px rgba(0,0,0,.25);white-space:nowrap;z-index:3}
-.doc.wide{max-width:960px}.doc.wide>:not(.plans){max-width:760px}.doc.wide>p.center{max-width:none}
+/* two plans: a card with the name and price, a Choose button under it, then what is included (the highlighted plan has a grainy gradient) */
+.pl{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));max-width:960px;margin:0 auto}
+.pcol{padding:0 18px;border-left:1px solid var(--line);display:flex;flex-direction:column}.pcol:last-child{border-right:1px solid var(--line)}
+.pc{position:relative;overflow:hidden;border-radius:26px;min-height:300px;padding:28px;display:flex;flex-direction:column;justify-content:space-between;isolation:isolate}
+.pc h3{font-size:34px;letter-spacing:-.03em;font-weight:560;margin:0;line-height:1.1}
+.pc p{margin:8px 0 0;font-size:15px;opacity:.78}
+.pl .pc p{color:inherit}
+.pc.light{background:color-mix(in srgb,var(--ink) 5%,var(--bg));color:var(--ink)}
+.pc.hot{color:#fff;background:radial-gradient(95% 80% at 8% 10%,#22d3ee 0%,transparent 62%),radial-gradient(90% 85% at 96% 92%,#0a8a64 0%,transparent 66%),radial-gradient(70% 70% at 88% 8%,#34d399 0%,transparent 60%),#0a2540}
+.pc.hot:after{content:"";position:absolute;inset:0;z-index:-1;border-radius:inherit;opacity:.55;mix-blend-mode:overlay;pointer-events:none;background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='180' height='180'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 .9 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>")}
+.pbadge{display:inline-block;margin-top:12px;font-style:normal;font-size:14px;font-weight:600;padding:4px 14px;border-radius:99px;border:1.5px solid rgba(255,255,255,.85)}
+.pp b{font-size:56px;font-weight:560;letter-spacing:-.045em;line-height:1}.pp small{font-size:18px;opacity:.75;font-weight:500;margin-left:4px}.pp span{display:block;margin-top:6px;font-size:16px;opacity:.85}
+.pbtn{margin-top:22px;width:100%;padding:18px 26px;font-size:18px}
+.pfine{margin:10px 0 0;font-size:13px;color:var(--mute);text-align:center}
+.pcol h4{margin:34px 0 8px;font-size:17px;font-weight:500;color:var(--ink2);display:flex;gap:10px;align-items:center}.pcol h4 i{font-style:normal;color:var(--mute)}
+.pf{list-style:none;margin:0;padding:0;border-top:1px dotted color-mix(in srgb,var(--ink) 28%,var(--line))}
+.pf li{display:flex;gap:16px;align-items:center;padding:17px 2px;font-size:17px;color:var(--ink);border-bottom:1px dotted color-mix(in srgb,var(--ink) 28%,var(--line))}
+.pi{flex:none;color:var(--ink2)}
+.pl .pf{padding:0;margin:0}.pl .pf li{margin:0;padding-left:2px}.pl h4,.pl p.pfine{max-width:none}
+.doc.wide{max-width:1000px}.doc.wide>:not(.pl){max-width:760px}.doc.wide>p.center{max-width:none}
 .plan h3{font-size:22px}
 .note{background:var(--warn);border:1px solid var(--warnline);border-radius:18px;padding:20px 24px;font-size:15.5px}
 details{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:0 24px;margin:12px 0;transition:border-color .15s,box-shadow .15s}
@@ -207,7 +217,7 @@ footer a{color:var(--ink2);margin-right:20px;text-decoration:none;display:inline
 table.t{width:100%;border-collapse:collapse;font-size:15px;margin:14px 0}
 table.t th,table.t td{border:1px solid var(--line);padding:11px 15px;text-align:left;vertical-align:top}table.t th{background:var(--alt)}
 @media (max-width:980px){.hero .wrap{grid-template-columns:1fr;gap:36px}.stage{padding:0 0 64px 0;max-width:560px;margin:0 auto;width:100%}.stage .phone{right:-6px}.split{grid-template-columns:1fr;gap:40px}.rev .vis{order:2}.split .vis{order:2}.vs{grid-template-columns:1fr}.fl{grid-template-columns:1fr 1fr}.uses{grid-template-columns:1fr 1fr}.uses .card{border-right:1px solid var(--line)!important;border-bottom:1px solid var(--line)!important}.g3,.g4{grid-template-columns:1fr 1fr}.stats .wrap{grid-template-columns:1fr 1fr}.stat:nth-child(3){border-left:0;padding-left:0}section{padding:72px 0}nav.main a.h{display:none}}
-@media (max-width:760px){.plans{grid-template-columns:none;grid-auto-flow:column;grid-auto-columns:86%;overflow-x:auto;scroll-snap-type:x mandatory;gap:14px;padding:8px 20px 18px;margin:0 -20px;-webkit-overflow-scrolling:touch}.plans .plan,.plans .plan.pop{scroll-snap-align:center;padding:26px 22px}.best{left:22px}.plans .price{font-size:46px}}
+@media (max-width:760px){.pl{grid-template-columns:none;grid-auto-flow:column;grid-auto-columns:84%;overflow-x:auto;scroll-snap-type:x mandatory;margin:0 -20px;padding:0 20px 6px;-webkit-overflow-scrolling:touch}.pcol{scroll-snap-align:start;padding:0 12px}.pc{min-height:270px;padding:24px}.pc h3{font-size:30px}.pp b{font-size:48px}.pf li{font-size:16px}}
 @media (max-width:620px){.fl,.uses,.g3,.g2,.g4{grid-template-columns:1fr}.plan ul{grid-template-columns:1fr}.plan.pop{padding:28px 22px}.cta-band{padding:56px 22px;border-radius:24px}.wrap{padding:0 20px}.hero{padding:44px 0 24px}.stage .phone{width:200px;right:-6px}.stage{padding-bottom:60px}.stat b{font-size:38px}.price{font-size:52px}}
 @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important;scroll-behavior:auto!important}.stage .chat .b{opacity:1}.win{transform:none}}
 
@@ -388,55 +398,72 @@ const FEATURES: { title: string; items: string[] }[] = [
 /** The sentence above the price: which currency is shown and why. */
 const pricingLead = (region: Region) =>
   region === 'IN'
-    ? 'Two plans, everything included in both: monthly in Indian rupees (UPI and card), or yearly in US dollars (PayPal and card) for the best value. The price is for your country, found from your IP address.'
-    : 'Two plans, everything included in both: pay monthly, or yearly for the best value. Shown in US dollars with PayPal and card payment. The price is for your country, found from your IP address.';
+    ? 'Two plans with everything included in both: pay monthly, or yearly for the best value. Shown in Indian rupees with UPI AutoPay and card payment. The price is for your country, found from your IP address.'
+    : 'Two plans with everything included in both: pay monthly, or yearly for the best value. Shown in US dollars with PayPal and card payment. The price is for your country, found from your IP address.';
+
+/** Small line icons for the feature rows (Lucide shapes). */
+const PLAN_ICONS: Record<string, string> = {
+  chat: '<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>',
+  ai: '<path d="m12 3-1.9 5.8a2 2 0 0 1-1.3 1.3L3 12l5.8 1.9a2 2 0 0 1 1.3 1.3L12 21l1.9-5.8a2 2 0 0 1 1.3-1.3L21 12l-5.8-1.9a2 2 0 0 1-1.3-1.3z"/>',
+  team: '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>',
+  mega: '<path d="m3 11 18-5v12L3 14v-3z"/><path d="M11.6 16.8a3 3 0 1 1-5.8-1.6"/>',
+  phone: '<path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/>',
+  crm: '<rect x="3" y="3" width="7" height="9"/><rect x="14" y="3" width="7" height="5"/><rect x="14" y="12" width="7" height="9"/><rect x="3" y="16" width="7" height="5"/>',
+  cal: '<rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/>',
+  plug: '<path d="M12 22v-5M9 8V2M15 8V2M18 8v5a4 4 0 0 1-4 4h-4a4 4 0 0 1-4-4V8z"/>',
+  sync: '<path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/>',
+  card: '<rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/>'
+};
+const planIcon = (k: string) => `<svg class="pi" viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${PLAN_ICONS[k]}</svg>`;
 
 /**
- * The two plans side by side: Monthly and Yearly. Dollar visitors see $9 a month and $49 a year; visitors in India see the
- * monthly price in rupees next to the yearly plan in dollars (there is no rupee yearly price). Both have everything included;
- * the yearly one is the best value. A link under the cards switches currency (a wrong guess is one click to fix).
+ * The two plans as two columns: a card with the plan name and price, a black "Choose" button under it, then everything that is
+ * included. Yearly is the highlighted one. Visitors in India see rupees (UPI AutoPay or card), everyone else dollars (PayPal or
+ * card); a link under the plans switches the currency (a wrong guess is one click to fix).
  */
 function planCardsHtml(region: Region, path: string): string {
   const rupees = region === 'IN';
   const anchor = path === '/' ? '#pricing' : '';
   const p = PLANS[0];
   const l = p.limits;
-  const save = Math.round(100 - (p.yearlyUSD / (p.price.USD * 12)) * 100);
-  const saveUsd = p.price.USD * 12 - p.yearlyUSD;
-  const perMonth = (p.yearlyUSD / 1200).toFixed(2);
-  const features = (how: string) => `<ul>
-<li>${n(l.conversations)} new conversations a month</li>
-<li>${n(l.aiReplies)} AI answers a month</li>
-<li>${l.seats} team members</li>
-<li>${n(l.broadcasts)} broadcast messages a month</li>
-<li>1 WhatsApp number</li>
-<li>CRM, inbox, simulator, analytics</li>
-<li>In-chat appointment booking and human hand-off</li>
-<li class="${p.integrations ? '' : 'no'}">Webhooks and REST API${p.integrations ? '' : ' (not included)'}</li>
-<li>Free updates and email support</li>
-<li>${how}</li>
-</ul>`;
-  const monthly = `<div class="card plan">
-<h3>Monthly</h3><p class="fine" style="margin:0 0 8px">${esc(p.name)} plan, paid month by month. Cancel any time.</p>
-<div class="price">${rupees ? inr(p.price.INR) : usd(p.price.USD)}<small> / month</small></div>
-<div class="fine" style="margin-top:4px">${rupees ? 'In Indian rupees' : 'In US dollars'}</div>
-${features(rupees ? 'Pay by UPI AutoPay or card' : 'Pay by PayPal or card')}
-<a class="btn s" href="/admin/?plan=pro&amp;period=month">Choose Monthly</a>
-<p class="fine" style="margin-top:8px">Renews automatically every month.</p>
+  const money = (minor: number) => (rupees ? inr(minor) : usd(minor));
+  const month = rupees ? p.price.INR : p.price.USD;
+  const year = rupees ? p.yearlyINR : p.yearlyUSD;
+  const save = Math.round(100 - (year / (month * 12)) * 100);
+  const perMonth = rupees ? inr(Math.round(year / 12)) : '$' + (year / 1200).toFixed(2);
+  const how = rupees ? 'Pay by UPI AutoPay or card' : 'Pay by PayPal or card';
+  const rows: [string, string][] = [
+    ['chat', `${n(l.conversations)} new conversations a month`],
+    ['ai', `${n(l.aiReplies)} AI answers a month`],
+    ['team', `${l.seats} team members`],
+    ['mega', `${n(l.broadcasts)} broadcast messages a month`],
+    ['phone', '1 WhatsApp number'],
+    ['crm', 'CRM, inbox, simulator and analytics'],
+    ['cal', 'In-chat appointment booking and human hand-off'],
+    ...(p.integrations ? ([['plug', 'Webhooks and REST API']] as [string, string][]) : []),
+    ['sync', 'Free updates and email support'],
+    ['card', how]
+  ];
+  const list = `<ul class="pf">${rows.map(([k, t]) => `<li>${planIcon(k)}<span>${t}</span></li>`).join('')}</ul>`;
+  const monthly = `<div class="pcol">
+<div class="pc light"><div><h3>Monthly</h3><p>${esc(p.name)} plan, paid month by month</p></div>
+<div class="pp"><b>${money(month)}</b><small> / month</small><span>Cancel any time</span></div></div>
+<a class="btn p pbtn" href="/admin/?plan=pro&amp;period=month">Choose Monthly</a>
+<p class="pfine">Renews automatically every month.</p>
+<h4>Everything included <i>↴</i></h4>${list}
 </div>`;
-  const yearly = `<div class="card plan pop">
-<span class="best">Best value · Save ${save}%</span>
-<h3>Yearly</h3><p class="fine" style="margin:0 0 8px">${esc(p.name)} plan, paid once a year. You save ${usd(saveUsd)}.</p>
-<div class="price">${usd(p.yearlyUSD)}<small> / year</small></div>
-<div class="fine" style="margin-top:4px">Just $${perMonth} a month, billed in US dollars</div>
-${features('Pay by PayPal or card')}
-<a class="btn p" href="/admin/?plan=pro&amp;period=year">Choose Yearly</a>
-<p class="fine" style="margin-top:8px">Renews automatically every year.</p>
+  const yearly = `<div class="pcol">
+<div class="pc hot"><div><h3>Yearly</h3><em class="pbadge">Best value</em><p>${esc(p.name)} plan, paid once a year</p></div>
+<div class="pp"><b>${money(year)}</b><small> / year</small><span>Just ${perMonth} a month · save ${save}%</span></div></div>
+<a class="btn p pbtn" href="/admin/?plan=pro&amp;period=year">Choose Yearly</a>
+<p class="pfine">Renews automatically every year.</p>
+<h4>Everything in Monthly, plus <i>↴</i></h4>
+<ul class="pf"><li>${planIcon('card')}<span>You save ${money(month * 12 - year)} a year</span></li><li>${planIcon('sync')}<span>One payment a year, no monthly bills</span></li></ul>
 </div>`;
   const switcher = rupees
-    ? `Monthly is shown in Indian rupees; yearly is in US dollars. <a href="${path}?region=world${anchor}">Show the monthly price in US dollars (${usd(p.price.USD)})</a>`
-    : `Prices shown in US dollars. <a href="${path}?region=in${anchor}">Paying from India? Show the monthly price in rupees (${inr(p.price.INR)})</a>`;
-  return `<div class="plans">${monthly}${yearly}</div><p class="fine center" style="margin-top:16px">${switcher}</p>`;
+    ? `Prices shown in Indian rupees. <a href="${path}?region=world${anchor}">Show US dollars (${usd(p.price.USD)} a month, ${usd(p.yearlyUSD)} a year)</a>`
+    : `Prices shown in US dollars. <a href="${path}?region=in${anchor}">Paying from India? Show rupees (${inr(p.price.INR)} a month, ${inr(p.yearlyINR)} a year)</a>`;
+  return `<div class="pl">${monthly}${yearly}</div><p class="fine center" style="margin-top:20px">${switcher}</p>`;
 }
 
 function landing(region: Region): string {
@@ -449,7 +476,7 @@ function landing(region: Region): string {
     ['What does the AI do, and what does it not do?', 'It answers questions from the facts you give it (prices, hours, policies), in the language the customer writes in. If the answer is not in your notes it does not guess. It also writes the short briefing when a customer asks for a person, and helps you set up. The questions customers must answer are always the ones you wrote.'],
     ['Can customers talk to a real person?', 'Yes. If a customer asks for a human, the bot stops replying in that chat and alerts you with a summary. You reply from your phone or the dashboard, then hand the chat back to the bot when you are done.'],
     ['How does appointment booking work?', 'Set your working days, hours and appointment length once. The customer replies BOOK, picks a date, then picks a time. The bot books it, confirms it to them on WhatsApp, alerts you and reminds them before it starts. You can use the built-in calendar or connect Google Calendar.'],
-    ['How much does it cost, and can I cancel?', `One plan with everything included: ${inr(PLANS[0].price.INR)} a month in India, ${usd(PLANS[0].price.USD)} a month or ${usd(PLANS[0].yearlyUSD)} a year everywhere else. It is a monthly subscription that renews automatically. Cancel any time from your dashboard and keep access until the end of the period you paid for. See the <a href="/refunds">refund and cancellation policy</a>.`],
+    ['How much does it cost, and can I cancel?', `Two plans with everything included: ${inr(PLANS[0].price.INR)} a month or ${inr(PLANS[0].yearlyINR)} a year in India, ${usd(PLANS[0].price.USD)} a month or ${usd(PLANS[0].yearlyUSD)} a year everywhere else. It is a monthly subscription that renews automatically. Cancel any time from your dashboard and keep access until the end of the period you paid for. See the <a href="/refunds">refund and cancellation policy</a>.`],
     ['How does the monthly auto-debit work?', `You subscribe once and approve the recurring payment: in India with UPI AutoPay or a card (through Razorpay), elsewhere with PayPal or a card. After that the monthly amount is debited automatically on the same date, and you are notified before each debit. Nothing is charged until you approve. To stop, cancel under Plan &amp; billing (or from your UPI app or PayPal) and no further payments are taken.`],
     ['What happens when my plan ends?', `The bot stops replying to new messages, but your leads and settings stay safe. A paid plan whose renewal fails keeps working for a ${GRACE_DAYS}-day grace period so you can fix the payment.`],
     ['Who can see my customers\' chats?', `Only you and the team members you add. We process the messages to run the service and never sell them. Read the <a href="/privacy">privacy policy</a> for details, including which providers are involved.`],
@@ -966,7 +993,7 @@ function pricing(region: Region): string {
   const p = esc(PRODUCT_NAME);
   return page({
     title: `Pricing | ${PRODUCT_NAME}`,
-    description: `${PRODUCT_NAME} pricing: ${inr(PLANS[0].price.INR)} a month in India, ${usd(PLANS[0].price.USD)} a month or ${usd(PLANS[0].yearlyUSD)} a year elsewhere.`,
+    description: `${PRODUCT_NAME} pricing: ${inr(PLANS[0].price.INR)} a month or ${inr(PLANS[0].yearlyINR)} a year in India, ${usd(PLANS[0].price.USD)} a month or ${usd(PLANS[0].yearlyUSD)} a year elsewhere.`,
     path: '/pricing',
     body: `<main class="doc wide"><h1>Pricing</h1>
 <p>${pricingLead(region)} Customers in India pay in Indian rupees by subscription (UPI AutoPay or card, through Razorpay); customers elsewhere pay in US dollars (PayPal or card).</p>

@@ -96,16 +96,18 @@ export async function startCheckout(ws: Workspace, planId: string, provider: Pro
     invalidateConfig(ws.id);
     return { url: sub.approveUrl };
   }
+  if (period === 'year' && razorpayLinkMode()) throw new Error('Yearly billing in rupees needs subscriptions: it is not available while payments are by link');
+  if (period === 'year' && !env(`RAZORPAY_PLAN_${plan.id.toUpperCase()}_YEARLY`)) throw new Error('Yearly billing in rupees is not set up yet');
   if (razorpayLinkMode()) {
     // A paid-up card or UPI subscription is managed by the provider, not by one-off links
     if (ws.providerSubscriptionId && ws.planStatus === 'active') throw new Error('You already have an active subscription');
     return { url: await createPaymentLink(ws, plan.id, email, back + '?billing=success') };
   }
   const sub = await razorpay<{ id: string; short_url: string }>('/subscriptions', {
-    plan_id: env(`RAZORPAY_PLAN_${plan.id.toUpperCase()}`),
-    total_count: 120,
+    plan_id: env(`RAZORPAY_PLAN_${plan.id.toUpperCase()}${period === 'year' ? '_YEARLY' : ''}`),
+    total_count: period === 'year' ? 10 : 120,
     customer_notify: 1,
-    notes: { workspaceId: ws.id, plan: plan.id }
+    notes: { workspaceId: ws.id, plan: plan.id, period }
   });
   await prisma.workspace.update({ where: { id: ws.id }, data: { billingProvider: 'razorpay', providerSubscriptionId: sub.id } });
   invalidateConfig(ws.id);
@@ -301,7 +303,7 @@ export async function handleRazorpayWebhook(raw: string, signature: string | und
     pay?.notes?.workspaceId ??
     (sub?.id ? (await prisma.workspace.findFirst({ where: { providerSubscriptionId: String(sub.id) }, select: { id: true } }))?.id ?? null : null);
   if (!wsId) return { status: 200, body: 'no workspace' };
-  const planFromId = (planId?: string) => PLANS.find((p) => env(`RAZORPAY_PLAN_${p.id.toUpperCase()}`) === planId)?.id;
+  const planFromId = (planId?: string) => PLANS.find((p) => env(`RAZORPAY_PLAN_${p.id.toUpperCase()}`) === planId || env(`RAZORPAY_PLAN_${p.id.toUpperCase()}_YEARLY`) === planId)?.id;
   const plan: string | undefined = sub?.notes?.plan ?? planFromId(sub?.plan_id);
   const base = { provider: 'razorpay' as const, subscriptionId: sub?.id ? String(sub.id) : undefined, customerId: sub?.customer_id ?? undefined, plan };
 

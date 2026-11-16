@@ -22,6 +22,7 @@ export const MANAGED_KEYS: KeyDef[] = [
   { key: 'RAZORPAY_KEY_SECRET', label: 'Razorpay key secret', secret: true, check: (v) => (v.length >= 10 ? null : 'That secret looks too short') },
   { key: 'RAZORPAY_WEBHOOK_SECRET', label: 'Razorpay webhook secret', secret: true, check: (v) => (v.length >= 8 ? null : 'The webhook secret must be at least 8 characters') },
   { key: 'RAZORPAY_PLAN_PRO', label: 'Razorpay plan id', secret: false, check: prefix('plan_', 'The plan id') },
+  { key: 'RAZORPAY_PLAN_PRO_YEARLY', label: 'Razorpay yearly plan id', secret: false, check: prefix('plan_', 'The plan id') },
   { key: 'RAZORPAY_MODE', label: 'Razorpay mode', secret: false, check: (v) => (['subscription', 'link'].includes(v) ? null : 'Mode must be subscription or link') },
   { key: 'PAYPAL_PLAN_PRO', label: 'PayPal plan id', secret: false, check: prefix('P-', 'The plan id') },
   { key: 'PAYPAL_PLAN_PRO_YEARLY', label: 'PayPal yearly plan id', secret: false, check: prefix('P-', 'The plan id') },

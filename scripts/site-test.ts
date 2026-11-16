@@ -50,7 +50,7 @@ const ok = (c: any, m: string) => { if (!c) throw new Error('FAIL: ' + m); conso
   const l = html['/'];
   ok(/<h1>[^<]*WhatsApp[^<]*<\/h1>/.test(l), 'a clear headline about WhatsApp leads');
   for (const p of PLANS) ok(l.includes(p.name) && l.includes('₹' + (p.price.INR / 100).toLocaleString('en-IN')) && l.includes('$' + p.price.USD / 100), `pricing shows ${p.name} in rupees and dollars`);
-  ok(/class="plans"/.test(l) && (l.match(/class="card plan/g) ?? []).length === 2 && l.includes('Choose Monthly') && l.includes('Choose Yearly') && l.includes('$' + PLANS[0].yearlyUSD / 100) && l.includes('Best value'), 'two plans side by side: Monthly and Yearly, the yearly one marked best value');
+  ok(/class="pl"/.test(l) && (l.match(/class="pc /g) ?? []).length === 2 && l.includes('Choose Monthly') && l.includes('Choose Yearly') && (l.includes('$' + PLANS[0].yearlyUSD / 100) || l.includes('₹' + (PLANS[0].yearlyINR / 100).toLocaleString('en-IN'))) && l.includes('Best value'), 'two plans side by side: Monthly and Yearly, the yearly one marked best value');
   ok(!/free trial/i.test(l), 'there is no free trial on the landing page');
   for (const f of ['Capture and qualify', 'Answer and hand over', 'Book and follow up', 'Manage your leads (CRM)', 'Grow and measure', 'Connect your tools']) ok(l.includes(f), `feature group "${f}" is listed`);
   for (const w of ['Google Calendar', 'Broadcasts', 'Webhooks', 'REST API', 'simulator', 'Analytics', 'real person']) ok(l.toLowerCase().includes(w.toLowerCase()), `the page mentions ${w}`);
@@ -88,7 +88,7 @@ const ok = (c: any, m: string) => { if (!c) throw new Error('FAIL: ' + m); conso
   const ABROAD = { 'x-real-ip': '8.8.8.8' };
   const rupee = '₹' + (PLANS[0].price.INR / 100).toLocaleString('en-IN');
   const dollar = '$' + PLANS[0].price.USD / 100;
-  const card = (cur: string) => `<div class="price">${cur}<small> / month</small></div>`;
+  const card = (cur: string) => `<b>${cur}</b><small> / month</small>`;
   for (const path of ['/', '/pricing']) {
     const inIndia = (await visit(path, IND)).body;
     ok(inIndia.includes(card(rupee)) && !inIndia.includes(card(dollar)) && inIndia.includes('?region=world') && inIndia.includes('UPI AutoPay or card'), `${path}: a visitor in India sees rupees, UPI and a link to dollars`);

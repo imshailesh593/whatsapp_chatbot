@@ -195,10 +195,10 @@ async function cleanup() {
   const end2 = new Date(end1.getTime() + 30 * DAY);
   subs.get(subId).billing_info = { next_billing_time: end2.toISOString() };
   subs.get(subId).custom_id = `${wsId}:pro`;
-  const sale = (id: string) => ({ id, billing_agreement_id: subId, state: 'completed', amount: { total: '19.00', currency: 'USD' } });
+  const sale = (id: string) => ({ id, billing_agreement_id: subId, state: 'completed', amount: { total: (PLANS[0].price.USD / 100).toFixed(2), currency: 'USD' } });
   ok((await hook('ppt_2', 'PAYMENT.SALE.COMPLETED', sale('SALE-1'))).statusCode === 200, 'PAYMENT.SALE.COMPLETED is accepted');
   ok(Math.abs((await row()).currentPeriodEnd!.getTime() - end2.getTime()) < 1000, 'a monthly charge moves the period end to the next billing date');
-  ok((await prisma.payment.count({ where: { workspaceId: wsId, providerRef: 'SALE-1', amount: 1900, currency: 'USD', provider: 'paypal', status: 'paid' } })) === 1, 'the charge is recorded as a payment of $19.00');
+  ok((await prisma.payment.count({ where: { workspaceId: wsId, providerRef: 'SALE-1', amount: PLANS[0].price.USD, currency: 'USD', provider: 'paypal', status: 'paid' } })) === 1, 'the charge is recorded as a payment of $19.00');
   ok((await prisma.affiliateCommission.count({ where: { affiliateId: referrer.id } })) === 1, 'and earns the referrer a commission');
   await hook('ppt_2', 'PAYMENT.SALE.COMPLETED', sale('SALE-1'));
   await hook('ppt_2b', 'PAYMENT.SALE.COMPLETED', sale('SALE-1'));

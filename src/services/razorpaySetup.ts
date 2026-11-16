@@ -16,29 +16,32 @@ async function rz<T>(method: 'GET' | 'POST', path: string, body?: unknown): Prom
   return data as T;
 }
 
-export const planEnvName = (planId: string) => `RAZORPAY_PLAN_${planId.toUpperCase()}`;
+export type Period = 'month' | 'year';
+export const planEnvName = (planId: string, period: Period = 'month') => `RAZORPAY_PLAN_${planId.toUpperCase()}${period === 'year' ? '_YEARLY' : ''}`;
+const amountFor = (p: { price: { INR: number }; yearlyINR: number }, period: Period) => (period === 'year' ? p.yearlyINR : p.price.INR);
+const PERIODS: Period[] = ['month', 'year'];
 
 /**
- * Creates one monthly Razorpay Plan per plan of ours that has no plan id configured yet. Razorpay cannot delete plans, so never run it twice.
+ * Creates a monthly and a yearly Razorpay Plan per plan of ours that has no plan id configured yet. Razorpay cannot delete plans, so never run it twice.
  * With `force` a new one is created even when an id is configured (after a price change: a Razorpay plan cannot change price).
  * Existing subscribers stay on their old plan and price.
  */
-export async function createPlans(force = false): Promise<{ plan: string; razorpayPlanId: string; created: boolean }[]> {
+export async function createPlans(force = false): Promise<{ plan: string; period: Period; razorpayPlanId: string; created: boolean }[]> {
   if (!env('RAZORPAY_KEY_ID') || !env('RAZORPAY_KEY_SECRET')) throw new Error('Set RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET first');
-  const out: { plan: string; razorpayPlanId: string; created: boolean }[] = [];
-  for (const p of PLANS) {
-    const existing = force ? '' : env(planEnvName(p.id));
+  const out: { plan: string; period: Period; razorpayPlanId: string; created: boolean }[] = [];
+  for (const p of PLANS) for (const period of PERIODS) {
+    const existing = force ? '' : env(planEnvName(p.id, period));
     if (existing) {
-      out.push({ plan: p.id, razorpayPlanId: existing, created: false });
+      out.push({ plan: p.id, period, razorpayPlanId: existing, created: false });
       continue;
     }
     const made = await rz<{ id: string }>('POST', '/plans', {
-      period: 'monthly',
+      period: period === 'year' ? 'yearly' : 'monthly',
       interval: 1,
-      item: { name: `${p.name} plan`, amount: p.price.INR, currency: 'INR', description: p.blurb },
-      notes: { plan: p.id }
+      item: { name: `${p.name} plan (${period === 'year' ? 'yearly' : 'monthly'})`, amount: amountFor(p, period), currency: 'INR', description: p.blurb },
+      notes: { plan: p.id, period }
     });
-    out.push({ plan: p.id, razorpayPlanId: made.id, created: true });
+    out.push({ plan: p.id, period, razorpayPlanId: made.id, created: true });
   }
   return out;
 }
@@ -62,9 +65,10 @@ export async function checkRazorpay(live: boolean): Promise<SetupCheck[]> {
   checks.push({ label: 'Mode', ok: true, detail: link ? 'Payment links (30 days at a time, owner renews by paying again)' : 'Subscriptions (renew by themselves)' });
 
   if (!link) {
-    for (const p of PLANS) {
-      const id = env(planEnvName(p.id));
-      checks.push({ label: `${p.name} plan id`, ok: !!id, detail: id ? id : `Run: node dist/cli/razorpaySetup.js, then add ${planEnvName(p.id)}` });
+    for (const p of PLANS) for (const period of PERIODS) {
+      const id = env(planEnvName(p.id, period));
+      const label = `${p.name} ${period === 'year' ? 'yearly' : 'monthly'}`;
+      checks.push({ label: `${label} plan id`, ok: !!id, detail: id ? id : `Run: node dist/cli/razorpaySetup.js, then add ${planEnvName(p.id, period)}` });
     }
   }
   if (!live || !keys) return checks;
@@ -77,15 +81,18 @@ export async function checkRazorpay(live: boolean): Promise<SetupCheck[]> {
     return checks;
   }
   if (!link) {
-    for (const p of PLANS) {
-      const id = env(planEnvName(p.id));
+    for (const p of PLANS) for (const period of PERIODS) {
+      const id = env(planEnvName(p.id, period));
       if (!id) continue;
+      const label = `${p.name} ${period === 'year' ? 'yearly' : 'monthly'}`;
+      const want = amountFor(p, period);
+      const per = period === 'year' ? 'yearly' : 'monthly';
       try {
         const plan = await rz<{ period: string; interval: number; item: { amount: number; currency: string } }>('GET', `/plans/${encodeURIComponent(id)}`);
-        const right = plan.period === 'monthly' && plan.interval === 1 && plan.item.amount === p.price.INR && plan.item.currency === 'INR';
-        checks.push({ label: `${p.name} plan in Razorpay`, ok: right, detail: right ? `₹${p.price.INR / 100} monthly` : `Razorpay has ${plan.item.currency} ${plan.item.amount / 100} per ${plan.interval} ${plan.period}; ours is ₹${p.price.INR / 100} monthly. The price in Razorpay must match` });
+        const right = plan.period === per && plan.interval === 1 && plan.item.amount === want && plan.item.currency === 'INR';
+        checks.push({ label: `${label} plan in Razorpay`, ok: right, detail: right ? `₹${want / 100} ${per}` : `Razorpay has ${plan.item.currency} ${plan.item.amount / 100} per ${plan.interval} ${plan.period}; ours is ₹${want / 100} ${per}. Create a new plan and update ${planEnvName(p.id, period)}` });
       } catch (err) {
-        checks.push({ label: `${p.name} plan in Razorpay`, ok: false, detail: (err as Error).message });
+        checks.push({ label: `${label} plan in Razorpay`, ok: false, detail: (err as Error).message });
       }
     }
   }
