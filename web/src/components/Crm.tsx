@@ -3,19 +3,20 @@ import { Clock, Download, LayoutGrid, List, Phone, Search, UserCheck, Zap } from
 import { api } from '../api';
 import type { AdminRow, Contact } from '../types';
 import { useStages } from '../stages';
-import { serviceStyle, stageBadge, ago, displayPhone, waLink, isSocialChat } from '../config';
+import { serviceStyle, stageBadge, ago, displayPhone, isSocialChat } from '../config';
 
 interface Props {
   contacts: Contact[];
   includeTest: boolean;
   onIncludeTest: (v: boolean) => void;
   onOpen: (phone: string) => void;
+  onOpenChat: (phone: string) => void;
   onChanged: (c: Contact) => void;
   team: AdminRow[];
   meId: string;
 }
 
-export default function Crm({ contacts, includeTest, onIncludeTest, onOpen, onChanged, team, meId }: Props) {
+export default function Crm({ contacts, includeTest, onIncludeTest, onOpen, onOpenChat, onChanged, team, meId }: Props) {
   const [view, setView] = useState<'list' | 'board'>(() => (localStorage.getItem('crmView') === 'board' ? 'board' : 'list'));
   const [owner, setOwner] = useState<string>('ALL');
   const [tag, setTag] = useState<string>('ALL');
@@ -242,16 +243,15 @@ export default function Crm({ contacts, includeTest, onIncludeTest, onOpen, onCh
                     </td>
                     <td className="py-3.5 px-4 text-right" onClick={(e) => e.stopPropagation()}>
                       <div className="flex items-center justify-end space-x-2">
-                        {!c.isTest && !isSocialChat(c.phone) && (
-                          <a
-                            href={waLink(c.phone)}
-                            target="_blank"
-                            rel="noreferrer"
+                        {!c.isTest && (
+                          <button
+                            type="button"
+                            onClick={() => onOpenChat(c.phone)}
                             className="p-1.5 rounded-lg bg-brand-soft text-brand-text hover:bg-brand-soft border border-brand/30 transition"
-                            title="Open WhatsApp chat"
+                            title="Open chat in Inbox"
                           >
                             <Phone className="w-3.5 h-3.5" />
-                          </a>
+                          </button>
                         )}
                         <button
                           onClick={() => onOpen(c.phone)}

@@ -264,7 +264,7 @@ function Console({ user, onSignedOut, onPlatform }: { user: AdminUser; onSignedO
             </div>
           )}
           {tab === 'crm' && (
-            <Crm contacts={contacts} includeTest={includeTest} onIncludeTest={setIncludeTest} onOpen={setSelected} onChanged={replaceContact} team={team} meId={user.id} />
+            <Crm contacts={contacts} includeTest={includeTest} onIncludeTest={setIncludeTest} onOpen={setSelected} onOpenChat={(phone) => { setInboxPhone(phone); setTab('inbox'); }} onChanged={replaceContact} team={team} meId={user.id} />
           )}
           {tab === 'inbox' && <Inbox contacts={contacts} waReady={waReady} onChanged={replaceContact} initialPhone={inboxPhone} />}
           {tab === 'simulator' && <Simulator onActivity={refresh} services={overview?.services ?? []} />}
