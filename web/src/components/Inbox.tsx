@@ -15,15 +15,18 @@ interface Props {
   contacts: Contact[];
   waReady: boolean;
   onChanged: (c: Contact) => void;
+  /** Chat to show first (set when a contact is opened from the lead card) */
+  initialPhone?: string | null;
 }
 
 import { useBrand } from '../brand';
 import { useStages } from '../stages';
-export default function Inbox({ contacts, waReady, onChanged }: Props) {
+export default function Inbox({ contacts, waReady, onChanged, initialPhone }: Props) {
   const brand = useBrand();
   const stages = useStages();
   const list = useMemo(() => contacts.filter((c) => !c.isTest), [contacts]);
-  const [activePhone, setActivePhone] = useState<string | null>(null);
+  const [activePhone, setActivePhone] = useState<string | null>(initialPhone ?? null);
+  useEffect(() => { if (initialPhone) setActivePhone(initialPhone); }, [initialPhone]);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [reply, setReply] = useState('');
   const [notes, setNotes] = useState('');

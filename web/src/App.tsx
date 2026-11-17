@@ -106,6 +106,7 @@ function Console({ user, onSignedOut, onPlatform }: { user: AdminUser; onSignedO
   // back from Facebook (/admin/?meta=...): open Settings on the Instagram & Facebook page
   const fromMeta = new URLSearchParams(window.location.search).has('meta');
   const [tab, setTab] = useState<Tab>(fromMeta ? 'config' : 'crm');
+  const [inboxPhone, setInboxPhone] = useState<string | null>(null);
   const [section, setSection] = useState(fromMeta ? 'social' : 'whatsapp');
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [overview, setOverview] = useState<Overview | null>(null);
@@ -265,7 +266,7 @@ function Console({ user, onSignedOut, onPlatform }: { user: AdminUser; onSignedO
           {tab === 'crm' && (
             <Crm contacts={contacts} includeTest={includeTest} onIncludeTest={setIncludeTest} onOpen={setSelected} onChanged={replaceContact} team={team} meId={user.id} />
           )}
-          {tab === 'inbox' && <Inbox contacts={contacts} waReady={waReady} onChanged={replaceContact} />}
+          {tab === 'inbox' && <Inbox contacts={contacts} waReady={waReady} onChanged={replaceContact} initialPhone={inboxPhone} />}
           {tab === 'simulator' && <Simulator onActivity={refresh} services={overview?.services ?? []} />}
           {tab === 'analytics' && !isAgent && <Analytics />}
           {tab === 'broadcasts' && !isAgent && overview && <Broadcasts overview={overview} waReady={waReady} />}
@@ -279,6 +280,7 @@ function Console({ user, onSignedOut, onPlatform }: { user: AdminUser; onSignedO
             team={team}
             onClose={() => setSelected(null)}
             onChanged={replaceContact}
+            onOpenChat={(phone) => { setInboxPhone(phone); setTab('inbox'); setSelected(null); }}
           />
         )}
       </StagesContext.Provider>

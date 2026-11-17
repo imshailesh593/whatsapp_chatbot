@@ -3,13 +3,15 @@ import { Calendar, Phone, UserCheck, Zap } from 'lucide-react';
 import { api } from '../api';
 import type { AdminRow, Contact, LeadEventInfo } from '../types';
 import { useStages } from '../stages';
-import { serviceStyle, humanize, displayPhone, waLink, isSocialChat } from '../config';
+import { serviceStyle, humanize, displayPhone, isSocialChat } from '../config';
 
 interface Props {
   contact: Contact;
   bookingUrl: string;
   onClose: () => void;
   onChanged: (c: Contact) => void;
+  /** Opens this contact's chat in the Inbox */
+  onOpenChat: (phone: string) => void;
   team: AdminRow[];
 }
 
@@ -22,7 +24,7 @@ const toLocalInput = (iso: string | null) => {
 
 const EVENT_LABEL: Record<string, string> = { created: 'Lead created', stage: 'Stage', owner: 'Owner', tags: 'Tags', follow_up: 'Follow-up', note: 'Notes' };
 
-export default function Dossier({ contact, bookingUrl, onClose, onChanged, team }: Props) {
+export default function Dossier({ contact, bookingUrl, onClose, onChanged, onOpenChat, team }: Props) {
   const [ownerId, setOwnerId] = useState(contact.ownerId ?? '');
   const [tags, setTags] = useState(contact.tags.join(', '));
   const [followUp, setFollowUp] = useState(toLocalInput(contact.followUpAt));
@@ -189,11 +191,11 @@ export default function Dossier({ contact, bookingUrl, onClose, onChanged, team 
 
         <div className="p-4 border-t border-line bg-card/80 flex items-center justify-between flex-wrap gap-2">
           <div className="flex items-center space-x-2">
-            {!contact.isTest && !isSocialChat(contact.phone) && (
-              <a href={waLink(contact.phone)} target="_blank" rel="noreferrer"
+            {!contact.isTest && (
+              <button type="button" onClick={() => onOpenChat(contact.phone)}
                 className="px-3 py-2 bg-brand-soft text-brand-text hover:bg-brand-soft border border-brand/40 rounded-xl text-xs font-semibold flex items-center space-x-1.5 transition">
-                <Phone className="w-3.5 h-3.5" /><span>WhatsApp Chat</span>
-              </a>
+                <Phone className="w-3.5 h-3.5" /><span>{isSocialChat(contact.phone) ? 'Open chat' : 'WhatsApp Chat'}</span>
+              </button>
             )}
             {bookingUrl && <a href={bookingUrl} target="_blank" rel="noreferrer"
               className="px-3 py-2 bg-violet-soft text-violet hover:bg-violet-soft border border-violet-line/40 rounded-xl text-xs font-semibold flex items-center space-x-1.5 transition">
