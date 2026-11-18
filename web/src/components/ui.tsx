@@ -50,6 +50,7 @@ export function AppShell({
   const [open, setOpen] = useState(false);
   // the desktop sidebar can shrink to an icon rail; the choice is remembered in this browser
   const [rail, setRail] = useState(() => { try { return localStorage.getItem('lk_rail') === '1'; } catch { return false; } });
+  const [tip, setTip] = useState<{ label: string; top: number } | null>(null);
   const toggleRail = () => setRail((v) => { const n = !v; try { localStorage.setItem('lk_rail', n ? '1' : '0'); } catch { /* ignore */ } return n; });
   useEffect(() => {
     document.body.style.overflow = open ? 'hidden' : '';
@@ -70,15 +71,16 @@ export function AppShell({
                   key={n.id}
                   onClick={() => { onSelect(n.id); setOpen(false); }}
                   aria-current={on ? 'page' : undefined}
-                  title={c ? n.label : undefined}
-                  className={`relative w-full flex items-center ${c ? 'justify-center px-0 py-2.5' : 'gap-3 px-3 py-2'} rounded-lg text-sm transition ${
+                  aria-label={n.label}
+                  onMouseEnter={c ? (e) => { const r = e.currentTarget.getBoundingClientRect(); setTip({ label: n.label, top: r.top + r.height / 2 }); } : undefined}
+                  onMouseLeave={c ? () => setTip(null) : undefined}
+                  className={`relative w-full flex items-center ${c ? 'justify-center h-12 [&_svg]:w-[22px] [&_svg]:h-[22px]' : 'gap-3 px-3 py-2'} rounded-xl text-sm transition ${
                     on ? 'bg-brand-soft text-brand-text font-semibold' : 'text-fg2 hover:bg-subtle hover:text-fg font-medium'
                   }`}
                 >
                   <span className={`shrink-0 ${on ? 'text-brand-text' : 'text-muted'}`}>{n.icon}</span>
                   {!c && <span className="truncate">{n.label}</span>}
                   {!c && n.badge !== undefined && <span className="ml-auto">{n.badge}</span>}
-                  {c && n.badge !== undefined && <span className="absolute top-1.5 right-2 w-2 h-2 rounded-full bg-brand" />}
                 </button>
               );
             })}
@@ -99,11 +101,19 @@ export function AppShell({
       </div>
       {navFor(c)}
       {sidebarFooter && !c && <div className="shrink-0 p-3 border-t border-line">{sidebarFooter}</div>}
+      {c && (
+        <div className="shrink-0 p-2 border-t border-line">
+          <button onClick={toggleRail} aria-label="Expand the sidebar"
+            onMouseEnter={(e) => { const r = e.currentTarget.getBoundingClientRect(); setTip({ label: 'Expand the sidebar', top: r.top + r.height / 2 }); }} onMouseLeave={() => setTip(null)}
+            className="w-full h-12 flex items-center justify-center rounded-xl text-muted hover:bg-subtle hover:text-fg transition"><PanelLeftOpen className="w-[22px] h-[22px]" /></button>
+        </div>
+      )}
     </>
   );
 
   return (
     <div className="min-h-screen bg-app text-fg">
+      {rail && tip && <div className="hidden lg:block fixed z-50 left-[80px] -translate-y-1/2 px-3 py-1.5 rounded-lg bg-fg text-app text-sm font-semibold shadow-pop pointer-events-none whitespace-nowrap" style={{ top: tip.top }}>{tip.label}</div>}
       <aside className={`hidden lg:flex fixed inset-y-0 left-0 ${rail ? 'w-[72px]' : 'w-64'} flex-col bg-card border-r border-line z-40 transition-[width] duration-200`}>{sidebarFor(rail)}</aside>
 
       {open && (
