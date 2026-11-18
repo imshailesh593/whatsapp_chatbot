@@ -66,11 +66,12 @@
   color-scheme: dark;
 }
 
-html { -webkit-text-size-adjust: 100%; font-size: 16px; }
+html { -webkit-text-size-adjust: 100%; font-size: 17px; }
 body {
   margin: 0;
   font-family: 'Inter Variable', Inter, ui-sans-serif, system-ui, sans-serif;
   letter-spacing: 0.005em;
+  font-weight: 500;
   background: rgb(var(--app));
   color: rgb(var(--fg));
   -webkit-font-smoothing: antialiased;
@@ -81,3 +82,7 @@ body {
 input, select, textarea { color: rgb(var(--fg)); }
 input::placeholder, textarea::placeholder { color: rgb(var(--muted) / 0.8); }
 input[type='checkbox'], input[type='radio'] { accent-color: rgb(var(--brand)); }
+
+/* Bolder text throughout: easier to read on screen */
+.font-normal { font-weight: 500; }
+.font-medium { font-weight: 600; }
