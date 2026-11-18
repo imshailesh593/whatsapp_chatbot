@@ -175,7 +175,7 @@ export default function Inbox({ contacts, waReady, onChanged, initialPhone }: Pr
           ))}
           {!active.botActive && (
             <div className="text-center my-2">
-              <span className="bg-danger-soft text-danger border border-danger-line/60 px-3 py-1 rounded-full text-[13.5px] font-semibold">
+              <span className="inline-block bg-danger-soft text-danger border border-danger-line/60 px-3.5 py-1.5 rounded-xl text-[13.5px] font-semibold">
                 ⚠️ {active.handoffAt ? 'The customer asked for a person: ' : 'Human takeover: '}bot replies are paused for this number.
               </span>
               {active.handoffSummary && <p className="mt-2 mx-auto max-w-md text-[13.5px] text-fg2 bg-sunken border border-line rounded-lg p-2.5 text-left whitespace-pre-line"><strong className="text-fg">Briefing:</strong> {active.handoffSummary}</p>}
