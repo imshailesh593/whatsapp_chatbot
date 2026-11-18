@@ -65,16 +65,16 @@ export default function Login({ onDone }: { onDone: (user: AdminUser) => void })
 
   return (
     <div className="min-h-screen grid lg:grid-cols-[1.05fr_1fr] bg-app">
-      <aside className="hidden lg:flex relative overflow-hidden flex-col justify-between p-12 text-white bg-gradient-to-br from-emerald-700 via-emerald-800 to-slate-900">
-        <div className="absolute -top-24 -right-24 w-96 h-96 rounded-full bg-emerald-400/20 blur-3xl" />
-        <div className="absolute -bottom-32 -left-16 w-96 h-96 rounded-full bg-teal-300/10 blur-3xl" />
+      <aside className="hidden lg:flex relative overflow-hidden flex-col justify-between p-12 text-white bg-gradient-to-br from-emerald-700 via-emerald-800 to-slate-900 dark:from-amber-900 dark:via-stone-950 dark:to-black">
+        <div className="absolute -top-24 -right-24 w-96 h-96 rounded-full bg-emerald-400/20 dark:bg-amber-400/20 blur-3xl" />
+        <div className="absolute -bottom-32 -left-16 w-96 h-96 rounded-full bg-teal-300/10 dark:bg-amber-300/10 blur-3xl" />
         <div className="relative flex items-center gap-3">
           <Logo size={40} className="ring-2 ring-white/20" />
           <span className="text-xl font-semibold tracking-tight">{product.productName}</span>
         </div>
         <div className="relative max-w-md">
           <h2 className="text-4xl font-semibold tracking-tight leading-tight">Turn WhatsApp chats into customers.</h2>
-          <p className="mt-4 text-emerald-100/90 leading-relaxed">Capture leads, answer questions, book appointments and follow up, all from one calm dashboard.</p>
+          <p className="mt-4 text-emerald-100/90 dark:text-amber-100/90 leading-relaxed">Capture leads, answer questions, book appointments and follow up, all from one calm dashboard.</p>
           <ul className="mt-8 space-y-3.5">
             {POINTS.map((p) => (
               <li key={p.text} className="flex items-start gap-3 text-sm text-emerald-50">
@@ -84,7 +84,7 @@ export default function Login({ onDone }: { onDone: (user: AdminUser) => void })
             ))}
           </ul>
         </div>
-        <p className="relative text-xs text-emerald-100/70 flex items-center gap-1.5"><CheckCircle2 className="w-3.5 h-3.5" /> Your customers&apos; data stays yours. See our <a className="underline" href="/privacy">privacy policy</a>.</p>
+        <p className="relative text-xs text-emerald-100/70 dark:text-amber-100/70 flex items-center gap-1.5"><CheckCircle2 className="w-3.5 h-3.5" /> Your customers&apos; data stays yours. See our <a className="underline" href="/privacy">privacy policy</a>.</p>
       </aside>
 
       <main className="relative flex items-center justify-center p-6 sm:p-10">
