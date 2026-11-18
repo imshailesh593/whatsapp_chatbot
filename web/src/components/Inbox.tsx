@@ -160,12 +160,12 @@ export default function Inbox({ contacts, waReady, onChanged, initialPhone }: Pr
           </button>
         </div>
 
-        <div ref={scroller} className="flex-1 p-4 overflow-y-auto space-y-2.5 bg-[#0a0a0a] text-sm">
+        <div ref={scroller} className="flex-1 p-4 overflow-y-auto space-y-2.5 bg-sunken text-sm">
           {messages.length === 0 && <p className="text-center text-muted mt-6">No messages recorded for this contact yet.</p>}
           {messages.map((m) => (
             <div key={m.id} className={`flex ${m.direction === 'INBOUND' ? 'justify-start' : 'justify-end'}`}>
               <div className={`max-w-[80%] rounded-xl px-3 py-2 whitespace-pre-wrap break-words border ${
-                m.direction === 'INBOUND' ? 'bg-sunken text-fg border-line' : 'bg-[#005c4b] text-white border-white/10'}`}>
+                m.direction === 'INBOUND' ? 'bg-card text-fg border-line shadow-card' : 'bg-[#005c4b] text-white border-white/10'}`}>
                 {m.text}
                 <div className={`text-[13px] mt-1 text-right ${m.direction === 'INBOUND' ? 'text-muted' : 'text-white/75'}`}>
                   {m.direction === 'INBOUND' ? 'Customer' : brand.businessName} · {new Date(m.at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
