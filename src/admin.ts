@@ -74,7 +74,7 @@ function cookie(req: FastifyRequest, name: string): string | undefined {
 
 type SessionWithLead = Prisma.SessionGetPayload<{ include: { lead: true } }>;
 
-function toContact(s: SessionWithLead, cfg: BotConfig, owners: Map<string, string> = new Map()) {
+function toContact(s: SessionWithLead, cfg: BotConfig, owners: Map<string, string> = new Map(), unread = 0) {
   const lead = s.lead;
   const answers = ((lead ? lead.collectedData : s.answers) ?? {}) as Record<string, string>;
   const serviceKey = lead?.serviceCategory ?? s.selectedService ?? null;
@@ -108,6 +108,7 @@ function toContact(s: SessionWithLead, cfg: BotConfig, owners: Map<string, strin
     hasLead: !!lead,
     receivedAt: (lead?.createdAt ?? s.createdAt).toISOString(),
     lastActivity: s.lastInteractionAt.toISOString(),
+    unread,
     isTest: s.phoneNumber.startsWith(SIM_PREFIX)
   };
 }
@@ -1006,7 +1007,15 @@ export function registerAdmin(app: FastifyInstance, opts: { getQr: (workspaceId:
       take: 1000
     });
     const owners = await ownerMap(wsId(req));
-    return { contacts: sessions.map((s) => toContact(s, cfg, owners)) };
+    // customer messages since the team last opened each chat
+    const counts = await prisma.$queryRaw<{ phone_number: string; n: bigint }[]>`
+      SELECT s.phone_number, COUNT(l.id) AS n
+      FROM mns_sessions s
+      JOIN mns_webhook_logs l ON l.workspace_id = s.workspace_id AND l.phone_number = s.phone_number AND l.direction = 'INBOUND' AND l.created_at > s.read_at
+      WHERE s.workspace_id = ${wsId(req)}
+      GROUP BY s.phone_number`;
+    const unread = new Map(counts.map((r) => [r.phone_number, Number(r.n)]));
+    return { contacts: sessions.map((s) => toContact(s, cfg, owners, unread.get(s.phoneNumber) ?? 0)) };
   });
 
   app.get('/admin/api/contacts/:phone/messages', { preHandler: guard }, async (req) => {
@@ -1021,6 +1030,13 @@ export function registerAdmin(app: FastifyInstance, opts: { getQr: (workspaceId:
         .reverse()
         .map((r) => ({ id: r.id, direction: r.direction, text: (r.payload as any)?.text ?? '', at: r.createdAt.toISOString() }))
     };
+  });
+
+  // The team opened this chat: its messages so far are read
+  app.post('/admin/api/contacts/:phone/read', { preHandler: guard }, async (req) => {
+    const { phone } = req.params as { phone: string };
+    await prisma.session.updateMany({ where: { workspaceId: wsId(req), phoneNumber: phone }, data: { readAt: new Date() } });
+    return { ok: true };
   });
 
   app.patch('/admin/api/contacts/:phone', { preHandler: guard }, async (req, reply) => {

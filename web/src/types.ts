@@ -31,6 +31,8 @@ export interface Contact {
   hasLead: boolean;
   receivedAt: string;
   lastActivity: string;
+  /** Customer messages the team has not opened yet */
+  unread: number;
   isTest: boolean;
 }
 

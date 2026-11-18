@@ -40,7 +40,7 @@ export default function Inbox({ contacts, waReady, onChanged, initialPhone }: Pr
   const [canned, setCanned] = useState(false);
   const [showChat, setShowChat] = useState(!!initialPhone);
 
-  const active = list.find((c) => c.phone === activePhone) ?? list[0] ?? null;
+  const active = list.find((c) => c.phone === activePhone) ?? null;
   const phone = active?.phone ?? null;
 
   // keep notes box in sync when switching contact
@@ -72,7 +72,15 @@ export default function Inbox({ contacts, waReady, onChanged, initialPhone }: Pr
     if (el) el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
   }, [messages.length, phone]);
 
-  if (!active) {
+  // opening a chat (or a customer writing while it is open) marks it as read for the team
+  const unreadHere = active?.unread ?? 0;
+  useEffect(() => {
+    if (!active || unreadHere === 0) return;
+    api.markRead(active.phone).then(() => onChanged({ ...active, unread: 0 })).catch(() => undefined);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phone, unreadHere]);
+
+  if (list.length === 0) {
     return <div className="bg-card border border-line rounded-2xl p-10 text-center text-muted text-sm">No conversations yet.</div>;
   }
 
@@ -112,8 +120,8 @@ export default function Inbox({ contacts, waReady, onChanged, initialPhone }: Pr
     }
   }
 
-  const canReply = !active.botActive && waReady;
-  const svc = active.service ? serviceStyle(active.service, active.serviceTitle) : null;
+  const canReply = !!active && !active.botActive && waReady;
+  const svc = active?.service ? serviceStyle(active.service, active.serviceTitle) : null;
 
   const q = query.trim().toLowerCase();
   const shown = list.filter((c) => (filter === 'all' || (filter === 'person' ? !c.botActive : c.botActive)) && (!q || (c.name || '').toLowerCase().includes(q) || c.phone.includes(q.replace(/\D/g, '') || '\u0000') || (c.name === null && 'unknown'.includes(q))));
@@ -155,16 +163,19 @@ export default function Inbox({ contacts, waReady, onChanged, initialPhone }: Pr
           {shown.length === 0 && <p className="p-6 text-center text-[14px] text-[#667781] dark:text-[#8696a0]">No chats match.</p>}
           {shown.map((c) => (
             <div key={c.phone} onClick={() => { setActivePhone(c.phone); setShowChat(true); }}
-              className={`flex items-center gap-3.5 pl-3.5 pr-4 cursor-pointer ${c.phone === active.phone ? 'bg-[#f0f2f5] dark:bg-[#2a3942]' : 'hover:bg-[#f5f6f6] dark:hover:bg-[#202c33]'}`}>
+              className={`flex items-center gap-3.5 pl-3.5 pr-4 cursor-pointer ${c.phone === active?.phone ? 'bg-[#f0f2f5] dark:bg-[#2a3942]' : 'hover:bg-[#f5f6f6] dark:hover:bg-[#202c33]'}`}>
               <Avatar c={c} />
               <div className="flex-1 min-w-0 py-3 border-b border-[#e9edef] dark:border-[#222d34]">
                 <div className="flex items-baseline justify-between gap-2">
-                  <span className="text-[17px] font-medium truncate">{c.name || displayPhone(c.phone)}</span>
-                  <span className={`text-[12.5px] shrink-0 ${c.botActive ? 'text-[#667781] dark:text-[#8696a0]' : 'text-[#1fa855] dark:text-[#06cf9c] font-semibold'}`}>{ago(c.lastActivity)}</span>
+                  <span className={`text-[17px] truncate ${c.unread > 0 ? 'font-semibold' : 'font-medium'}`}>{c.name || displayPhone(c.phone)}</span>
+                  <span className={`text-[12.5px] shrink-0 ${c.unread > 0 ? 'text-[#1fa855] dark:text-[#06cf9c] font-semibold' : 'text-[#667781] dark:text-[#8696a0]'}`}>{ago(c.lastActivity)}</span>
                 </div>
                 <div className="flex items-center justify-between gap-2 mt-0.5">
-                  <span className="text-[14.5px] text-[#667781] dark:text-[#8696a0] truncate">{c.name ? `${displayPhone(c.phone)} · ` : ''}{sub(c)}</span>
-                  {!c.botActive && <span className="shrink-0 w-5 h-5 rounded-full bg-[#25d366] text-[#0b141a] flex items-center justify-center" title="Needs a person"><UserCheck className="w-3 h-3" /></span>}
+                  <span className={`text-[14.5px] truncate ${c.unread > 0 ? 'text-[#111b21] dark:text-[#e9edef]' : 'text-[#667781] dark:text-[#8696a0]'}`}>{c.name ? `${displayPhone(c.phone)} · ` : ''}{sub(c)}</span>
+                  <span className="shrink-0 flex items-center gap-1.5">
+                    {!c.botActive && <span className="w-5 h-5 rounded-full bg-[#fff5c4] dark:bg-[#3a3217] text-[#8a6d00] dark:text-[#ffd279] flex items-center justify-center" title="Needs a person"><UserCheck className="w-3 h-3" /></span>}
+                    {c.unread > 0 && <span className="min-w-[20px] h-5 px-1.5 rounded-full bg-[#25d366] text-[#0b141a] text-[12px] font-bold flex items-center justify-center" title={`${c.unread} unread`}>{c.unread > 99 ? '99+' : c.unread}</span>}
+                  </span>
                 </div>
               </div>
             </div>
@@ -173,6 +184,13 @@ export default function Inbox({ contacts, waReady, onChanged, initialPhone }: Pr
       </aside>
 
       {/* conversation */}
+      {!active ? (
+        <section className="hidden md:flex flex-1 flex-col items-center justify-center gap-2 bg-[#f0f2f5] dark:bg-[#222e35] text-center px-8">
+          <MessageSquareText className="w-14 h-14 text-[#8696a0]" />
+          <div className="text-[28px] font-light text-[#41525d] dark:text-[#e9edef]">Your conversations</div>
+          <p className="text-[14.5px] text-[#667781] dark:text-[#8696a0] max-w-sm">Select a chat to read it, reply, or take over from the bot.</p>
+        </section>
+      ) : (<>
       <section className={`${showChat ? 'flex' : 'hidden'} md:flex flex-1 min-w-0 flex-col`}>
         <header className="h-[60px] shrink-0 flex items-center gap-3 px-4 bg-[#f0f2f5] dark:bg-[#202c33] border-b border-[#e9edef] dark:border-[#222d34]">
           <button className="md:hidden p-1 -ml-1 text-[#54656f] dark:text-[#aebac1]" onClick={() => setShowChat(false)} aria-label="Back"><ArrowLeft className="w-5 h-5" /></button>
@@ -288,6 +306,7 @@ export default function Inbox({ contacts, waReady, onChanged, initialPhone }: Pr
           </div>
         </aside>
       )}
+      </>)}
     </div>
   );
 }
