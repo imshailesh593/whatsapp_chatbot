@@ -3,7 +3,7 @@ import path from 'path';
 import pino from 'pino';
 import qrcodeTerminal from 'qrcode-terminal';
 import { handleIncomingMessage } from './engine';
-import { setTransport, sendTextMessage } from './transport';
+import { setTransport, sendTextMessage, logMessage } from './transport';
 import { UNSUPPORTED_MEDIA_MESSAGE } from './botConfig';
 import os from 'os';
 import { prisma } from '../lib/prisma';
@@ -16,6 +16,7 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 // Baileys 7 is ESM-only. A real dynamic import is needed because TypeScript rewrites import() to require() in CommonJS output.
 const dynamicImport = new Function('m', 'return import(m)') as (m: string) => Promise<any>;
 
+const MEDIA_LABEL: Record<string, string> = { imageMessage: '📷 Photo', videoMessage: '🎥 Video', audioMessage: '🎤 Voice message', documentMessage: '📄 Document', stickerMessage: 'Sticker', contactMessage: '👤 Contact', locationMessage: '📍 Location' };
 const MEDIA_KEYS = ['imageMessage', 'videoMessage', 'audioMessage', 'documentMessage', 'stickerMessage', 'contactMessage', 'locationMessage'];
 
 /** Unwraps ephemeral/view-once wrappers and returns the inner message object. */
@@ -92,6 +93,8 @@ export class WaConnection {
   private readonly jids = new Map<string, string>();
   private readonly chains = new Map<string, Promise<void>>();
   private readonly seen = new Set<string>();
+  /** Ids of messages this bot sent itself, so a copy arriving as "sent from the phone" is not recorded twice */
+  private readonly ownSent = new Set<string>();
 
   constructor(readonly workspaceId: string) {
     this.authDir = path.join(authBase(), workspaceId);
@@ -184,7 +187,12 @@ export class WaConnection {
       // cosmetic
     }
     await sleep(600 + Math.random() * 900);
-    await sock.sendMessage(jid, { text });
+    const sent = await sock.sendMessage(jid, { text });
+    const sid: string | undefined = sent?.key?.id;
+    if (sid) {
+      this.ownSent.add(sid);
+      if (this.ownSent.size > 2000) this.ownSent.delete(this.ownSent.values().next().value as string);
+    }
     try {
       await sock.sendPresenceUpdate('paused', jid);
     } catch {
@@ -202,8 +210,12 @@ export class WaConnection {
     // Owner takeover: typing !pause / !resume in a customer's chat from the linked phone
     if (m.key.fromMe) {
       const cmd = text.toLowerCase();
-      if (cmd !== '!pause' && cmd !== '!resume') return;
       const key = [...this.jids.entries()].find(([, j]) => j === jid)?.[0] ?? phoneKey(m.key);
+      if (cmd !== '!pause' && cmd !== '!resume') {
+        // A message typed on the linked phone itself: keep it in the chat log so the dashboard shows both sides of a takeover
+        void this.recordPhoneMessage(m, key, text);
+        return;
+      }
       const paused = cmd === '!pause';
       const r = await prisma.session.updateMany({ where: { workspaceId: wsId, phoneNumber: key }, data: paused ? { isAgentPaused: true } : { isAgentPaused: false, handoffAt: null, handoffSummary: '' } });
       console.log(`[Takeover] ${wsId}/${key} ${paused ? 'paused' : 'resumed'} (${r.count} session)`);
@@ -237,6 +249,8 @@ export class WaConnection {
       if (dup) return;
       if (!text) {
         if (isMedia) {
+          const label = MEDIA_KEYS.map((k) => (unwrap(m.message)?.[k] ? MEDIA_LABEL[k] : '')).find(Boolean);
+          if (label) await logMessage(wsId, key, 'INBOUND', label, id);
           const s = await prisma.session.findUnique({ where: { workspaceId_phoneNumber: { workspaceId: wsId, phoneNumber: key } } });
           if (!s?.isAgentPaused) await sendTextMessage(wsId, key, UNSUPPORTED_MEDIA_MESSAGE);
         }
@@ -244,6 +258,28 @@ export class WaConnection {
       }
       await handleIncomingMessage(wsId, key, name, text, id);
     });
+  }
+
+  private async recordPhoneMessage(m: any, key: string, text: string): Promise<void> {
+    const id: string | undefined = m.key?.id;
+    if (!id) return;
+    const ts = Number(m.messageTimestamp?.low ?? m.messageTimestamp ?? 0) * 1000;
+    if (ts && Date.now() - ts > 10 * 60_000) return; // history sync, not a live message
+    const body = text || (MEDIA_KEYS.map((k) => (unwrap(m.message)?.[k] ? MEDIA_LABEL[k] : '')).find(Boolean) ?? '');
+    if (!body) return;
+    await sleep(2500); // our own sends arrive here too; give sendText time to register its id
+    if (this.ownSent.has(id)) return;
+    const wsId = this.workspaceId;
+    try {
+      const dup = await prisma.webhookLog.findFirst({ where: { workspaceId: wsId, payload: { path: ['wamid'], equals: id } }, select: { id: true } });
+      if (dup) return;
+      const sess = await prisma.session.findUnique({ where: { workspaceId_phoneNumber: { workspaceId: wsId, phoneNumber: key } }, select: { id: true } });
+      if (!sess) return; // not one of our chats
+      await logMessage(wsId, key, 'OUTBOUND', body, id);
+      await prisma.session.update({ where: { id: sess.id }, data: { readAt: new Date() } }); // replying from the phone counts as having read it
+    } catch (err) {
+      console.error('[wa] could not record a phone-sent message:', (err as Error).message);
+    }
   }
 
   private async open(): Promise<void> {

@@ -33,6 +33,8 @@ export interface Contact {
   lastActivity: string;
   /** Customer messages the team has not opened yet */
   unread: number;
+  /** Newest message in the chat (for the list preview) */
+  lastMessage: { direction: 'INBOUND' | 'OUTBOUND'; text: string } | null;
   isTest: boolean;
 }
 

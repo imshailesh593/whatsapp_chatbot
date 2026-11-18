@@ -138,6 +138,7 @@ export default function Inbox({ contacts, waReady, onChanged, initialPhone }: Pr
     return d.toLocaleDateString([], { day: 'numeric', month: 'long', year: 'numeric' });
   };
   const sub = (c: Contact) => (c.service ? c.serviceTitle : 'Choosing service') + (c.targetCountry ? ` • ${c.targetCountry}` : '');
+  const preview = (c: Contact) => (c.lastMessage?.text ? c.lastMessage.text : `${c.name ? displayPhone(c.phone) + ' · ' : ''}${sub(c)}`);
 
   return (
     <div className="h-[calc(100vh-190px)] min-h-[560px] flex overflow-hidden rounded-xl border border-[#d1d7db] dark:border-[#222d34] bg-white dark:bg-[#111b21] text-[#111b21] dark:text-[#e9edef] shadow-card">
@@ -171,7 +172,7 @@ export default function Inbox({ contacts, waReady, onChanged, initialPhone }: Pr
                   <span className={`text-[12.5px] shrink-0 ${c.unread > 0 ? 'text-[#1fa855] dark:text-[#06cf9c] font-semibold' : 'text-[#667781] dark:text-[#8696a0]'}`}>{ago(c.lastActivity)}</span>
                 </div>
                 <div className="flex items-center justify-between gap-2 mt-0.5">
-                  <span className={`text-[14.5px] truncate ${c.unread > 0 ? 'text-[#111b21] dark:text-[#e9edef]' : 'text-[#667781] dark:text-[#8696a0]'}`}>{c.name ? `${displayPhone(c.phone)} · ` : ''}{sub(c)}</span>
+                  <span className={`text-[14.5px] truncate ${c.unread > 0 ? 'text-[#111b21] dark:text-[#e9edef]' : 'text-[#667781] dark:text-[#8696a0]'}`}>{c.lastMessage?.text && c.lastMessage.direction === 'OUTBOUND' && <CheckCheck className="inline w-4 h-4 mr-1 -mt-0.5 text-[#53bdeb]" />}{preview(c)}</span>
                   <span className="shrink-0 flex items-center gap-1.5">
                     {!c.botActive && <span className="w-5 h-5 rounded-full bg-[#fff5c4] dark:bg-[#3a3217] text-[#8a6d00] dark:text-[#ffd279] flex items-center justify-center" title="Needs a person"><UserCheck className="w-3 h-3" /></span>}
                     {c.unread > 0 && <span className="min-w-[20px] h-5 px-1.5 rounded-full bg-[#25d366] text-[#0b141a] text-[12px] font-bold flex items-center justify-center" title={`${c.unread} unread`}>{c.unread > 99 ? '99+' : c.unread}</span>}

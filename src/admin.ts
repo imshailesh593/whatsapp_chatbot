@@ -74,7 +74,7 @@ function cookie(req: FastifyRequest, name: string): string | undefined {
 
 type SessionWithLead = Prisma.SessionGetPayload<{ include: { lead: true } }>;
 
-function toContact(s: SessionWithLead, cfg: BotConfig, owners: Map<string, string> = new Map(), unread = 0) {
+function toContact(s: SessionWithLead, cfg: BotConfig, owners: Map<string, string> = new Map(), unread = 0, last: { direction: string; text: string } | null = null) {
   const lead = s.lead;
   const answers = ((lead ? lead.collectedData : s.answers) ?? {}) as Record<string, string>;
   const serviceKey = lead?.serviceCategory ?? s.selectedService ?? null;
@@ -109,6 +109,7 @@ function toContact(s: SessionWithLead, cfg: BotConfig, owners: Map<string, strin
     receivedAt: (lead?.createdAt ?? s.createdAt).toISOString(),
     lastActivity: s.lastInteractionAt.toISOString(),
     unread,
+    lastMessage: last ? { direction: last.direction, text: last.text.slice(0, 140) } : null,
     isTest: s.phoneNumber.startsWith(SIM_PREFIX)
   };
 }
@@ -1015,7 +1016,14 @@ export function registerAdmin(app: FastifyInstance, opts: { getQr: (workspaceId:
       WHERE s.workspace_id = ${wsId(req)}
       GROUP BY s.phone_number`;
     const unread = new Map(counts.map((r) => [r.phone_number, Number(r.n)]));
-    return { contacts: sessions.map((s) => toContact(s, cfg, owners, unread.get(s.phoneNumber) ?? 0)) };
+    // the newest message of each chat, for the preview line under its name
+    const lasts = await prisma.$queryRaw<{ phone_number: string; direction: string; text: string | null }[]>`
+      SELECT DISTINCT ON (phone_number) phone_number, direction, payload->>'text' AS text
+      FROM mns_webhook_logs
+      WHERE workspace_id = ${wsId(req)} AND phone_number IS NOT NULL
+      ORDER BY phone_number, created_at DESC`;
+    const last = new Map(lasts.map((r) => [r.phone_number, { direction: r.direction, text: (r.text ?? '').replace(/\s+/g, ' ').trim() }]));
+    return { contacts: sessions.map((s) => toContact(s, cfg, owners, unread.get(s.phoneNumber) ?? 0, last.get(s.phoneNumber) ?? null)) };
   });
 
   app.get('/admin/api/contacts/:phone/messages', { preHandler: guard }, async (req) => {
