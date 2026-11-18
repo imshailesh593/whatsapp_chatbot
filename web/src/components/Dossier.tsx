@@ -80,7 +80,7 @@ export default function Dossier({ contact, bookingUrl, onClose, onChanged, onOpe
           <div>
             <div className="flex items-center flex-wrap gap-2">
               <h3 className="text-base font-bold text-fg">{contact.name || 'Unknown'}</h3>
-              {svc && <span title={svc.shortTitle} className={`inline-flex max-w-full items-center text-[10px] px-2 py-0.5 rounded-md font-semibold border ${svc.badge}`}><span className="mr-1.5 text-[7px] leading-none shrink-0">{svc.icon}</span><span className="truncate">{svc.shortTitle}</span></span>}
+              {svc && <span title={svc.shortTitle} className={`inline-flex max-w-full items-center text-[12px] px-2 py-0.5 rounded-md font-semibold border ${svc.badge}`}><span className="mr-1.5 text-[10px] leading-none shrink-0">{svc.icon}</span><span className="truncate">{svc.shortTitle}</span></span>}
             </div>
             <p className="text-xs text-muted mt-0.5">
               {displayPhone(contact.phone)}
@@ -95,12 +95,12 @@ export default function Dossier({ contact, bookingUrl, onClose, onChanged, onOpe
             <div className="bg-danger-soft border border-danger-line/60 rounded-xl p-3.5">
               <div className="font-bold text-danger">🙋 Asked to talk to a person</div>
               <p className="mt-1 text-fg2 whitespace-pre-line">{contact.handoffSummary || 'Writing a briefing…'}</p>
-              <p className="mt-2 text-[11px] text-muted">The bot is paused for this chat. Use Automation below to hand it back.</p>
+              <p className="mt-2 text-[12.5px] text-muted">The bot is paused for this chat. Use Automation below to hand it back.</p>
             </div>
           )}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 bg-card p-3.5 rounded-xl border border-line">
             <div>
-              <label className="text-[11px] font-semibold text-muted block mb-1">Lead Stage</label>
+              <label className="text-[12.5px] font-semibold text-muted block mb-1">Lead Stage</label>
               <select
                 value={status}
                 onChange={(e) => setStatus(e.target.value)}
@@ -112,7 +112,7 @@ export default function Dossier({ contact, bookingUrl, onClose, onChanged, onOpe
               </select>
             </div>
             <div>
-              <label className="text-[11px] font-semibold text-muted block mb-1">Automation</label>
+              <label className="text-[12.5px] font-semibold text-muted block mb-1">Automation</label>
               <button
                 type="button"
                 onClick={toggleBot}
@@ -130,21 +130,21 @@ export default function Dossier({ contact, bookingUrl, onClose, onChanged, onOpe
           {contact.hasLead && (
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 bg-card p-3.5 rounded-xl border border-line">
               <div>
-                <label className="text-[11px] font-semibold text-muted block mb-1">Owner</label>
+                <label className="text-[12.5px] font-semibold text-muted block mb-1">Owner</label>
                 <select value={ownerId} onChange={(e) => setOwnerId(e.target.value)} className="w-full bg-sunken border border-line rounded-lg px-2.5 py-1.5 text-xs text-fg focus:outline-none focus:border-brand/40">
                   <option value="">Unassigned</option>
                   {team.map((m) => <option key={m.id} value={m.id}>{m.email}</option>)}
                 </select>
               </div>
               <div>
-                <label className="text-[11px] font-semibold text-muted block mb-1">Tags (comma separated)</label>
+                <label className="text-[12.5px] font-semibold text-muted block mb-1">Tags (comma separated)</label>
                 <input value={tags} onChange={(e) => setTags(e.target.value)} placeholder="vip, call-back" className="w-full bg-sunken border border-line rounded-lg px-2.5 py-1.5 text-xs text-fg focus:outline-none focus:border-brand/40" />
               </div>
               <div>
-                <label className="text-[11px] font-semibold text-muted block mb-1">Follow up on</label>
+                <label className="text-[12.5px] font-semibold text-muted block mb-1">Follow up on</label>
                 <input type="datetime-local" value={followUp} onChange={(e) => setFollowUp(e.target.value)} className="w-full bg-sunken border border-line rounded-lg px-2.5 py-1.5 text-xs text-fg focus:outline-none focus:border-brand/40" />
               </div>
-              {contact.source && <div className="sm:col-span-3 text-[11px] text-muted">Came from campaign: <strong className="text-fg2">{contact.source}</strong></div>}
+              {contact.source && <div className="sm:col-span-3 text-[12.5px] text-muted">Came from campaign: <strong className="text-fg2">{contact.source}</strong></div>}
             </div>
           )}
 
@@ -154,7 +154,7 @@ export default function Dossier({ contact, bookingUrl, onClose, onChanged, onOpe
               {Object.entries(contact.answers).length === 0 && <p className="text-muted">No answers yet.</p>}
               {Object.entries(contact.answers).map(([key, val]) => (
                 <div key={key} className="py-2 first:pt-0 last:pb-0">
-                  <span className="text-[10px] text-muted uppercase font-semibold block">{humanize(key)}</span>
+                  <span className="text-[12px] text-muted uppercase font-semibold block">{humanize(key)}</span>
                   <span className="text-xs text-fg font-medium mt-0.5 block whitespace-pre-wrap break-words">{val}</span>
                 </div>
               ))}
@@ -178,7 +178,7 @@ export default function Dossier({ contact, bookingUrl, onClose, onChanged, onOpe
               <h4 className="text-xs font-bold uppercase tracking-wider text-muted mb-2">Activity</h4>
               <div className="bg-card rounded-xl p-3.5 border border-line space-y-2 max-h-40 overflow-y-auto">
                 {events.map((e) => (
-                  <div key={e.id} className="flex justify-between gap-3 text-[11px]">
+                  <div key={e.id} className="flex justify-between gap-3 text-[12.5px]">
                     <span className="text-fg2"><strong>{EVENT_LABEL[e.type] ?? e.type}</strong>{e.detail ? ': ' + e.detail : ''}</span>
                     <span className="text-muted whitespace-nowrap">{e.actor.split('@')[0]} · {new Date(e.at).toLocaleString()}</span>
                   </div>

@@ -73,13 +73,13 @@ export default function Broadcasts({ overview, waReady }: { overview: Overview; 
   }
 
   const input = 'w-full bg-sunken border border-line rounded-lg px-3 py-2 text-xs text-fg focus:outline-none focus:border-brand/40';
-  const chip = (on: boolean) => `px-2.5 py-1 rounded-full text-[11px] font-semibold border transition ${on ? 'bg-brand-soft text-brand-text border-brand/50' : 'bg-sunken text-muted border-line hover:text-fg'}`;
+  const chip = (on: boolean) => `px-2.5 py-1 rounded-full text-[12.5px] font-semibold border transition ${on ? 'bg-brand-soft text-brand-text border-brand/50' : 'bg-sunken text-muted border-line hover:text-fg'}`;
 
   return (
     <div className="space-y-6">
       <div className="bg-card border border-line rounded-2xl p-5 shadow-lg">
         <h3 className="font-bold text-fg text-base flex items-center space-x-2"><Megaphone className="w-4 h-4 text-brand-text" /><span>New broadcast</span></h3>
-        <p className="text-[11px] text-warn bg-warn-soft border border-warn-line/50 rounded-lg p-3 mt-3">
+        <p className="text-[12.5px] text-warn bg-warn-soft border border-warn-line/50 rounded-lg p-3 mt-3">
           Broadcasts are sent from your own WhatsApp number. WhatsApp can restrict numbers that send unwanted messages, so only write to customers who have chatted with you, keep it relevant,
           and expect a few replies of STOP. Every message ends with an unsubscribe line, goes out slowly, and only between 9:00 and 20:00 in your time zone.
         </p>
@@ -87,34 +87,34 @@ export default function Broadcasts({ overview, waReady }: { overview: Overview; 
 
         <form onSubmit={create} className="mt-4 grid grid-cols-1 lg:grid-cols-2 gap-5">
           <div className="space-y-3">
-            <div><label className="text-[11px] text-muted block mb-1">Name (only you see this)</label><input required maxLength={80} value={name} onChange={(e) => setName(e.target.value)} className={input} placeholder="Diwali offer" /></div>
+            <div><label className="text-[12.5px] text-muted block mb-1">Name (only you see this)</label><input required maxLength={80} value={name} onChange={(e) => setName(e.target.value)} className={input} placeholder="Diwali offer" /></div>
             <div>
-              <label className="text-[11px] text-muted block mb-1">Message · use {'{name}'} for their first name</label>
+              <label className="text-[12.5px] text-muted block mb-1">Message · use {'{name}'} for their first name</label>
               <textarea required rows={6} maxLength={1000} value={text} onChange={(e) => setText(e.target.value)} className={input} placeholder="Hi {name}, we have a few slots open this week…" />
-              <div className="text-[10px] text-muted mt-1">{text.length}/1000 · &ldquo;Reply STOP to unsubscribe.&rdquo; is added automatically</div>
+              <div className="text-[12px] text-muted mt-1">{text.length}/1000 · &ldquo;Reply STOP to unsubscribe.&rdquo; is added automatically</div>
             </div>
             <div>
-              <label className="text-[11px] text-muted block mb-1">Send at (optional, leave empty to start it yourself)</label>
+              <label className="text-[12.5px] text-muted block mb-1">Send at (optional, leave empty to start it yourself)</label>
               <input type="datetime-local" value={schedule} onChange={(e) => setSchedule(e.target.value)} className={input} />
             </div>
           </div>
 
           <div className="space-y-3">
             <div>
-              <div className="text-[11px] text-muted mb-1">Pipeline stage (none selected = all finished leads)</div>
+              <div className="text-[12.5px] text-muted mb-1">Pipeline stage (none selected = all finished leads)</div>
               <div className="flex flex-wrap gap-1.5">{overview.stages.map((s) => <button type="button" key={s.key} onClick={() => toggle(stages, setStages, s.key)} className={chip(stages.includes(s.key))}>{s.label}</button>)}</div>
             </div>
             <div>
-              <div className="text-[11px] text-muted mb-1">Service (none selected = any)</div>
+              <div className="text-[12.5px] text-muted mb-1">Service (none selected = any)</div>
               <div className="flex flex-wrap gap-1.5">{overview.services.map((s) => <button type="button" key={s.id} onClick={() => toggle(services, setServices, s.id)} className={chip(services.includes(s.id))}>{s.title}</button>)}</div>
             </div>
             <div className="flex flex-wrap items-center gap-3">
-              <label className="text-[11px] text-muted">Wrote to you within the last
+              <label className="text-[12.5px] text-muted">Wrote to you within the last
                 <select value={days} onChange={(e) => setDays(Number(e.target.value))} className="ml-2 bg-sunken border border-line rounded-lg px-2 py-1 text-xs text-fg">
                   {[7, 30, 90, 180, 365].map((d) => <option key={d} value={d}>{d} days</option>)}
                 </select>
               </label>
-              <label className="text-[11px] text-muted flex items-center space-x-1.5">
+              <label className="text-[12.5px] text-muted flex items-center space-x-1.5">
                 <input type="checkbox" disabled={stages.length > 0} checked={answering && stages.length === 0} onChange={(e) => setAnswering(e.target.checked)} />
                 <span>Include people who did not finish the questions</span>
               </label>
@@ -142,8 +142,8 @@ export default function Broadcasts({ overview, waReady }: { overview: Overview; 
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <div className="min-w-0">
                     <span className="font-semibold text-fg text-sm">{b.name}</span>
-                    <span className={`ml-2 text-[10px] px-2 py-0.5 rounded-full border font-semibold ${STATUS_CLS[b.status] ?? STATUS_CLS.draft}`}>{b.status}</span>
-                    <div className="text-[11px] text-muted mt-0.5">{ago(b.createdAt)} · {b.createdBy}{b.scheduledAt ? ` · scheduled for ${new Date(b.scheduledAt).toLocaleString()}` : ''}</div>
+                    <span className={`ml-2 text-[12px] px-2 py-0.5 rounded-full border font-semibold ${STATUS_CLS[b.status] ?? STATUS_CLS.draft}`}>{b.status}</span>
+                    <div className="text-[12.5px] text-muted mt-0.5">{ago(b.createdAt)} · {b.createdBy}{b.scheduledAt ? ` · scheduled for ${new Date(b.scheduledAt).toLocaleString()}` : ''}</div>
                   </div>
                   <div className="flex items-center gap-2">
                     {(b.status === 'draft' || b.status === 'scheduled') && <button onClick={() => act(b, 'start')} className="flex items-center space-x-1 px-3 py-1.5 bg-brand text-on-brand font-bold rounded-lg"><Play className="w-3 h-3" /><span>Send now</span></button>}

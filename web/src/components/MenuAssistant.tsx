@@ -110,7 +110,7 @@ export default function MenuAssistant({ overview, onUse, onClose }: { overview: 
               <div className="flex-1 overflow-y-auto p-4">
                 {draft && draft.services.length > 0 ? (
                   <div className="space-y-3">
-                    <p className="text-[11px] text-muted">{changed ? 'Gemini’s proposal' : 'Your current menu'}</p>
+                    <p className="text-[12.5px] text-muted">{changed ? 'Gemini’s proposal' : 'Your current menu'}</p>
                     {draft.services.map((s, i) => (
                       <div key={i} className="bg-sunken border border-line rounded-xl p-3">
                         <div className="text-sm font-semibold text-fg">{i + 1}. {s.title}</div>
@@ -131,7 +131,7 @@ export default function MenuAssistant({ overview, onUse, onClose }: { overview: 
                 <button disabled={!draft || !changed || busy} onClick={use} className="px-4 py-2 bg-brand hover:bg-brand text-on-brand font-bold text-xs rounded-lg disabled:opacity-40">Use this menu</button>
                 {hasMenu && <button onClick={startOver} disabled={busy} className="px-3.5 py-2 bg-subtle hover:bg-subtle text-fg text-xs rounded-lg border border-line disabled:opacity-40">Start from scratch</button>}
                 <button onClick={onClose} className="px-3.5 py-2 text-muted hover:text-fg text-xs">Cancel</button>
-                <span className="text-[11px] text-muted">It goes into the editor first; nothing changes for customers until you press Save changes.</span>
+                <span className="text-[12.5px] text-muted">It goes into the editor first; nothing changes for customers until you press Save changes.</span>
               </div>
             </div>
           </div>

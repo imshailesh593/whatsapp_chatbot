@@ -35,7 +35,7 @@ export default function ReferAndEarn({ me }: { me: AdminUser }) {
   return (
     <div className={card}>
       <h3 className="font-bold text-fg text-base flex items-center space-x-2"><Gift className="w-4 h-4 text-brand-text" /><span>Refer &amp; earn</span></h3>
-      <p className="text-[11px] text-muted mt-1">
+      <p className="text-[12.5px] text-muted mt-1">
         Share your link. When a business signs up through it, you earn {r.percent}% of what it pays for its first {r.months} payments.
       </p>
       <div className="mt-3 flex items-center gap-2">
@@ -44,18 +44,18 @@ export default function ReferAndEarn({ me }: { me: AdminUser }) {
       </div>
 
       <div className="mt-4 grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
-        <div className="bg-sunken border border-line rounded-xl p-3"><div className="text-muted text-[11px]">Signed up</div><div className="text-fg font-bold text-lg">{r.signedUp}</div></div>
-        <div className="bg-sunken border border-line rounded-xl p-3"><div className="text-muted text-[11px]">Paying</div><div className="text-fg font-bold text-lg">{r.paying}</div></div>
+        <div className="bg-sunken border border-line rounded-xl p-3"><div className="text-muted text-[12.5px]">Signed up</div><div className="text-fg font-bold text-lg">{r.signedUp}</div></div>
+        <div className="bg-sunken border border-line rounded-xl p-3"><div className="text-muted text-[12.5px]">Paying</div><div className="text-fg font-bold text-lg">{r.paying}</div></div>
         {(['pending', 'paid'] as const).map((k) => (
           <div key={k} className="bg-sunken border border-line rounded-xl p-3">
-            <div className="text-muted text-[11px]">{k === 'pending' ? 'Waiting for approval' : 'Paid out'}</div>
+            <div className="text-muted text-[12.5px]">{k === 'pending' ? 'Waiting for approval' : 'Paid out'}</div>
             <div className="text-fg font-bold text-lg">{currencies.length ? currencies.map((c) => money(r.totals[c][k] + (k === 'pending' ? r.totals[c].approved : 0), c)).join(' · ') : '—'}</div>
           </div>
         ))}
       </div>
 
       <div className="mt-4">
-        <label className="text-[11px] font-semibold text-muted block mb-1" htmlFor="payout">Where should we send your earnings? (UPI id, bank details, PayPal…)</label>
+        <label className="text-[12.5px] font-semibold text-muted block mb-1" htmlFor="payout">Where should we send your earnings? (UPI id, bank details, PayPal…)</label>
         <div className="flex gap-2">
           <input id="payout" value={payout} maxLength={300} disabled={!owner} onChange={(e) => setPayout(e.target.value)} className="flex-1 min-w-0 bg-sunken border border-line rounded-lg px-3 py-2 text-xs text-fg disabled:opacity-60" placeholder="UPI: you@bank" />
           {owner && <button onClick={savePayout} className="px-4 py-2 bg-brand hover:bg-brand text-on-brand font-bold text-xs rounded-lg">Save</button>}

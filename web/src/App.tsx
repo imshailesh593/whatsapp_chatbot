@@ -158,14 +158,14 @@ function Console({ user, onSignedOut, onPlatform }: { user: AdminUser; onSignedO
     {
       label: 'Conversations',
       items: [
-        { id: 'crm', label: 'Leads', icon: <Users className={ico} />, badge: <span className="px-1.5 py-0.5 text-[11px] font-semibold rounded-md bg-subtle text-fg2 tabular-nums">{stats.total}</span> },
+        { id: 'crm', label: 'Leads', icon: <Users className={ico} />, badge: <span className="px-1.5 py-0.5 text-[12.5px] font-semibold rounded-md bg-subtle text-fg2 tabular-nums">{stats.total}</span> },
         { id: 'inbox', label: 'Inbox', icon: <MessageSquare className={ico} /> }
       ]
     },
     {
       label: 'Automation',
       items: [
-        { id: 'simulator', label: 'Simulator', icon: <Smartphone className={ico} />, badge: <span className="px-1.5 py-0.5 text-[10px] font-bold rounded-md bg-brand-soft text-brand-text">TEST</span> },
+        { id: 'simulator', label: 'Simulator', icon: <Smartphone className={ico} />, badge: <span className="px-1.5 py-0.5 text-[12px] font-bold rounded-md bg-brand-soft text-brand-text">TEST</span> },
         ...(!isAgent ? [{ id: 'broadcasts', label: 'Broadcasts', icon: <Megaphone className={ico} /> }] : [])
       ]
     },
@@ -186,14 +186,14 @@ function Console({ user, onSignedOut, onPlatform }: { user: AdminUser; onSignedO
         <button onClick={() => !isAgent && openSettings('billing')} className="w-full text-left rounded-xl border border-line bg-sunken hover:bg-subtle transition p-3">
           <div className="flex items-center justify-between">
             <span className="text-xs font-semibold text-fg">{billing.planName}</span>
-            <span className={`text-[11px] font-semibold px-1.5 py-0.5 rounded-md ${planActive ? 'bg-brand-soft text-brand-text' : 'bg-danger-soft text-danger'}`}>
+            <span className={`text-[12.5px] font-semibold px-1.5 py-0.5 rounded-md ${planActive ? 'bg-brand-soft text-brand-text' : 'bg-danger-soft text-danger'}`}>
               {planActive ? 'Active' : billing.status === 'past_due' ? 'Payment due' : 'Not subscribed'}
             </span>
           </div>
           {!planActive && !isAgent && <span className="text-xs text-brand-text font-medium mt-1 block">Choose a plan →</span>}
         </button>
       )}
-      <div className="text-[11px] text-muted px-1 truncate">{user.role === 'owner' ? 'Owner' : user.role === 'admin' ? 'Admin' : 'Agent'} · {user.email}</div>
+      <div className="text-[12.5px] text-muted px-1 truncate">{user.role === 'owner' ? 'Owner' : user.role === 'admin' ? 'Admin' : 'Agent'} · {user.email}</div>
     </div>
   );
 

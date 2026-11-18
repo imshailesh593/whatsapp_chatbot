@@ -61,10 +61,10 @@ export default function Admins({ me }: { me: AdminUser }) {
             <div className="min-w-0">
               <div className="text-fg font-medium truncate">
                 {r.email}
-                <span className="ml-2 text-[10px] px-1.5 py-0.5 rounded bg-subtle text-fg2">{ROLE_LABEL[r.role]}</span>
-                {r.id === me.id && <span className="ml-2 text-[10px] px-1.5 py-0.5 rounded bg-brand-soft text-brand-text">you</span>}
+                <span className="ml-2 text-[12px] px-1.5 py-0.5 rounded bg-subtle text-fg2">{ROLE_LABEL[r.role]}</span>
+                {r.id === me.id && <span className="ml-2 text-[12px] px-1.5 py-0.5 rounded bg-brand-soft text-brand-text">you</span>}
               </div>
-              <div className="text-[11px] text-muted">Last sign-in: {when(r.lastLoginAt)}</div>
+              <div className="text-[12.5px] text-muted">Last sign-in: {when(r.lastLoginAt)}</div>
             </div>
             {r.id !== me.id && (
               <button onClick={() => remove(r)} title="Remove" className="p-1.5 rounded-lg text-danger hover:bg-danger-soft border border-transparent hover:border-danger-line/60 transition">
@@ -86,7 +86,7 @@ export default function Admins({ me }: { me: AdminUser }) {
           <UserPlus className="w-3.5 h-3.5" /><span>Add</span>
         </button>
       </form>
-      <p className="text-[11px] text-muted mt-2">Share the password with them privately; they can change it from the account menu.</p>
+      <p className="text-[12.5px] text-muted mt-2">Share the password with them privately; they can change it from the account menu.</p>
       {error && <p className="text-xs text-danger mt-2" role="alert">{error}</p>}
     </div>
   );

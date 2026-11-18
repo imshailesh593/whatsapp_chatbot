@@ -54,9 +54,9 @@ export default function Platform() {
 
   const tile = (label: string, value: string | number, hint?: string) => (
     <div className="bg-card border border-line rounded-xl p-3.5">
-      <p className="text-[11px] font-medium text-muted uppercase tracking-wider">{label}</p>
+      <p className="text-[12.5px] font-medium text-muted uppercase tracking-wider">{label}</p>
       <p className="text-2xl font-bold mt-0.5 text-fg">{value}</p>
-      {hint && <p className="text-[11px] text-muted">{hint}</p>}
+      {hint && <p className="text-[12.5px] text-muted">{hint}</p>}
     </div>
   );
 
@@ -91,7 +91,7 @@ export default function Platform() {
         </div>
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs">
-            <thead className="bg-sunken text-muted uppercase text-[10px] tracking-wider">
+            <thead className="bg-sunken text-muted uppercase text-[12px] tracking-wider">
               <tr>
                 <th className="py-3 px-4">Business</th>
                 <th className="py-3 px-4">Owner</th>
@@ -106,7 +106,7 @@ export default function Platform() {
             <tbody className="divide-y divide-line">
               {shown.map((w) => (
                 <tr key={w.id} onClick={() => setOpenId(w.id)} className="hover:bg-sunken cursor-pointer">
-                  <td className="py-3 px-4"><div className="font-semibold text-fg">{w.businessName}</div><div className="text-[11px] text-muted">{w.onboardingCompleted ? w.industry : 'setting up'} · joined {new Date(w.createdAt).toLocaleDateString()}</div></td>
+                  <td className="py-3 px-4"><div className="font-semibold text-fg">{w.businessName}</div><div className="text-[12.5px] text-muted">{w.onboardingCompleted ? w.industry : 'setting up'} · joined {new Date(w.createdAt).toLocaleDateString()}</div></td>
                   <td className="py-3 px-4 text-fg2">{w.owner ?? '—'}</td>
                   <td className={`py-3 px-4 font-semibold ${WA[w.whatsapp] ?? 'text-warn'}`}>{w.whatsapp}</td>
                   <td className="py-3 px-4 text-fg2">{planLabel(w)}</td>
@@ -114,7 +114,7 @@ export default function Platform() {
                   <td className="py-3 px-4 text-fg2">{w.leads}</td>
                   <td className="py-3 px-4 text-muted">{w.lastActivity ? ago(w.lastActivity) : '—'}</td>
                   <td className="py-3 px-4" onClick={(e) => e.stopPropagation()}>
-                    <button onClick={() => toggle(w)} className={`px-2.5 py-1 rounded-lg border text-[11px] font-semibold ${w.botEnabled ? 'bg-brand-soft text-brand-text border-brand/40' : 'bg-subtle text-muted border-line-strong'}`}>{w.botEnabled ? 'Live' : 'Paused'}</button>
+                    <button onClick={() => toggle(w)} className={`px-2.5 py-1 rounded-lg border text-[12.5px] font-semibold ${w.botEnabled ? 'bg-brand-soft text-brand-text border-brand/40' : 'bg-subtle text-muted border-line-strong'}`}>{w.botEnabled ? 'Live' : 'Paused'}</button>
                   </td>
                 </tr>
               ))}
@@ -160,7 +160,7 @@ function CreateBusiness({ onClose, onCreated }: { onClose: () => void; onCreated
     <div className="fixed inset-0 z-50 bg-card backdrop-blur-sm flex items-center justify-center p-4" onClick={onClose}>
       <form onSubmit={submit} onClick={(e) => e.stopPropagation()} className="w-full max-w-md bg-card border border-line rounded-2xl p-5 space-y-3 shadow-2xl">
         <h3 className="text-base font-bold text-fg">Add a business</h3>
-        <p className="text-[11px] text-muted">Creates the account and its owner login. The owner finishes setup (menu, questions, WhatsApp) when they first sign in. Give them the password privately.</p>
+        <p className="text-[12.5px] text-muted">Creates the account and its owner login. The owner finishes setup (menu, questions, WhatsApp) when they first sign in. Give them the password privately.</p>
         <input required placeholder="Business name" value={f.businessName} onChange={(e) => setF({ ...f, businessName: e.target.value })} className={input + ' w-full'} />
         <input required type="email" placeholder="Owner email" value={f.email} onChange={(e) => setF({ ...f, email: e.target.value })} className={input + ' w-full'} />
         <input required minLength={10} placeholder="Temporary password (min 10 characters)" value={f.password} onChange={(e) => setF({ ...f, password: e.target.value })} className={input + ' w-full'} />
@@ -204,7 +204,7 @@ function Detail({ id, onClose }: { id: string; onClose: () => void }) {
 
   if (!d) return <div className="fixed inset-0 z-50 bg-card flex items-center justify-center text-muted text-sm">{error || 'Loading…'}</div>;
   const use = (label: string, used: number, limit: number | null) => (
-    <div className="bg-card border border-line rounded-lg p-2.5"><div className="text-[10px] text-muted uppercase">{label}</div><div className="text-sm text-fg font-semibold">{used}{limit === null ? '' : ` / ${limit}`}</div></div>
+    <div className="bg-card border border-line rounded-lg p-2.5"><div className="text-[12px] text-muted uppercase">{label}</div><div className="text-sm text-fg font-semibold">{used}{limit === null ? '' : ` / ${limit}`}</div></div>
   );
 
   return (
@@ -225,7 +225,7 @@ function Detail({ id, onClose }: { id: string; onClose: () => void }) {
         </p>
 
         <div className="bg-card border border-line rounded-xl p-3.5 space-y-2">
-          <h4 className="font-bold text-fg2 uppercase tracking-wider text-[11px]">Set plan (no payment needed)</h4>
+          <h4 className="font-bold text-fg2 uppercase tracking-wider text-[12.5px]">Set plan (no payment needed)</h4>
           <div className="flex gap-2 items-center">
             <select value={plan} onChange={(e) => setPlan(e.target.value)} className={input}>{PLANS.map((p) => <option key={p} value={p}>{p || 'no plan (pays first)'}</option>)}</select>
             <input type="number" min={1} max={3650} value={days} onChange={(e) => setDays(Number(e.target.value))} className={input + ' w-24'} />
@@ -235,11 +235,11 @@ function Detail({ id, onClose }: { id: string; onClose: () => void }) {
         </div>
 
         <div>
-          <h4 className="font-bold text-fg2 uppercase tracking-wider text-[11px] mb-2">People</h4>
+          <h4 className="font-bold text-fg2 uppercase tracking-wider text-[12.5px] mb-2">People</h4>
           <div className="divide-y divide-line border border-line rounded-xl overflow-hidden">
             {d.users.map((u) => (
               <div key={u.id} className="flex items-center justify-between px-3 py-2 bg-card">
-                <div><div className="text-fg">{u.email} <span className="ml-1 text-[10px] px-1.5 py-0.5 rounded bg-subtle text-fg2">{u.role}{u.isSuperAdmin ? ' · platform' : ''}</span></div><div className="text-[11px] text-muted">Last sign-in: {u.lastLoginAt ? ago(u.lastLoginAt) : 'never'}</div></div>
+                <div><div className="text-fg">{u.email} <span className="ml-1 text-[12px] px-1.5 py-0.5 rounded bg-subtle text-fg2">{u.role}{u.isSuperAdmin ? ' · platform' : ''}</span></div><div className="text-[12.5px] text-muted">Last sign-in: {u.lastLoginAt ? ago(u.lastLoginAt) : 'never'}</div></div>
                 <div className="flex gap-1.5">
                   <button onClick={() => { const p = window.prompt(`New password for ${u.email} (min 10 characters):`); if (p) run(() => api.platformResetPassword(u.id, p), `Password reset for ${u.email}`); }} className="px-2.5 py-1 bg-subtle hover:bg-subtle rounded-lg border border-line-strong text-fg">Reset password</button>
                   <button onClick={() => { if (window.confirm(`Remove ${u.email}?`)) run(() => api.platformRemoveUser(u.id)); }} className="p-1.5 text-muted hover:text-danger"><Trash2 className="w-3.5 h-3.5" /></button>
@@ -251,7 +251,7 @@ function Detail({ id, onClose }: { id: string; onClose: () => void }) {
 
         {d.payments.length > 0 && (
           <div>
-            <h4 className="font-bold text-fg2 uppercase tracking-wider text-[11px] mb-2">Payments</h4>
+            <h4 className="font-bold text-fg2 uppercase tracking-wider text-[12.5px] mb-2">Payments</h4>
             <div className="divide-y divide-line border border-line rounded-xl overflow-hidden">
               {d.payments.map((p) => <div key={p.id} className="flex justify-between px-3 py-2 bg-card text-fg2"><span>{new Date(p.at).toLocaleDateString()} · {p.plan}</span><span>{new Intl.NumberFormat(undefined, { style: 'currency', currency: p.currency }).format(p.amount / 100)} · {p.status}</span></div>)}
             </div>
@@ -260,7 +260,7 @@ function Detail({ id, onClose }: { id: string; onClose: () => void }) {
 
         {d.audit.length > 0 && (
           <div>
-            <h4 className="font-bold text-fg2 uppercase tracking-wider text-[11px] mb-2">Operator history</h4>
+            <h4 className="font-bold text-fg2 uppercase tracking-wider text-[12.5px] mb-2">Operator history</h4>
             <div className="space-y-1 text-muted">{d.audit.map((a) => <div key={a.id} className="flex justify-between gap-3"><span><strong className="text-fg2">{a.action}</strong> {a.detail}</span><span className="whitespace-nowrap">{ago(a.at)}</span></div>)}</div>
           </div>
         )}

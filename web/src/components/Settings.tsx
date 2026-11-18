@@ -46,7 +46,7 @@ export default function Settings({ overview, me, onChanged, section, onSection }
               <span className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${on ? 'bg-brand-soft text-brand-text' : 'bg-subtle text-muted'}`}>{s.icon}</span>
               <span className="min-w-0">
                 <span className="block text-sm font-medium whitespace-nowrap">{s.label}</span>
-                <span className="hidden lg:block text-[11px] text-muted truncate">{s.hint}</span>
+                <span className="hidden lg:block text-[12.5px] text-muted truncate">{s.hint}</span>
               </span>
             </button>
           );

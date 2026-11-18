@@ -57,7 +57,7 @@ export function AppShell({
     <nav className="flex-1 overflow-y-auto px-3 py-3 space-y-5">
       {groups.map((g, gi) => (
         <div key={gi}>
-          {g.label && <p className="px-3 mb-1.5 text-[11px] font-semibold uppercase tracking-wider text-muted">{g.label}</p>}
+          {g.label && <p className="px-3 mb-1.5 text-[12.5px] font-semibold uppercase tracking-wider text-muted">{g.label}</p>}
           <div className="space-y-0.5">
             {g.items.map((n) => {
               const on = n.id === active;
@@ -88,7 +88,7 @@ export function AppShell({
         <Logo size={36} />
         <div className="min-w-0">
           <div className="font-semibold text-fg leading-tight truncate" title={brand}>{brand}</div>
-          {subtitle && <div className="text-[11px] text-muted leading-tight truncate mt-0.5" title={subtitle}>{subtitle}</div>}
+          {subtitle && <div className="text-[12.5px] text-muted leading-tight truncate mt-0.5" title={subtitle}>{subtitle}</div>}
         </div>
       </div>
       {nav}

@@ -112,9 +112,9 @@ export default function Simulator({ onActivity, services }: { onActivity: () => 
                     {i + 1}️⃣ {s.title}
                   </button>
                 ))}
-                {services.length === 0 && <p className="col-span-2 text-[11px] text-muted">Add a service under Settings to test it here.</p>}
+                {services.length === 0 && <p className="col-span-2 text-[12.5px] text-muted">Add a service under Settings to test it here.</p>}
               </div>
-              <p className="text-[11px] text-muted mt-2">Also try a side question about your business (answered by Gemini when its key is set), type <em>menu</em> to start over, or ask for “a real person” to test the hand-off.</p>
+              <p className="text-[12.5px] text-muted mt-2">Also try a side question about your business (answered by Gemini when its key is set), type <em>menu</em> to start over, or ask for “a real person” to test the hand-off.</p>
             </div>
 
             <div className="bg-sunken rounded-xl p-3 border border-line text-xs space-y-2">
@@ -122,7 +122,7 @@ export default function Simulator({ onActivity, services }: { onActivity: () => 
               <Row k="Current step" v={state.service ? `Q${Math.min(state.step + 1, state.totalSteps)} of ${state.totalSteps}` : 'Menu'} />
               <Row k="Session stage" v={state.stage} cls={state.stage === 'COMPLETED' ? 'text-violet' : 'text-warn'} />
             </div>
-            <p className="text-[11px] text-slate-400">Completed test runs appear in the CRM when “Show simulator data” is ticked.</p>
+            <p className="text-[12.5px] text-slate-400">Completed test runs appear in the CRM when “Show simulator data” is ticked.</p>
             {error && <p className="text-xs text-danger">{error}</p>}
           </div>
         </div>
@@ -137,7 +137,7 @@ export default function Simulator({ onActivity, services }: { onActivity: () => 
                 <div className="w-9 h-9 rounded-full bg-brand text-slate-100 font-bold flex items-center justify-center text-xs shadow">{brand.businessName.slice(0, 3).toUpperCase()}</div>
                 <div>
                   <h4 className="font-semibold text-xs leading-none">{brand.businessName}</h4>
-                  <p className="text-[10px] text-white opacity-90 mt-0.5">{busy ? 'typing…' : 'online'}</p>
+                  <p className="text-[12px] text-white opacity-90 mt-0.5">{busy ? 'typing…' : 'online'}</p>
                 </div>
               </div>
               <div className="flex items-center space-x-2"><Phone className="w-4 h-4" /><MoreVertical className="w-4 h-4" /></div>
@@ -151,7 +151,7 @@ export default function Simulator({ onActivity, services }: { onActivity: () => 
                 <div className={`max-w-[85%] rounded-2xl px-3 py-2 leading-relaxed shadow-md whitespace-pre-wrap break-words ${
                   m.sender === 'user' ? 'bg-[#005c4b] text-white rounded-tr-none' : 'bg-[#202c33] text-slate-100 rounded-tl-none border border-white/10'}`}>
                   {m.text}
-                  <div className="flex items-center justify-end space-x-1 mt-1 text-[9px] text-slate-400">
+                  <div className="flex items-center justify-end space-x-1 mt-1 text-[11px] text-slate-400">
                     <span>{m.time}</span>
                     {m.sender === 'user' && <CheckCheck className="w-3.5 h-3.5 text-info inline" />}
                   </div>

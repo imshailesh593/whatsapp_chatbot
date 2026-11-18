@@ -12,7 +12,7 @@ function Bar({ label, used, limit }: { label: string; used: number; limit: numbe
   const pct = limit ? Math.min(100, Math.round((used / limit) * 100)) : 0;
   return (
     <div>
-      <div className="flex justify-between text-[11px] text-muted mb-1">
+      <div className="flex justify-between text-[12.5px] text-muted mb-1">
         <span>{label}</span>
         <span className="text-fg2">{used.toLocaleString()} / {limit === null ? 'unlimited' : limit.toLocaleString()}</span>
       </div>
@@ -133,8 +133,8 @@ export default function Billing({ me }: { me: AdminUser }) {
           <h3 className="font-bold text-fg text-base flex items-center space-x-2"><CreditCard className="w-4 h-4 text-brand-text" /><span>Plan &amp; billing</span></h3>
           <div className="mt-2 flex items-center gap-2 flex-wrap">
             <span className="text-sm font-semibold text-fg">{b.planName}</span>
-            {!internal && <span className={`text-[11px] px-2 py-0.5 rounded-full border font-semibold ${pill}`}>{statusText}</span>}
-            {internal && <span className="text-[11px] text-muted">Not billed</span>}
+            {!internal && <span className={`text-[12.5px] px-2 py-0.5 rounded-full border font-semibold ${pill}`}>{statusText}</span>}
+            {internal && <span className="text-[12.5px] text-muted">Not billed</span>}
           </div>
         </div>
         {owner && b.provider === 'stripe' && b.status !== 'inactive' && (
@@ -180,7 +180,7 @@ export default function Billing({ me }: { me: AdminUser }) {
               return [
                 <PlanColumn key={`${p.id}-month`} className={wanted('month')} title="Monthly" sub={`${p.name} plan, paid month by month`} price={money(monthMinor, currency)} unit="/ month" note="Cancel any time" rows={rows} intro="Everything included"
                   footer={
-                    <button type="button" onClick={() => setChosen(currency === 'INR' ? 'USD' : 'INR')} className="mt-3 text-[11px] text-muted hover:text-fg2 underline">
+                    <button type="button" onClick={() => setChosen(currency === 'INR' ? 'USD' : 'INR')} className="mt-3 text-[12.5px] text-muted hover:text-fg2 underline">
                       {currency === 'INR' ? `Not in India? Show ${money(p.price.USD, 'USD')} / ${money(p.yearlyUSD, 'USD')}` : `Paying from India? Show ${money(p.price.INR, 'INR')} / ${money(p.yearlyINR, 'INR')}`}
                     </button>
                   }
@@ -197,7 +197,7 @@ export default function Billing({ me }: { me: AdminUser }) {
                           {busy === `st-${p.id}` && <Loader2 className="w-3.5 h-3.5 animate-spin" />}<span>Choose Monthly (card)</span>
                         </button>}
                         {!current && currency === 'INR' && !b.providers.razorpay && (
-                          <p className="text-[11px] text-warn">Payments in rupees are being set up. <button type="button" onClick={() => setChosen('USD')} className="underline">Pay in dollars instead</button></p>
+                          <p className="text-[12.5px] text-warn">Payments in rupees are being set up. <button type="button" onClick={() => setChosen('USD')} className="underline">Pay in dollars instead</button></p>
                         )}
                       </>
                     )
@@ -212,7 +212,7 @@ export default function Billing({ me }: { me: AdminUser }) {
                           {busy === `y-${p.id}` && <Loader2 className="w-3.5 h-3.5 animate-spin" />}<span>Choose Yearly</span>
                         </button>
                       ) : (
-                        <p className="text-[11px] text-warn">Yearly billing is not set up yet.</p>
+                        <p className="text-[12.5px] text-warn">Yearly billing is not set up yet.</p>
                       )
                     )
                   }
@@ -228,9 +228,9 @@ export default function Billing({ me }: { me: AdminUser }) {
               {redeemed && <span className="text-xs text-brand-text">{redeemed}</span>}
             </div>
           )}
-          {anyProvider && owner && <p className="text-[11px] text-muted mt-3">You approve the recurring payment (UPI AutoPay, card or PayPal) on the payment provider&apos;s secure page. It is then debited automatically every month, or every year on the yearly plan, and you can cancel any time here. After approving, come back: your plan switches on as soon as the first payment is confirmed (usually within a minute; refresh if it still shows no plan).</p>}
-          {!anyProvider && <p className="text-[11px] text-muted mt-3">Online payment is not switched on for this account yet. Contact support to activate a plan.</p>}
-          {!owner && <p className="text-[11px] text-muted mt-3">Only the account owner can change the plan.</p>}
+          {anyProvider && owner && <p className="text-[12.5px] text-muted mt-3">You approve the recurring payment (UPI AutoPay, card or PayPal) on the payment provider&apos;s secure page. It is then debited automatically every month, or every year on the yearly plan, and you can cancel any time here. After approving, come back: your plan switches on as soon as the first payment is confirmed (usually within a minute; refresh if it still shows no plan).</p>}
+          {!anyProvider && <p className="text-[12.5px] text-muted mt-3">Online payment is not switched on for this account yet. Contact support to activate a plan.</p>}
+          {!owner && <p className="text-[12.5px] text-muted mt-3">Only the account owner can change the plan.</p>}
           {owner && b.status === 'active' && !b.cancelAtPeriodEnd && b.provider && !linkPaid && (
             <button onClick={cancel} disabled={!!busy} className="mt-4 text-xs text-muted hover:text-danger underline disabled:opacity-50">Cancel subscription</button>
           )}

@@ -107,7 +107,7 @@ export default function Onboarding({ user, onDone, onSignOut }: { user: AdminUse
             <Logo size={36} />
             <div>
               <div className="font-extrabold text-fg text-sm">Set up your chatbot</div>
-              <div className="text-[11px] text-muted">{user.workspace?.businessName}</div>
+              <div className="text-[12.5px] text-muted">{user.workspace?.businessName}</div>
             </div>
           </div>
           <button onClick={onSignOut} className="text-xs text-muted hover:text-fg">Sign out</button>
@@ -119,7 +119,7 @@ export default function Onboarding({ user, onDone, onSignOut }: { user: AdminUse
           {STEPS.map((s, i) => (
             <li key={s} className={`flex items-center space-x-2 px-3 py-1.5 rounded-full text-xs font-semibold border ${
               i === step ? 'bg-brand-soft text-brand-text border-brand/40' : i < step ? 'text-fg2 border-line' : 'text-muted border-line'}`}>
-              <span className="w-4 h-4 rounded-full bg-subtle flex items-center justify-center text-[10px]">{i < step ? <Check className="w-3 h-3" /> : i + 1}</span>
+              <span className="w-4 h-4 rounded-full bg-subtle flex items-center justify-center text-[12px]">{i < step ? <Check className="w-3 h-3" /> : i + 1}</span>
               <span>{s}</span>
             </li>
           ))}
@@ -161,7 +161,7 @@ export default function Onboarding({ user, onDone, onSignOut }: { user: AdminUse
                   className="px-4 py-2 bg-brand hover:bg-brand text-on-brand font-bold text-xs rounded-lg disabled:opacity-40">Looks good, continue</button>
                 <button onClick={() => setUseTemplates(true)} className="px-4 py-2 bg-subtle hover:bg-subtle text-fg text-xs rounded-lg border border-line">Use a template instead</button>
               </div>
-              {draft && <p className="text-[11px] text-muted mt-2">Not quite right? Tell the assistant what to change, for example “add a question about budget”.</p>}
+              {draft && <p className="text-[12.5px] text-muted mt-2">Not quite right? Tell the assistant what to change, for example “add a question about budget”.</p>}
             </div>
           </div>
         )}
@@ -178,7 +178,7 @@ export default function Onboarding({ user, onDone, onSignOut }: { user: AdminUse
                   className={`text-left p-4 rounded-xl border bg-sunken hover:border-brand/60 transition ${picked === t.id ? 'border-brand/40' : 'border-line'}`}>
                   <div className="font-semibold text-sm text-fg">{t.label}</div>
                   <div className="text-xs text-muted mt-1">{t.description}</div>
-                  <div className="text-[11px] text-muted mt-2">{t.services} services</div>
+                  <div className="text-[12.5px] text-muted mt-2">{t.services} services</div>
                 </button>
               ))}
             </div>
@@ -199,7 +199,7 @@ export default function Onboarding({ user, onDone, onSignOut }: { user: AdminUse
             <div>
               <label className="text-xs text-fg2 block mb-1">Booking or payment link</label>
               <input value={links.bookingUrl} onChange={(e) => setLinks({ ...links, bookingUrl: e.target.value })} placeholder="https://cal.com/you" className={input$} />
-              <p className="text-[11px] text-muted mt-1">Sent to customers when they finish the questions. Leave empty if you do not take bookings.</p>
+              <p className="text-[12.5px] text-muted mt-1">Sent to customers when they finish the questions. Leave empty if you do not take bookings.</p>
             </div>
             <div>
               <label className="text-xs text-fg2 block mb-1">Form to share in the first message</label>
@@ -208,7 +208,7 @@ export default function Onboarding({ user, onDone, onSignOut }: { user: AdminUse
             <div>
               <label className="text-xs text-fg2 block mb-1">Email for lead alerts</label>
               <input type="email" value={links.notifyEmail} onChange={(e) => setLinks({ ...links, notifyEmail: e.target.value })} className={input$} />
-              <p className="text-[11px] text-muted mt-1">You get an email when a customer finishes the questions (if email sending is set up on this server). Add a WhatsApp number later in Settings.</p>
+              <p className="text-[12.5px] text-muted mt-1">You get an email when a customer finishes the questions (if email sending is set up on this server). Add a WhatsApp number later in Settings.</p>
             </div>
             {error && <p className="text-xs text-danger" role="alert">{error}</p>}
             <div className="flex gap-2">
@@ -240,7 +240,7 @@ export default function Onboarding({ user, onDone, onSignOut }: { user: AdminUse
                 <button disabled={busy} onClick={() => finish(true)} className="px-5 py-2 bg-brand hover:bg-brand text-on-brand font-bold text-xs rounded-lg disabled:opacity-50">Go live</button>
                 <button disabled={busy} onClick={() => finish(false)} className="px-4 py-2 bg-subtle hover:bg-subtle text-fg text-xs rounded-lg border border-line disabled:opacity-50">Finish, keep the bot paused for now</button>
               </div>
-              <p className="text-[11px] text-muted">The bot only replies to customers after you go live. You can switch it on or off any time in Settings.</p>
+              <p className="text-[12.5px] text-muted">The bot only replies to customers after you go live. You can switch it on or off any time in Settings.</p>
             </div>
           </BrandContext.Provider>
         )}

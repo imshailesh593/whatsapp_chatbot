@@ -85,14 +85,14 @@ export default function MetaLink({ onChanged }: { onChanged?: () => void }) {
               <li key={a.pageId} className="p-3 flex flex-wrap items-center justify-between gap-2">
                 <div className="min-w-0">
                   <div className="text-sm font-semibold text-fg flex items-center gap-1.5"><Facebook className="w-3.5 h-3.5 text-muted" /><span className="truncate">{a.pageName}</span></div>
-                  <div className="text-[11px] text-muted flex items-center gap-1.5 mt-0.5"><Instagram className="w-3 h-3" />{a.hasInstagram ? `@${a.igUsername || 'instagram account'} linked` : 'No Instagram account linked to this Page'}</div>
+                  <div className="text-[12.5px] text-muted flex items-center gap-1.5 mt-0.5"><Instagram className="w-3 h-3" />{a.hasInstagram ? `@${a.igUsername || 'instagram account'} linked` : 'No Instagram account linked to this Page'}</div>
                 </div>
                 <button onClick={() => disconnect(a.pageId, a.pageName)} disabled={!!busy} className="text-xs text-muted hover:text-danger flex items-center gap-1 disabled:opacity-40"><Unplug className="w-3.5 h-3.5" />Disconnect</button>
               </li>
             ))}
           </ul>
         ) : (
-          <p className="mt-4 text-[11px] text-muted">Nothing connected yet. You need to be an admin of the Facebook Page. For Instagram, use a Professional (business or creator) account linked to the Page, and turn on “Allow access to messages” in Instagram: Settings, Messages and story replies, Message controls, Connected tools. Facebook then asks which Pages and Instagram accounts to share.</p>
+          <p className="mt-4 text-[12.5px] text-muted">Nothing connected yet. You need to be an admin of the Facebook Page. For Instagram, use a Professional (business or creator) account linked to the Page, and turn on “Allow access to messages” in Instagram: Settings, Messages and story replies, Message controls, Connected tools. Facebook then asks which Pages and Instagram accounts to share.</p>
         )}
       </div>
 
@@ -106,7 +106,7 @@ export default function MetaLink({ onChanged }: { onChanged?: () => void }) {
         {settings.enabled && (
           <div className="mt-4 grid gap-4 sm:grid-cols-2">
             <div>
-              <label className="text-[11px] text-muted">Which comments</label>
+              <label className="text-[12.5px] text-muted">Which comments</label>
               <select className={input} value={settings.mode} onChange={(e) => save({ mode: e.target.value as CommentSettings['mode'] })}>
                 <option value="keywords">Only comments with a keyword</option>
                 <option value="all">All comments</option>
@@ -114,7 +114,7 @@ export default function MetaLink({ onChanged }: { onChanged?: () => void }) {
             </div>
             {settings.mode === 'keywords' && (
               <div>
-                <label className="text-[11px] text-muted">Keywords (separate with commas)</label>
+                <label className="text-[12.5px] text-muted">Keywords (separate with commas)</label>
                 <input className={input} defaultValue={settings.keywords} maxLength={500} onBlur={(e) => e.target.value !== settings.keywords && save({ keywords: e.target.value })} placeholder="price, fees, info, details, interested" />
               </div>
             )}
@@ -123,7 +123,7 @@ export default function MetaLink({ onChanged }: { onChanged?: () => void }) {
               <span>Also send the commenter a private message that starts the conversation (the AI then continues in their DMs)</span>
             </label>
             <div className="sm:col-span-2">
-              <label className="text-[11px] text-muted">Standard public reply, used only when the AI is unavailable (optional)</label>
+              <label className="text-[12.5px] text-muted">Standard public reply, used only when the AI is unavailable (optional)</label>
               <input className={input} defaultValue={settings.template} maxLength={300} onBlur={(e) => e.target.value !== settings.template && save({ template: e.target.value })} placeholder="Thanks for your comment! We have sent you a message with the details." />
             </div>
           </div>
@@ -131,17 +131,17 @@ export default function MetaLink({ onChanged }: { onChanged?: () => void }) {
 
         <h4 className="mt-6 text-xs font-bold text-fg">Recent comments</h4>
         {events.length === 0 ? (
-          <p className="mt-2 text-[11px] text-muted">No comments yet.</p>
+          <p className="mt-2 text-[12.5px] text-muted">No comments yet.</p>
         ) : (
           <div className="mt-2 overflow-x-auto">
             <table className="w-full text-xs">
-              <thead><tr className="text-left text-[10px] uppercase tracking-wide text-muted"><th className="py-1.5 pr-3">Comment</th><th className="py-1.5 pr-3">Our reply</th><th className="py-1.5">Result</th></tr></thead>
+              <thead><tr className="text-left text-[12px] uppercase tracking-wide text-muted"><th className="py-1.5 pr-3">Comment</th><th className="py-1.5 pr-3">Our reply</th><th className="py-1.5">Result</th></tr></thead>
               <tbody className="divide-y divide-line align-top">
                 {events.map((e) => (
                   <tr key={e.id}>
-                    <td className="py-2 pr-3 max-w-[16rem]"><div className="text-fg2 truncate" title={e.text}>{e.text}</div><div className="text-[10px] text-muted">{e.channel === 'ig' ? 'Instagram' : 'Facebook'} · {e.commenter || 'someone'} · {new Date(e.at).toLocaleString()}</div></td>
-                    <td className="py-2 pr-3 max-w-[18rem] text-fg2"><div className="truncate" title={e.reply}>{e.reply || '—'}</div>{e.dm && <div className="text-[10px] text-muted truncate" title={e.dm}>DM: {e.dm}</div>}</td>
-                    <td className="py-2"><span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${STATUS[e.status] ?? STATUS.skipped}`}>{e.status}</span>{e.note && <div className="text-[10px] text-muted mt-0.5 max-w-[14rem]">{e.note}</div>}</td>
+                    <td className="py-2 pr-3 max-w-[16rem]"><div className="text-fg2 truncate" title={e.text}>{e.text}</div><div className="text-[12px] text-muted">{e.channel === 'ig' ? 'Instagram' : 'Facebook'} · {e.commenter || 'someone'} · {new Date(e.at).toLocaleString()}</div></td>
+                    <td className="py-2 pr-3 max-w-[18rem] text-fg2"><div className="truncate" title={e.reply}>{e.reply || '—'}</div>{e.dm && <div className="text-[12px] text-muted truncate" title={e.dm}>DM: {e.dm}</div>}</td>
+                    <td className="py-2"><span className={`px-2 py-0.5 rounded-full text-[12px] font-semibold ${STATUS[e.status] ?? STATUS.skipped}`}>{e.status}</span>{e.note && <div className="text-[12px] text-muted mt-0.5 max-w-[14rem]">{e.note}</div>}</td>
                   </tr>
                 ))}
               </tbody>
