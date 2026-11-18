@@ -187,7 +187,7 @@ export default function Crm({ contacts, includeTest, onIncludeTest, onOpen, onOp
               {rows.map((c) => {
                 const svc = c.service ? serviceStyle(c.service, c.serviceTitle) : null;
                 return (
-                  <tr key={c.phone} className="hover:bg-sunken/50 transition cursor-pointer" onClick={() => onOpen(c.phone)}>
+                  <tr key={c.phone} className="hover:bg-sunken/50 transition cursor-pointer" onClick={() => (c.isTest ? onOpen(c.phone) : onOpenChat(c.phone))} title={c.isTest ? undefined : 'Open chat'}>
                     <td className="py-3.5 px-4">
                       <div className="font-semibold text-fg">
                         {c.name || 'Unknown'}
