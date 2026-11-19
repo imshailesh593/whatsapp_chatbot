@@ -252,7 +252,7 @@ export default function Inbox({ contacts, waReady, onChanged, initialPhone }: Pr
                     {m.media && (
                       <div className="-mx-1 -mt-0.5 mb-1">
                         {m.media.kind === 'image' && (
-                          <a href={`/admin/api/media/${m.media.id}`} target="_blank" rel="noreferrer"><img src={`/admin/api/media/${m.media.id}`} alt={m.media.name} onLoad={keepBottom} className="rounded-md max-h-72 w-full object-cover" /></a>
+                          <a href={`/admin/api/media/${m.media.id}`} target="_blank" rel="noreferrer"><img src={`/admin/api/media/${m.media.id}`} alt="Photo no longer available" onLoad={keepBottom} onError={(e) => { e.currentTarget.style.display = 'none'; }} className="rounded-md max-h-72 w-full object-cover" /></a>
                         )}
                         {m.media.kind === 'video' && <video src={`/admin/api/media/${m.media.id}`} controls preload="metadata" onLoadedMetadata={keepBottom} className="rounded-md max-h-72 w-full bg-black" />}
                         {m.media.kind === 'document' && (

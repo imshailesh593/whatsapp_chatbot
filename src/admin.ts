@@ -21,7 +21,7 @@ import { createWorkspaceWithOwner } from './lib/workspaces';
 import { handleIncomingMessage } from './services/engine';
 import { clearSimHistory } from './services/aiChat';
 import { captureReplies, sendTextMessage, sendMediaMessage } from './services/transport';
-import { fileOf, servedType } from './services/mediaStore';
+import { fileOf, servedType, removeWorkspaceMedia } from './services/mediaStore';
 import { invalidateConfig, loadConfig, saveServices, seedDefaultWorkspace, type BotConfig } from './services/botConfig';
 import { onboardingAvailable, onboardingTurn, parseDraft, type ChatTurn, type Draft } from './services/onboarding';
 import { TEMPLATES, getTemplate } from './templates';
@@ -1521,6 +1521,7 @@ export function registerAdmin(app: FastifyInstance, opts: { getQr: (workspaceId:
     if (String((req.body as any)?.confirm ?? '').trim() !== w.businessName) return reply.status(400).send({ error: 'Type the exact business name to confirm' });
     await waFor(id).disconnect().catch(() => undefined);
     await prisma.workspace.delete({ where: { id } });
+    try { removeWorkspaceMedia(id); } catch (e) { console.error('[media] could not remove files of the deleted workspace:', (e as Error).message); }
     invalidateConfig(id);
     await audit(req, 'workspace.delete', null, w.businessName);
     return { ok: true };

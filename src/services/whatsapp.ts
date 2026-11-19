@@ -287,12 +287,22 @@ export class WaConnection {
     const kind = inner?.imageMessage ? 'image' : inner?.videoMessage ? 'video' : inner?.documentMessage ? 'document' : null;
     if (!kind) return null;
     const part = inner[`${kind}Message`];
-    const size = Number(part?.fileLength?.low ?? part?.fileLength ?? 0);
-    if (size > 16 * 1024 * 1024) return null;
+    const CAP = 16 * 1024 * 1024;
+    // The size the sender declares is only a first filter: bytes are counted as they arrive and the download is cut off at the cap
+    const declared = Number(part?.fileLength?.low ?? part?.fileLength ?? 0);
+    if (!(declared > 0) || declared > CAP) return null;
     try {
       const baileys = await dynamicImport('@whiskeysockets/baileys');
-      const buf: Buffer = await baileys.downloadMediaMessage(m, 'buffer', {}, { logger: pino({ level: 'silent' }), reuploadRequest: this.sock?.updateMediaMessage });
-      if (!buf?.length || buf.length > 16 * 1024 * 1024) return null;
+      const stream: NodeJS.ReadableStream & { destroy(e?: Error): void } = await baileys.downloadMediaMessage(m, 'stream', {}, { logger: pino({ level: 'silent' }), reuploadRequest: this.sock?.updateMediaMessage });
+      const chunks: Buffer[] = [];
+      let total = 0;
+      for await (const chunk of stream) {
+        total += (chunk as Buffer).length;
+        if (total > CAP) { stream.destroy(); return null; }
+        chunks.push(chunk as Buffer);
+      }
+      const buf = Buffer.concat(chunks);
+      if (!buf.length) return null;
       const mime: string = String(part?.mimetype ?? '').split(';')[0] || (kind === 'image' ? 'image/jpeg' : kind === 'video' ? 'video/mp4' : 'application/octet-stream');
       const name = kind === 'document' ? String(part?.fileName ?? 'document').slice(0, 120) : kind === 'image' ? 'photo' : 'video';
       return saveMedia(this.workspaceId, buf, { kind, mime, name, caption: String(part?.caption ?? '').slice(0, 1000) || undefined });

@@ -9,6 +9,7 @@ import { registerAdmin } from './admin';
 import { DEFAULT_WORKSPACE_ID } from './lib/workspaces';
 import { startBroadcastWorker } from './services/broadcast';
 import { startWebhookWorker } from './services/integrations';
+import { startMediaSweep } from './services/mediaStore';
 import { startFollowUpWorker } from './services/crm';
 import { startAppointmentWorker } from './services/calendar';
 import { startRenewalWorker } from './services/billing';
@@ -64,6 +65,7 @@ const followUps = startFollowUpWorker();
 const appointments = startAppointmentWorker();
 const renewals = startRenewalWorker();
 const customerFollowUps = startCustomerFollowUps();
+const mediaSweep = startMediaSweep();
 let client: { stop(): Promise<void> } | null = null;
 startWhatsApp()
   .then((c) => (client = c))
@@ -75,6 +77,7 @@ const shutdown = async () => {
   followUps.stop();
   appointments.stop();
   customerFollowUps.stop();
+  mediaSweep.stop();
   renewals.stop();
   await app.close();
   await client?.stop();
