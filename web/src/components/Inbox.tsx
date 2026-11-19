@@ -83,6 +83,9 @@ export default function Inbox({ contacts, waReady, onChanged, initialPhone }: Pr
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phone, unreadHere]);
 
+  // a photo or video growing the thread while the reader is at the bottom keeps the bottom in view
+  const keepBottom = () => { const el = scroller.current; if (el && el.scrollHeight - el.scrollTop - el.clientHeight < 700) el.scrollTo({ top: el.scrollHeight }); };
+
   if (list.length === 0) {
     return <div className="bg-card border border-line rounded-2xl p-10 text-center text-muted text-sm">No conversations yet.</div>;
   }
@@ -246,7 +249,21 @@ export default function Inbox({ contacts, waReady, onChanged, initialPhone }: Pr
                 <div className={`flex ${out ? 'justify-end' : 'justify-start'} ${first ? 'mt-2' : 'mt-0.5'}`}>
                   <div className={`relative max-w-[85%] sm:max-w-[65%] rounded-lg px-2.5 pt-1.5 pb-1 shadow-[0_1px_0.5px_rgba(11,20,26,.13)] ${out ? 'bg-[#d9fdd3] dark:bg-[#005c4b] text-[#111b21] dark:text-[#e9edef]' : 'bg-white dark:bg-[#202c33] text-[#111b21] dark:text-[#e9edef]'} ${first ? (out ? 'rounded-tr-none' : 'rounded-tl-none') : ''}`}>
                     {first && <span aria-hidden className={`absolute top-0 w-2 h-3 ${out ? '-right-2 bg-[#d9fdd3] dark:bg-[#005c4b]' : '-left-2 bg-white dark:bg-[#202c33]'}`} style={{ clipPath: out ? 'polygon(0 0, 0 100%, 100% 0)' : 'polygon(100% 0, 100% 100%, 0 0)' }} />}
-                    <span className="text-[15px] leading-[21px] whitespace-pre-wrap break-words">{m.text}</span>
+                    {m.media && (
+                      <div className="-mx-1 -mt-0.5 mb-1">
+                        {m.media.kind === 'image' && (
+                          <a href={`/admin/api/media/${m.media.id}`} target="_blank" rel="noreferrer"><img src={`/admin/api/media/${m.media.id}`} alt={m.media.name} onLoad={keepBottom} className="rounded-md max-h-72 w-full object-cover" /></a>
+                        )}
+                        {m.media.kind === 'video' && <video src={`/admin/api/media/${m.media.id}`} controls preload="metadata" onLoadedMetadata={keepBottom} className="rounded-md max-h-72 w-full bg-black" />}
+                        {m.media.kind === 'document' && (
+                          <a href={`/admin/api/media/${m.media.id}`} target="_blank" rel="noreferrer" className="flex items-center gap-3 rounded-md bg-black/5 dark:bg-black/20 px-3 py-2.5 hover:bg-black/10 dark:hover:bg-black/30">
+                            <FileText className="w-8 h-8 shrink-0 text-[#e0453a]" />
+                            <span className="min-w-0"><span className="block text-[14.5px] truncate">{m.media.name}</span><span className="block text-[12px] text-[#667781] dark:text-[#ffffff99]">{m.media.mime === 'application/pdf' ? 'PDF' : 'Document'} · {m.media.size >= 1048576 ? `${(m.media.size / 1048576).toFixed(1)} MB` : `${Math.max(1, Math.round(m.media.size / 1024))} KB`}</span></span>
+                          </a>
+                        )}
+                      </div>
+                    )}
+                    {(m.media ? m.media.caption : m.text) && <span className="text-[15px] leading-[21px] whitespace-pre-wrap break-words">{m.media ? m.media.caption : m.text}</span>}
                     <span className="float-right ml-3 mt-1.5 -mb-0.5 flex items-center gap-1 text-[11.5px] text-[#667781] dark:text-[#ffffff99] leading-none">
                       {new Date(m.at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                       {out && <CheckCheck className="w-4 h-4 text-[#53bdeb]" />}

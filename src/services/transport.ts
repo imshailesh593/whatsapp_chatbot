@@ -1,6 +1,7 @@
 import { AsyncLocalStorage } from 'async_hooks';
 import { prisma } from '../lib/prisma';
 import { isSocial } from '../lib/channel';
+import { saveMedia } from './mediaStore';
 
 /** Thin seam between the conversation engine and whatever actually delivers messages (a WhatsApp link per workspace, or a fake in tests). */
 export type MediaKind = 'image' | 'video' | 'document';
@@ -43,11 +44,12 @@ export async function logMessage(
   phone: string,
   direction: 'INBOUND' | 'OUTBOUND',
   text: string,
-  wamid?: string
+  wamid?: string,
+  extra?: Record<string, unknown>
 ): Promise<void> {
   try {
     await prisma.webhookLog.create({
-      data: { workspaceId, phoneNumber: phone, direction, payload: wamid ? { text, wamid } : { text } }
+      data: { workspaceId, phoneNumber: phone, direction, payload: { text, ...(wamid ? { wamid } : {}), ...(extra ?? {}) } as any }
     });
   } catch (err) {
     console.error('[log] failed to store message:', (err as Error).message);
@@ -64,9 +66,8 @@ export async function sendMediaMessage(workspaceId: string, to: string, media: O
   await t.sendMedia(to, media);
   const label = `${MEDIA_ICON[media.kind]} ${media.fileName}` + (media.caption ? `\n${media.caption}` : '');
   try {
-    await prisma.webhookLog.create({
-      data: { workspaceId, phoneNumber: to, direction: 'OUTBOUND', payload: { text: label, media: { kind: media.kind, name: media.fileName, size: media.buffer.length } } }
-    });
+    const stored = saveMedia(workspaceId, media.buffer, { kind: media.kind, mime: media.mime, name: media.fileName, caption: media.caption });
+    await logMessage(workspaceId, to, 'OUTBOUND', label, undefined, { media: stored });
   } catch (err) {
     console.error('[log] failed to store attachment:', (err as Error).message);
   }

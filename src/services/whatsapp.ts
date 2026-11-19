@@ -4,6 +4,7 @@ import pino from 'pino';
 import qrcodeTerminal from 'qrcode-terminal';
 import { handleIncomingMessage } from './engine';
 import { setTransport, sendTextMessage, logMessage, type OutgoingMedia } from './transport';
+import { saveMedia, type StoredMedia } from './mediaStore';
 import { UNSUPPORTED_MEDIA_MESSAGE } from './botConfig';
 import os from 'os';
 import { prisma } from '../lib/prisma';
@@ -251,7 +252,10 @@ export class WaConnection {
       if (!text) {
         if (isMedia) {
           const label = MEDIA_KEYS.map((k) => (unwrap(m.message)?.[k] ? MEDIA_LABEL[k] : '')).find(Boolean);
-          if (label) await logMessage(wsId, key, 'INBOUND', label, id);
+          if (label) {
+            const media = await this.fetchMedia(m);
+            await logMessage(wsId, key, 'INBOUND', media?.caption ? `${label}\n${media.caption}` : label, id, media ? { media } : undefined);
+          }
           const s = await prisma.session.findUnique({ where: { workspaceId_phoneNumber: { workspaceId: wsId, phoneNumber: key } } });
           if (!s?.isAgentPaused) await sendTextMessage(wsId, key, UNSUPPORTED_MEDIA_MESSAGE);
         }
@@ -277,6 +281,27 @@ export class WaConnection {
     }
   }
 
+  /** Downloads a photo, video or document a customer sent so the Inbox can show it. Returns null if it is too big or not downloadable. */
+  private async fetchMedia(m: any): Promise<StoredMedia | null> {
+    const inner = unwrap(m.message);
+    const kind = inner?.imageMessage ? 'image' : inner?.videoMessage ? 'video' : inner?.documentMessage ? 'document' : null;
+    if (!kind) return null;
+    const part = inner[`${kind}Message`];
+    const size = Number(part?.fileLength?.low ?? part?.fileLength ?? 0);
+    if (size > 16 * 1024 * 1024) return null;
+    try {
+      const baileys = await dynamicImport('@whiskeysockets/baileys');
+      const buf: Buffer = await baileys.downloadMediaMessage(m, 'buffer', {}, { logger: pino({ level: 'silent' }), reuploadRequest: this.sock?.updateMediaMessage });
+      if (!buf?.length || buf.length > 16 * 1024 * 1024) return null;
+      const mime: string = String(part?.mimetype ?? '').split(';')[0] || (kind === 'image' ? 'image/jpeg' : kind === 'video' ? 'video/mp4' : 'application/octet-stream');
+      const name = kind === 'document' ? String(part?.fileName ?? 'document').slice(0, 120) : kind === 'image' ? 'photo' : 'video';
+      return saveMedia(this.workspaceId, buf, { kind, mime, name, caption: String(part?.caption ?? '').slice(0, 1000) || undefined });
+    } catch (err) {
+      console.error('[wa] could not download a customer attachment:', (err as Error).message);
+      return null;
+    }
+  }
+
   private async recordPhoneMessage(m: any, key: string, text: string): Promise<void> {
     const id: string | undefined = m.key?.id;
     if (!id) return;
@@ -292,7 +317,8 @@ export class WaConnection {
       if (dup) return;
       const sess = await prisma.session.findUnique({ where: { workspaceId_phoneNumber: { workspaceId: wsId, phoneNumber: key } }, select: { id: true } });
       if (!sess) return; // not one of our chats
-      await logMessage(wsId, key, 'OUTBOUND', body, id);
+      const media = text ? null : await this.fetchMedia(m);
+      await logMessage(wsId, key, 'OUTBOUND', media?.caption ? `${body}\n${media.caption}` : body, id, media ? { media } : undefined);
       await prisma.session.update({ where: { id: sess.id }, data: { readAt: new Date() } }); // replying from the phone counts as having read it
     } catch (err) {
       console.error('[wa] could not record a phone-sent message:', (err as Error).message);

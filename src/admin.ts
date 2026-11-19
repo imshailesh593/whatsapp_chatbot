@@ -21,6 +21,7 @@ import { createWorkspaceWithOwner } from './lib/workspaces';
 import { handleIncomingMessage } from './services/engine';
 import { clearSimHistory } from './services/aiChat';
 import { captureReplies, sendTextMessage, sendMediaMessage } from './services/transport';
+import { fileOf, servedType } from './services/mediaStore';
 import { invalidateConfig, loadConfig, saveServices, seedDefaultWorkspace, type BotConfig } from './services/botConfig';
 import { onboardingAvailable, onboardingTurn, parseDraft, type ChatTurn, type Draft } from './services/onboarding';
 import { TEMPLATES, getTemplate } from './templates';
@@ -1036,7 +1037,7 @@ export function registerAdmin(app: FastifyInstance, opts: { getQr: (workspaceId:
     return {
       messages: rows
         .reverse()
-        .map((r) => ({ id: r.id, direction: r.direction, text: (r.payload as any)?.text ?? '', at: r.createdAt.toISOString() }))
+        .map((r) => ({ id: r.id, direction: r.direction, text: (r.payload as any)?.text ?? '', at: r.createdAt.toISOString(), media: (r.payload as any)?.media ?? null }))
     };
   });
 
@@ -1116,6 +1117,30 @@ export function registerAdmin(app: FastifyInstance, opts: { getQr: (workspaceId:
       return reply.status(502).send({ error: `Could not send: ${(err as Error).message}` });
     }
     return { ok: true };
+  });
+
+  // A photo, video or document shown in a chat: only for people signed in to the workspace the chat belongs to
+  app.get('/admin/api/media/:id', { preHandler: guard }, async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const w = wsId(req);
+    const file = fileOf(w, id);
+    const row = file ? await prisma.webhookLog.findFirst({ where: { workspaceId: w, payload: { path: ['media', 'id'], equals: id } }, select: { payload: true } }) : null;
+    const meta = (row?.payload as any)?.media as { mime?: string; name?: string } | undefined;
+    if (!file || !meta || !fs.existsSync(file)) return reply.status(404).send({ error: 'File not found' });
+    const { type, inline } = servedType(String(meta.mime ?? ''));
+    const size = fs.statSync(file).size;
+    const safeName = String(meta.name ?? 'file').replace(/[^\w.\- ]/g, '_');
+    reply.header('Content-Type', type).header('X-Content-Type-Options', 'nosniff').header('Content-Security-Policy', "sandbox; default-src 'none'; media-src 'self'; img-src 'self'")
+      .header('Cache-Control', 'private, max-age=86400').header('Accept-Ranges', 'bytes')
+      .header('Content-Disposition', `${inline ? 'inline' : 'attachment'}; filename="${safeName}"`);
+    const range = /^bytes=(\d*)-(\d*)$/.exec(String(req.headers.range ?? ''));
+    if (range && size > 0) {
+      const start = range[1] ? Number(range[1]) : Math.max(0, size - Number(range[2]));
+      const end = range[1] && range[2] ? Math.min(Number(range[2]), size - 1) : size - 1;
+      if (start > end || start >= size) return reply.status(416).header('Content-Range', `bytes */${size}`).send();
+      return reply.status(206).header('Content-Range', `bytes ${start}-${end}/${size}`).header('Content-Length', end - start + 1).send(fs.createReadStream(file, { start, end }));
+    }
+    return reply.header('Content-Length', size).send(fs.createReadStream(file));
   });
 
   // Attachment from the Live Inbox: a photo, a video or a PDF, with an optional caption. Same rules as a text reply.

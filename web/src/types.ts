@@ -93,6 +93,8 @@ export interface ChatMessage {
   direction: 'INBOUND' | 'OUTBOUND';
   text: string;
   at: string;
+  /** A photo, video or document attached to the message */
+  media?: { id: string; kind: 'image' | 'video' | 'document'; mime: string; name: string; size: number; caption?: string } | null;
 }
 
 export interface PatchBody {
