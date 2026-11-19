@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowLeft, CheckCheck, ExternalLink, Info, MessageSquareText, Phone, Search, Send, UserCheck, X, Zap } from 'lucide-react';
+import { ArrowLeft, CheckCheck, ExternalLink, FileText, Info, MessageSquareText, Paperclip, Phone, Search, Send, UserCheck, X, Zap } from 'lucide-react';
 import { api } from '../api';
 import type { ChatMessage, Contact } from '../types';
 import { serviceStyle, stageBadge, ago, displayPhone, humanize, waLink, isSocialChat } from '../config';
@@ -38,6 +38,8 @@ export default function Inbox({ contacts, waReady, onChanged, initialPhone }: Pr
   const [filter, setFilter] = useState<'all' | 'person' | 'bot'>('all');
   const [info, setInfo] = useState(false);
   const [canned, setCanned] = useState(false);
+  const [file, setFile] = useState<File | null>(null);
+  const fileInput = useRef<HTMLInputElement>(null);
   const [showChat, setShowChat] = useState(!!initialPhone);
 
   const active = list.find((c) => c.phone === activePhone) ?? null;
@@ -46,6 +48,7 @@ export default function Inbox({ contacts, waReady, onChanged, initialPhone }: Pr
   // keep notes box in sync when switching contact
   useEffect(() => {
     setNotes(active?.notes ?? '');
+    setFile(null);
     setError('');
     setSaved(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -93,13 +96,32 @@ export default function Inbox({ contacts, waReady, onChanged, initialPhone }: Pr
     }
   }
 
+  function pickFile(f: File | undefined) {
+    if (!f) return;
+    setError('');
+    if (!/^(image\/(jpeg|png|webp)|video\/(mp4|quicktime)|application\/pdf)$/.test(f.type)) { setError('Only photos (JPG, PNG, WebP), videos (MP4, MOV) and PDF files can be sent.'); return; }
+    if (f.size > 16 * 1024 * 1024) { setError('That file is larger than 16 MB.'); return; }
+    setFile(f);
+  }
+
   async function sendReply() {
     const text = reply.trim();
-    if (!text) return;
+    if (!text && !file) return;
     setSending(true);
     setError('');
     try {
-      await api.send(active!.phone, text);
+      if (file) {
+        const data = await new Promise<string>((resolve, reject) => {
+          const r = new FileReader();
+          r.onload = () => resolve(String(r.result).split(',')[1] ?? '');
+          r.onerror = () => reject(new Error('Could not read the file'));
+          r.readAsDataURL(file);
+        });
+        await api.sendMedia(active!.phone, file.name, data, text);
+        setFile(null);
+      } else {
+        await api.send(active!.phone, text);
+      }
       setReply('');
       await loadMessages();
     } catch (err) {
@@ -255,13 +277,25 @@ export default function Inbox({ contacts, waReady, onChanged, initialPhone }: Pr
             </div>
           )}
           {error && <p className="text-[13.5px] text-[#c0392b] dark:text-[#ff8a80] mb-1.5 px-1">{error}</p>}
+          {file && (
+            <div className="mb-2 flex items-center gap-3 rounded-lg bg-white dark:bg-[#2a3942] px-3 py-2">
+              <FileText className="w-5 h-5 shrink-0 text-[#54656f] dark:text-[#aebac1]" />
+              <div className="min-w-0 flex-1">
+                <div className="text-[14.5px] truncate">{file.name}</div>
+                <div className="text-[12.5px] text-[#667781] dark:text-[#8696a0]">{file.size >= 1024 * 1024 ? `${(file.size / 1024 / 1024).toFixed(1)} MB` : `${Math.max(1, Math.round(file.size / 1024))} KB`} · type a caption below if you like</div>
+              </div>
+              <button onClick={() => setFile(null)} className="p-1 rounded-full hover:bg-black/5 dark:hover:bg-white/10" aria-label="Remove the file"><X className="w-4 h-4" /></button>
+            </div>
+          )}
           <div className="flex items-center gap-2">
+            <input ref={fileInput} type="file" hidden accept="image/jpeg,image/png,image/webp,video/mp4,video/quicktime,application/pdf" onChange={(e) => { pickFile(e.target.files?.[0]); e.target.value = ''; }} />
+            <button onClick={() => fileInput.current?.click()} disabled={!canReply || isSocialChat(active.phone)} className="p-2.5 rounded-full text-[#54656f] dark:text-[#aebac1] hover:bg-black/5 dark:hover:bg-white/10 disabled:opacity-40" title={isSocialChat(active.phone) ? 'Attachments are not available for Instagram / Facebook yet' : 'Attach a photo, video or PDF'} aria-label="Attach a file"><Paperclip className="w-5 h-5" /></button>
             <button onClick={() => setCanned((v) => !v)} className="p-2.5 rounded-full text-[#54656f] dark:text-[#aebac1] hover:bg-black/5 dark:hover:bg-white/10" title="Quick replies" aria-label="Quick replies"><MessageSquareText className="w-5 h-5" /></button>
             <input value={reply} onChange={(e) => setReply(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && canReply && sendReply()}
               disabled={!canReply}
-              placeholder={!waReady ? 'WhatsApp is not connected' : active.botActive ? 'Take over (button above) to type a message' : 'Type a message'}
+              placeholder={!waReady ? 'WhatsApp is not connected' : active.botActive ? 'Take over (button above) to type a message' : file ? 'Add a caption (optional)' : 'Type a message'}
               className="flex-1 min-w-0 rounded-lg bg-white dark:bg-[#2a3942] px-4 py-2.5 text-[15px] outline-none placeholder-[#667781] dark:placeholder-[#8696a0] disabled:opacity-60" />
-            <button onClick={sendReply} disabled={!canReply || !reply.trim() || sending} aria-label="Send"
+            <button onClick={sendReply} disabled={!canReply || (!reply.trim() && !file) || sending} aria-label="Send"
               className="w-10 h-10 rounded-full bg-[#00a884] hover:bg-[#008f72] text-white flex items-center justify-center transition disabled:opacity-40">
               <Send className="w-[18px] h-[18px]" />
             </button>

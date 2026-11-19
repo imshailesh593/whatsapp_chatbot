@@ -3,8 +3,13 @@ import { prisma } from '../lib/prisma';
 import { isSocial } from '../lib/channel';
 
 /** Thin seam between the conversation engine and whatever actually delivers messages (a WhatsApp link per workspace, or a fake in tests). */
+export type MediaKind = 'image' | 'video' | 'document';
+export interface OutgoingMedia { kind: MediaKind; buffer: Buffer; mime: string; fileName: string; caption?: string }
+
 export interface Transport {
   sendText(to: string, text: string): Promise<void>;
+  /** Sends a photo, video or document (WhatsApp only) */
+  sendMedia?(to: string, media: OutgoingMedia): Promise<void>;
   /** Is the underlying connection usable right now? */
   ready?(): boolean;
 }
@@ -46,6 +51,24 @@ export async function logMessage(
     });
   } catch (err) {
     console.error('[log] failed to store message:', (err as Error).message);
+  }
+}
+
+const MEDIA_ICON: Record<MediaKind, string> = { image: '📷', video: '🎥', document: '📄' };
+
+/** Sends an attachment from the Inbox and records it in the chat log (name and kind, not the file itself). */
+export async function sendMediaMessage(workspaceId: string, to: string, media: OutgoingMedia): Promise<void> {
+  if (isSocial(to)) throw new Error('Attachments are not supported for Instagram / Facebook chats yet');
+  const t = transports.get(workspaceId);
+  if (!t?.sendMedia) throw new Error('WhatsApp is not connected for this workspace');
+  await t.sendMedia(to, media);
+  const label = `${MEDIA_ICON[media.kind]} ${media.fileName}` + (media.caption ? `\n${media.caption}` : '');
+  try {
+    await prisma.webhookLog.create({
+      data: { workspaceId, phoneNumber: to, direction: 'OUTBOUND', payload: { text: label, media: { kind: media.kind, name: media.fileName, size: media.buffer.length } } }
+    });
+  } catch (err) {
+    console.error('[log] failed to store attachment:', (err as Error).message);
   }
 }
 

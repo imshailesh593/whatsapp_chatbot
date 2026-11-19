@@ -119,6 +119,7 @@ export const api = {
       body: JSON.stringify(body)
     }).then((r) => r.contact),
   markRead: (phone: string) => post<{ ok: true }>(`/admin/api/contacts/${encodeURIComponent(phone)}/read`, {}),
+  sendMedia: (phone: string, name: string, data: string, caption: string) => post<{ ok: true }>(`/admin/api/contacts/${encodeURIComponent(phone)}/send-media`, { name, data, caption }),
   send: (phone: string, text: string) => post<{ ok: true }>(`/admin/api/contacts/${encodeURIComponent(phone)}/send`, { text }),
   simulate: (id: string, name: string, text: string) =>
     post<{ replies: string[]; state: { stage: string; service: string | null; step: number; totalSteps: number } }>(

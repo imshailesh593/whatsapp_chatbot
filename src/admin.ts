@@ -20,7 +20,7 @@ import {
 import { createWorkspaceWithOwner } from './lib/workspaces';
 import { handleIncomingMessage } from './services/engine';
 import { clearSimHistory } from './services/aiChat';
-import { captureReplies, sendTextMessage } from './services/transport';
+import { captureReplies, sendTextMessage, sendMediaMessage } from './services/transport';
 import { invalidateConfig, loadConfig, saveServices, seedDefaultWorkspace, type BotConfig } from './services/botConfig';
 import { onboardingAvailable, onboardingTurn, parseDraft, type ChatTurn, type Draft } from './services/onboarding';
 import { TEMPLATES, getTemplate } from './templates';
@@ -1112,6 +1112,42 @@ export function registerAdmin(app: FastifyInstance, opts: { getQr: (workspaceId:
     if (isSocial(phone) ? !(await metaStatus(w)).connected : waFor(w).status !== 'ready') return reply.status(503).send({ error: isSocial(phone) ? 'Instagram / Facebook is not connected' : 'WhatsApp is not connected' });
     try {
       await sendTextMessage(w, phone, text);
+    } catch (err) {
+      return reply.status(502).send({ error: `Could not send: ${(err as Error).message}` });
+    }
+    return { ok: true };
+  });
+
+  // Attachment from the Live Inbox: a photo, a video or a PDF, with an optional caption. Same rules as a text reply.
+  const MAX_ATTACHMENT = 16 * 1024 * 1024;
+  const sniff = (b: Buffer): { kind: 'image' | 'video' | 'document'; mime: string } | null => {
+    if (b.length < 12) return null;
+    if (b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff) return { kind: 'image', mime: 'image/jpeg' };
+    if (b.subarray(0, 8).toString('hex') === '89504e470d0a1a0a') return { kind: 'image', mime: 'image/png' };
+    if (b.subarray(0, 4).toString() === 'RIFF' && b.subarray(8, 12).toString() === 'WEBP') return { kind: 'image', mime: 'image/webp' };
+    if (b.subarray(0, 4).toString() === '%PDF') return { kind: 'document', mime: 'application/pdf' };
+    if (b.subarray(4, 8).toString() === 'ftyp') return { kind: 'video', mime: b.subarray(8, 12).toString().startsWith('qt') ? 'video/quicktime' : 'video/mp4' };
+    return null;
+  };
+  app.post('/admin/api/contacts/:phone/send-media', { preHandler: guard, bodyLimit: 24 * 1024 * 1024 }, async (req, reply) => {
+    const { phone } = req.params as { phone: string };
+    const w = wsId(req);
+    const body = (req.body ?? {}) as { name?: string; data?: string; caption?: string };
+    const buffer = Buffer.from(String(body.data ?? ''), 'base64');
+    if (buffer.length === 0) return reply.status(400).send({ error: 'No file received' });
+    if (buffer.length > MAX_ATTACHMENT) return reply.status(413).send({ error: 'The file is larger than 16 MB' });
+    const type = sniff(buffer);
+    if (!type) return reply.status(400).send({ error: 'Only photos (JPG, PNG, WebP), videos (MP4, MOV) and PDF files can be sent' });
+    if (phone.startsWith(SIM_PREFIX)) return reply.status(400).send({ error: 'Cannot message a simulator contact' });
+    if (isSocial(phone)) return reply.status(400).send({ error: 'Attachments are not supported for Instagram / Facebook chats yet' });
+    const session = await prisma.session.findUnique({ where: { workspaceId_phoneNumber: { workspaceId: w, phoneNumber: phone } } });
+    if (!session) return reply.status(404).send({ error: 'Contact not found' });
+    if (!session.isAgentPaused) return reply.status(409).send({ error: 'Pause the bot for this chat before replying manually' });
+    if (waFor(w).status !== 'ready') return reply.status(503).send({ error: 'WhatsApp is not connected' });
+    const ext = type.mime === 'application/pdf' ? '.pdf' : type.mime === 'image/jpeg' ? '.jpg' : type.mime === 'image/png' ? '.png' : type.mime === 'image/webp' ? '.webp' : type.mime === 'video/quicktime' ? '.mov' : '.mp4';
+    const base = String(body.name ?? 'file').replace(/[\\/:*?"<>|\u0000-\u001f]/g, '').replace(/\.[A-Za-z0-9]{1,5}$/, '').trim().slice(0, 80) || 'file';
+    try {
+      await sendMediaMessage(w, phone, { kind: type.kind, buffer, mime: type.mime, fileName: base + ext, caption: String(body.caption ?? '').trim().slice(0, 1000) || undefined });
     } catch (err) {
       return reply.status(502).send({ error: `Could not send: ${(err as Error).message}` });
     }

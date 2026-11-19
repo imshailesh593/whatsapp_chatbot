@@ -3,7 +3,7 @@ import path from 'path';
 import pino from 'pino';
 import qrcodeTerminal from 'qrcode-terminal';
 import { handleIncomingMessage } from './engine';
-import { setTransport, sendTextMessage, logMessage } from './transport';
+import { setTransport, sendTextMessage, logMessage, type OutgoingMedia } from './transport';
 import { UNSUPPORTED_MEDIA_MESSAGE } from './botConfig';
 import os from 'os';
 import { prisma } from '../lib/prisma';
@@ -100,6 +100,7 @@ export class WaConnection {
     this.authDir = path.join(authBase(), workspaceId);
     setTransport(workspaceId, {
       sendText: (to, text) => this.sendText(to, text),
+      sendMedia: (to, media) => this.sendMedia(to, media),
       ready: () => this.status === 'ready'
     });
   }
@@ -258,6 +259,22 @@ export class WaConnection {
       }
       await handleIncomingMessage(wsId, key, name, text, id);
     });
+  }
+
+  private async sendMedia(to: string, media: OutgoingMedia): Promise<void> {
+    if (!this.sock || this.status !== 'ready') throw new Error('WhatsApp is not connected');
+    const jid = this.jids.get(to) ?? `${to}@s.whatsapp.net`;
+    const caption = media.caption || undefined;
+    const content =
+      media.kind === 'image' ? { image: media.buffer, caption, mimetype: media.mime }
+      : media.kind === 'video' ? { video: media.buffer, caption, mimetype: media.mime }
+      : { document: media.buffer, caption, mimetype: media.mime, fileName: media.fileName };
+    const sent = await this.sock.sendMessage(jid, content);
+    const sid: string | undefined = sent?.key?.id;
+    if (sid) {
+      this.ownSent.add(sid);
+      if (this.ownSent.size > 2000) this.ownSent.delete(this.ownSent.values().next().value as string);
+    }
   }
 
   private async recordPhoneMessage(m: any, key: string, text: string): Promise<void> {
