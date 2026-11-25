@@ -1076,18 +1076,21 @@ export function registerSite(app: FastifyInstance): void {
       const ip = String(req.headers['x-forwarded-for'] ?? req.ip).split(',')[0].trim();
       const now = Date.now();
       // limits: per address, and overall (the forwarded address can be spoofed, so the overall cap bounds what a flood can write)
-      if (unlocks.size > 5000) for (const [k, v] of unlocks) if (v.reset < now) unlocks.delete(k);
-      if (unlocks.size > 5000) unlocks.clear();
-      if (global.reset < now) { global.n = 0; global.reset = now + 3_600_000; }
-      if (++global.n > 600) return reply.status(429).type('text/plain').send('Too many attempts. Try again later.');
+      if (unlocks.size > 5000) {
+        for (const [k, v] of unlocks) if (v.reset < now) unlocks.delete(k);
+        for (const k of unlocks.keys()) { if (unlocks.size <= 4000) break; unlocks.delete(k); } // oldest first
+      }
       const slot = unlocks.get(ip);
       if (!slot || slot.reset < now) unlocks.set(ip, { n: 1, reset: now + 3_600_000 });
       else if (++slot.n > 20) return reply.status(429).type('text/plain').send('Too many attempts. Try again later.');
       const phone = cleanPhone(b.phone);
       if (!validPhone(phone)) return reply.redirect(`${next}?pe=1${anchor}`, 303);
       const region = detectRegion(req.headers, req.ip, {}).region;
+      // past the overall hourly cap the number is not stored, but the visitor still gets the prices
+      if (global.reset < now) { global.n = 0; global.reset = now + 3_600_000; }
+      const store = ++global.n <= 600;
       try {
-        await prisma.pricingLead.upsert({
+        if (store) await prisma.pricingLead.upsert({
           where: { phone },
           create: { phone, region, source: next },
           update: { visits: { increment: 1 }, lastSeenAt: new Date() }
