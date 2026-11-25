@@ -17,6 +17,7 @@ import {
   verifyAgainstDummy,
   verifyPassword
 } from './lib/auth';
+import { ZERNIO_PLATFORMS, connectLink as zernioConnectLink, deleteAccount as zernioDelete, ensureProfile as ensureZernioProfile, listAccounts as zernioAccounts, zernioConfigured, type ZernioPlatform } from './services/zernio';
 import { createWorkspaceWithOwner } from './lib/workspaces';
 import { handleIncomingMessage } from './services/engine';
 import { clearSimHistory } from './services/aiChat';
@@ -595,6 +596,53 @@ export function registerAdmin(app: FastifyInstance, opts: { getQr: (workspaceId:
     // answered at once: Meta wants a reply within seconds, the AI and the reply back can take longer
     void processWebhook(req.body).catch((e) => console.error('[meta webhook]', (e as Error).message));
     return reply.status(200).send('EVENT_RECEIVED');
+  });
+
+  // ---- Zernio: connect other social accounts (Instagram, LinkedIn, YouTube, TikTok ...) ----
+  app.get('/admin/api/zernio/status', { preHandler: guard }, async (req) => {
+    if (!zernioConfigured()) return { configured: false, platforms: [], accounts: [] };
+    const ws = await prisma.workspace.findUniqueOrThrow({ where: { id: wsId(req) }, select: { zernioProfileId: true } });
+    let accounts: { id: string; platform: string; name: string; active: boolean }[] = [];
+    if (ws.zernioProfileId) {
+      try {
+        accounts = (await zernioAccounts(ws.zernioProfileId)).accounts
+          .filter((a) => !a.profileId || a.profileId === ws.zernioProfileId)
+          .map((a) => ({ id: a._id, platform: a.platform, name: a.displayName || a.username || a.platform, active: a.isActive !== false }));
+      } catch (e) { console.error('[zernio] list failed:', (e as Error).message); }
+    }
+    return { configured: true, platforms: ZERNIO_PLATFORMS, accounts };
+  });
+
+  app.post('/admin/api/zernio/connect', { preHandler: manager }, async (req, reply) => {
+    if (!zernioConfigured()) return reply.status(400).send({ error: 'Social account connections are not set up on this server yet.' });
+    const platform = String(((req.body ?? {}) as { platform?: string }).platform ?? '') as ZernioPlatform;
+    if (!ZERNIO_PLATFORMS.includes(platform)) return reply.status(400).send({ error: 'Unknown platform' });
+    try {
+      const ws = await prisma.workspace.findUniqueOrThrow({ where: { id: wsId(req) }, select: { businessName: true } });
+      const profileId = await ensureZernioProfile(wsId(req), ws.businessName);
+      const link = await zernioConnectLink(platform, profileId, `${publicUrl(req)}/admin/?zernio=connected`);
+      return { url: link.authUrl };
+    } catch (e) {
+      console.error('[zernio] connect failed:', (e as Error).message);
+      return reply.status(502).send({ error: 'Could not start the connection. Please try again.' });
+    }
+  });
+
+  app.post('/admin/api/zernio/disconnect', { preHandler: manager }, async (req, reply) => {
+    const id = String(((req.body ?? {}) as { accountId?: string }).accountId ?? '');
+    const ws = await prisma.workspace.findUniqueOrThrow({ where: { id: wsId(req) }, select: { zernioProfileId: true } });
+    if (!id || !ws.zernioProfileId) return reply.status(404).send({ error: 'Account not found' });
+    try {
+      // only accounts that belong to this business's own profile can be removed
+      const mine = (await zernioAccounts(ws.zernioProfileId)).accounts.some((a) => a._id === id && (!a.profileId || a.profileId === ws.zernioProfileId));
+      if (!mine) return reply.status(404).send({ error: 'Account not found' });
+      await zernioDelete(id);
+    } catch (e) {
+      console.error('[zernio] disconnect failed:', (e as Error).message);
+      return reply.status(502).send({ error: 'Could not disconnect. Please try again.' });
+    }
+    await audit(req, 'zernio.disconnect', wsId(req), id);
+    return { ok: true };
   });
 
   app.get('/admin/api/meta/status', { preHandler: guard }, async (req) => metaStatus(wsId(req)));

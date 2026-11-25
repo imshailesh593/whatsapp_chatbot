@@ -4,6 +4,7 @@ import type { AdminUser, Overview } from '../types';
 import Admins from './Admins';
 import WhatsAppLink from './WhatsAppLink';
 import MetaLink from './MetaLink';
+import ZernioLink from './ZernioLink';
 import BusinessProfile from './BusinessProfile';
 import BotBuilder from './BotBuilder';
 import Billing from './Billing';
@@ -55,7 +56,7 @@ export default function Settings({ overview, me, onChanged, section, onSection }
 
       <div className="min-w-0">
         {current.id === 'whatsapp' && <WhatsAppLink onChanged={onChanged} />}
-        {current.id === 'social' && <MetaLink onChanged={onChanged} />}
+        {current.id === 'social' && <div className="space-y-5"><MetaLink onChanged={onChanged} /><ZernioLink /></div>}
         {current.id === 'business' && <BusinessProfile workspace={overview.workspace} onSaved={onChanged} />}
         {current.id === 'menu' && <BotBuilder overview={overview} onSaved={onChanged} />}
         {current.id === 'booking' && <Appointments me={me} />}

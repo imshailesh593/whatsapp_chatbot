@@ -388,6 +388,12 @@ export interface AffiliateAdmin {
   commissions: { id: string; affiliate: string; payoutDetails: string; referred: string; amount: number; currency: string; status: string; at: string; paidAt: string | null }[];
 }
 
+export interface ZernioStatus {
+  configured: boolean;
+  platforms: string[];
+  accounts: { id: string; platform: string; name: string; active: boolean }[];
+}
+
 export interface MetaStatus {
   configured: boolean;
   connected: boolean;

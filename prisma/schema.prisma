@@ -59,6 +59,8 @@ model Workspace {
   /// Workspace that referred this one (plain text so deleting a referrer does not touch the referred)
   referredById           String?   @map("referred_by_id")
   payoutDetails          String    @default("") @map("payout_details")
+  /// Zernio profile that holds this business's connected social accounts
+  zernioProfileId        String    @default("") @map("zernio_profile_id")
   /// pro | internal (unlimited, for the operator's own business); older starter / growth / scale count as pro
   plan                   String    @default("pro")
   /// inactive (not paid yet) | active | past_due | canceled
