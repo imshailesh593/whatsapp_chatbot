@@ -2,7 +2,7 @@ import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
 import { LogIn, Plus, Search, Trash2, X } from 'lucide-react';
 import { api } from '../api';
 import { ago } from '../config';
-import type { AuditEntry, PlatformDetail, PlatformOverview, PlatformWorkspace } from '../types';
+import type { AuditEntry, PlatformDetail, PricingLeadRow, PlatformOverview, PlatformWorkspace } from '../types';
 
 const PLANS = ['', 'pro', 'internal'];
 const WA: Record<string, string> = { ready: 'text-brand-text', qr: 'text-warn', off: 'text-muted' };
@@ -135,8 +135,41 @@ export default function Platform() {
         </div>
       </div>
 
+      <PricingLeads />
+
       {creating && <CreateBusiness onClose={() => setCreating(false)} onCreated={(id) => { setCreating(false); load(); setOpenId(id); }} />}
       {openId && <Detail id={openId} onClose={() => { setOpenId(null); load(); }} />}
+    </div>
+  );
+}
+
+/** Website visitors who left their WhatsApp number to see the prices. */
+function PricingLeads() {
+  const [rows, setRows] = useState<PricingLeadRow[] | null>(null);
+  useEffect(() => { api.pricingLeads().then((r) => setRows(r.leads)).catch(() => setRows([])); }, []);
+  return (
+    <div className={card + ' p-5'}>
+      <h3 className="font-bold text-fg text-base mb-1">Pricing page visitors{rows ? ` (${rows.length})` : ''}</h3>
+      <p className="text-xs text-muted mb-3">People who entered their WhatsApp number on the website to see the plans.</p>
+      {rows && rows.length === 0 && <p className="text-xs text-muted">Nobody yet.</p>}
+      {rows && rows.length > 0 && (
+        <div className="overflow-x-auto max-h-80 overflow-y-auto">
+          <table className="w-full text-xs text-left">
+            <thead className="text-muted"><tr><th className="py-2 pr-4">WhatsApp</th><th className="py-2 pr-4">Region</th><th className="py-2 pr-4">From page</th><th className="py-2 pr-4">Visits</th><th className="py-2">Last seen</th></tr></thead>
+            <tbody className="divide-y divide-line">
+              {rows.map((r) => (
+                <tr key={r.id}>
+                  <td className="py-2 pr-4 text-fg font-semibold"><a href={`https://wa.me/${r.phone}`} target="_blank" rel="noreferrer" className="hover:underline">+{r.phone}</a></td>
+                  <td className="py-2 pr-4 text-fg2">{r.region || '—'}</td>
+                  <td className="py-2 pr-4 text-fg2">{r.source === '/pricing' ? 'Pricing page' : 'Home page'}</td>
+                  <td className="py-2 pr-4 text-fg2">{r.visits}</td>
+                  <td className="py-2 text-muted">{ago(r.lastSeenAt)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   );
 }

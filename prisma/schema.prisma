@@ -552,3 +552,17 @@ model CommentEvent {
   @@index([accountId, createdAt])
   @@map("saas_comment_events")
 }
+
+/// A website visitor who left their WhatsApp number to see the prices
+model PricingLead {
+  id         String   @id @default(uuid())
+  phone      String   @unique
+  region     String   @default("")
+  /// Page they unlocked from (/ or /pricing)
+  source     String   @default("")
+  visits     Int      @default(1)
+  createdAt  DateTime @default(now()) @map("created_at")
+  lastSeenAt DateTime @default(now()) @map("last_seen_at")
+
+  @@map("saas_pricing_leads")
+}

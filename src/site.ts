@@ -5,6 +5,8 @@ import type { FastifyInstance, FastifyReply } from 'fastify';
 import { PRODUCT_NAME } from './brand';
 import { PLANS, GRACE_DAYS } from './plans';
 import { detectRegion, type Region } from './lib/geo';
+import { cleanPhone, priceCookie, pricesUnlocked, validPhone } from './lib/priceGate';
+import { prisma } from './lib/prisma';
 
 /**
  * The public website: landing page, privacy policy, terms, refund policy and contact page.
@@ -67,6 +69,7 @@ h3{font-size:19px;margin:0 0 8px;letter-spacing:-.02em;font-weight:650}
 .lead{font-size:20px;color:var(--ink2);max-width:30em;line-height:1.55;letter-spacing:-.01em}
 .cta{display:flex;flex-wrap:wrap;gap:12px;margin:32px 0 14px}
 .fine{font-size:14px;color:var(--mute)}
+.gate{max-width:460px;margin:8px auto 0;background:var(--card);border:1px solid var(--line);border-radius:18px;padding:28px;text-align:center}.gate h3{margin:0 0 6px;font-size:20px}.gate p{margin:0 0 16px;color:var(--mute);font-size:15px}.gate input{width:100%;box-sizing:border-box;padding:14px 16px;border-radius:12px;border:1px solid var(--line);font-size:17px;margin-bottom:12px;background:var(--bg);color:var(--ink)}.gate .err{color:#b91c1c;font-size:14px;margin:0 0 10px}.gate button{width:100%;cursor:pointer;font-family:inherit}
 .chips{display:flex;flex-wrap:wrap;gap:8px 22px;margin-top:26px;color:var(--ink2);font-size:14.5px;font-weight:500}
 .chips span:before{content:"✓";color:var(--brand);font-weight:800;margin-right:7px}
 /* product preview */
@@ -421,6 +424,14 @@ const planIcon = (k: string) => `<svg class="pi" viewBox="0 0 24 24" width="22" 
  * included. Yearly is the highlighted one. Visitors in India see rupees (UPI AutoPay or card), everyone else dollars (PayPal or
  * card); a link under the plans switches the currency (a wrong guess is one click to fix).
  */
+function priceGateHtml(path: string, error: boolean): string {
+  return `<form class="gate" method="post" action="/pricing/unlock"><input type="hidden" name="next" value="${esc(path)}">
+<h3>See the plans and prices</h3><p>Enter your WhatsApp number to view our plans. We will only use it to help you get started.</p>
+${error ? '<p class="err">Enter a valid WhatsApp number with country code, for example +91 98765 43210.</p>' : ''}
+<input type="tel" name="phone" inputmode="tel" autocomplete="tel" required placeholder="+91 98765 43210" aria-label="Your WhatsApp number">
+<button class="btn p" type="submit">Show me the prices</button></form>`;
+}
+
 function planCardsHtml(region: Region, path: string): string {
   const rupees = region === 'IN';
   const anchor = path === '/' ? '#pricing' : '';
@@ -466,9 +477,9 @@ function planCardsHtml(region: Region, path: string): string {
   return `<div class="pl">${monthly}${yearly}</div><p class="fine center" style="margin-top:20px">${switcher}</p>`;
 }
 
-function landing(region: Region): string {
+function landing(region: Region, unlocked: boolean, gateError = false): string {
   const name = esc(PRODUCT_NAME);
-  const planCards = planCardsHtml(region, '/');
+  const planCards = unlocked ? planCardsHtml(region, '/') : priceGateHtml('/', gateError);
 
   const faq: [string, string][] = [
     ['Do I need the official WhatsApp Business API?', `No. ${PRODUCT_NAME} links to your existing WhatsApp number through WhatsApp's "Linked devices" feature, the same way WhatsApp Web works. There is no Meta approval process and no per-message fee from us.`],
@@ -476,7 +487,7 @@ function landing(region: Region): string {
     ['What does the AI do, and what does it not do?', 'It answers questions from the facts you give it (prices, hours, policies), in the language the customer writes in. If the answer is not in your notes it does not guess. It also writes the short briefing when a customer asks for a person, and helps you set up. The questions customers must answer are always the ones you wrote.'],
     ['Can customers talk to a real person?', 'Yes. If a customer asks for a human, the bot stops replying in that chat and alerts you with a summary. You reply from your phone or the dashboard, then hand the chat back to the bot when you are done.'],
     ['How does appointment booking work?', 'Set your working days, hours and appointment length once. The customer replies BOOK, picks a date, then picks a time. The bot books it, confirms it to them on WhatsApp, alerts you and reminds them before it starts. You can use the built-in calendar or connect Google Calendar.'],
-    ['How much does it cost, and can I cancel?', `Two plans with everything included: ${inr(PLANS[0].price.INR)} a month or ${inr(PLANS[0].yearlyINR)} a year in India, ${usd(PLANS[0].price.USD)} a month or ${usd(PLANS[0].yearlyUSD)} a year everywhere else. It is a monthly subscription that renews automatically. Cancel any time from your dashboard and keep access until the end of the period you paid for. See the <a href="/refunds">refund and cancellation policy</a>.`],
+    ['How much does it cost, and can I cancel?', `Two plans with everything included: monthly or yearly (see the plans above once you have entered your WhatsApp number). It is a monthly subscription that renews automatically. Cancel any time from your dashboard and keep access until the end of the period you paid for. See the <a href="/refunds">refund and cancellation policy</a>.`],
     ['How does the monthly auto-debit work?', `You subscribe once and approve the recurring payment: in India with UPI AutoPay or a card (through Razorpay), elsewhere with PayPal or a card. After that the monthly amount is debited automatically on the same date, and you are notified before each debit. Nothing is charged until you approve. To stop, cancel under Plan &amp; billing (or from your UPI app or PayPal) and no further payments are taken.`],
     ['What happens when my plan ends?', `The bot stops replying to new messages, but your leads and settings stay safe. A paid plan whose renewal fails keeps working for a ${GRACE_DAYS}-day grace period so you can fix the payment.`],
     ['Who can see my customers\' chats?', `Only you and the team members you add. We process the messages to run the service and never sell them. Read the <a href="/privacy">privacy policy</a> for details, including which providers are involved.`],
@@ -689,7 +700,7 @@ ${faq.map(([q, a]) => `<details><summary>${esc(q)}</summary><p>${a}</p></details
 <p>${signupOpen() ? `Get ${name} running on your own WhatsApp number.` : `Open the dashboard to get started.`}</p>
 <a class="btn p" href="/admin/?plan=pro">${signupOpen() ? 'Get started' : 'Open the dashboard'}</a>
 </div></div></section>`;
-  return page({ title: `${PRODUCT_NAME}: WhatsApp lead capture, CRM and appointment booking`, description: `${PRODUCT_NAME} turns WhatsApp enquiries into qualified leads: guided questions, AI answers, human hand-off, in-chat appointment booking, CRM, broadcasts and analytics on your own number. ${inr(PLANS[0].price.INR)} a month in India, ${usd(PLANS[0].price.USD)} elsewhere.`, path: '/', body, landing: true });
+  return page({ title: `${PRODUCT_NAME}: WhatsApp lead capture, CRM and appointment booking`, description: `${PRODUCT_NAME} turns WhatsApp enquiries into qualified leads: guided questions, AI answers, human hand-off, in-chat appointment booking, CRM, broadcasts and analytics on your own number. Plans for monthly or yearly billing.`, path: '/', body, landing: true });
 }
 
 // ---------- legal pages ----------
@@ -989,15 +1000,15 @@ ${contactLines()}
   });
 }
 
-function pricing(region: Region): string {
+function pricing(region: Region, unlocked: boolean, gateError = false): string {
   const p = esc(PRODUCT_NAME);
   return page({
     title: `Pricing | ${PRODUCT_NAME}`,
-    description: `${PRODUCT_NAME} pricing: ${inr(PLANS[0].price.INR)} a month or ${inr(PLANS[0].yearlyINR)} a year in India, ${usd(PLANS[0].price.USD)} a month or ${usd(PLANS[0].yearlyUSD)} a year elsewhere.`,
+    description: `${PRODUCT_NAME} plans and pricing for WhatsApp lead capture, monthly or yearly.`,
     path: '/pricing',
     body: `<main class="doc wide"><h1>Pricing</h1>
 <p>${pricingLead(region)} Customers in India pay in Indian rupees by subscription (UPI AutoPay or card, through Razorpay); customers elsewhere pay in US dollars (PayPal or card).</p>
-${planCardsHtml(region, '/pricing')}
+${unlocked ? planCardsHtml(region, '/pricing') : priceGateHtml('/pricing', gateError)}
 <h2>Good to know</h2>
 <ul>
 <li>Both plans are subscriptions: you approve the recurring payment once and it is debited automatically every month (or every year on the yearly plan) on the same date, with a reminder before each debit. Cancel any time and you keep access until the end of the period you have paid for.</li>
@@ -1040,13 +1051,42 @@ export function registerSite(app: FastifyInstance): void {
   // Hero video and poster (range requests supported, so playback starts quickly)
   app.register(fastifyStatic, { root: path.join(__dirname, '..', 'public'), prefix: '/media/', decorateReply: false, maxAge: '7d' });
 
-  app.get('/', async (req, reply) => send(reply, landing(regionOf(req, reply)), 200, true));
+  app.get('/', async (req, reply) => send(reply, landing(regionOf(req, reply), pricesUnlocked(req.headers.cookie), (req.query as any)?.pe === '1'), 200, true));
   app.get('/privacy', async (_req, reply) => send(reply, privacy()));
   app.get('/terms', async (_req, reply) => send(reply, terms()));
   app.get('/refunds', async (_req, reply) => send(reply, refunds()));
   app.get('/contact', async (_req, reply) => send(reply, contact()));
   app.get('/about', async (_req, reply) => send(reply, about()));
-  app.get('/pricing', async (req, reply) => send(reply, pricing(regionOf(req, reply)), 200, true));
+  app.get('/pricing', async (req, reply) => send(reply, pricing(regionOf(req, reply), pricesUnlocked(req.headers.cookie), (req.query as any)?.pe === '1'), 200, true));
+
+  // A visitor leaves their WhatsApp number to see the prices. Plain form post (the site runs no scripts).
+  app.addContentTypeParser('application/x-www-form-urlencoded', { parseAs: 'string', bodyLimit: 4096 }, (_req, body, done) => {
+    try { done(null, Object.fromEntries(new URLSearchParams(String(body)))); } catch (e) { done(e as Error); }
+  });
+  const unlocks = new Map<string, { n: number; reset: number }>();
+  app.post('/pricing/unlock', async (req, reply) => {
+    const b = (req.body ?? {}) as { phone?: string; next?: string };
+    const next = b.next === '/pricing' ? '/pricing' : '/';
+    const anchor = next === '/' ? '#pricing' : '';
+    const ip = String(req.headers['x-forwarded-for'] ?? req.ip).split(',')[0].trim();
+    const now = Date.now();
+    const slot = unlocks.get(ip);
+    if (!slot || slot.reset < now) unlocks.set(ip, { n: 1, reset: now + 3_600_000 });
+    else if (++slot.n > 20) return reply.status(429).type('text/plain').send('Too many attempts. Try again later.');
+    const phone = cleanPhone(b.phone);
+    if (!validPhone(phone)) return reply.redirect(`${next}?pe=1${anchor}`, 303);
+    const region = detectRegion(req.headers, req.ip, {}).region;
+    try {
+      await prisma.pricingLead.upsert({
+        where: { phone },
+        create: { phone, region, source: next },
+        update: { visits: { increment: 1 }, lastSeenAt: new Date() }
+      });
+    } catch (e) { console.error('[pricing lead]', (e as Error).message); }
+    const secure = String(req.headers['x-forwarded-proto'] ?? '').startsWith('https');
+    reply.header('Set-Cookie', priceCookie(phone, secure));
+    return reply.redirect(`${next}${anchor}`, 303);
+  });
   app.get('/shipping', async (_req, reply) => send(reply, shipping()));
   app.get('/data-deletion', async (_req, reply) => send(reply, dataDeletion()));
 

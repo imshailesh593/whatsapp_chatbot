@@ -388,6 +388,16 @@ export interface AffiliateAdmin {
   commissions: { id: string; affiliate: string; payoutDetails: string; referred: string; amount: number; currency: string; status: string; at: string; paidAt: string | null }[];
 }
 
+export interface PricingLeadRow {
+  id: string;
+  phone: string;
+  region: string;
+  source: string;
+  visits: number;
+  createdAt: string;
+  lastSeenAt: string;
+}
+
 export interface ZernioStatus {
   configured: boolean;
   platforms: string[];

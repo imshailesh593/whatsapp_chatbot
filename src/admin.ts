@@ -1252,6 +1252,12 @@ export function registerAdmin(app: FastifyInstance, opts: { getQr: (workspaceId:
     };
   });
 
+  // website visitors who left their WhatsApp number to see the prices
+  app.get('/admin/api/super/pricing-leads', { preHandler: superOnly }, async () => {
+    const rows = await prisma.pricingLead.findMany({ orderBy: { lastSeenAt: 'desc' }, take: 500 });
+    return { leads: rows.map((r) => ({ id: r.id, phone: r.phone, region: r.region, source: r.source, visits: r.visits, createdAt: r.createdAt.toISOString(), lastSeenAt: r.lastSeenAt.toISOString() })) };
+  });
+
   app.post('/admin/api/simulate/reset', { preHandler: guard }, async (req) => {
     const phone = simPhone((req.body as any)?.id);
     clearSimHistory(wsId(req), phone);

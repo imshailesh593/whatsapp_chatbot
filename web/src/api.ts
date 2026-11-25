@@ -1,4 +1,4 @@
-import type { CommentEvent, CommentSettings, MetaStatus, ZernioStatus, ConfigInfo, PaymentsSetup, AffiliateAdmin, ReferralInfo, CalendarInfo, CouponInfo, PlatformSettingsInfo, AuditEntry, PlatformDetail, PlatformOverview, LeadEventInfo, AnalyticsData, ApiKeyInfo, IntegrationsInfo, WebhookInfo, BroadcastInfo, StageDef, BillingInfo, AdminRow, AdminUser, ChatMessage, ChatTurn, Contact, Draft, Overview, PatchBody, PlatformWorkspace, ServiceDef, TemplateInfo, WaSnapshot, Workspace } from './types';
+import type { CommentEvent, CommentSettings, MetaStatus, PricingLeadRow, ZernioStatus, ConfigInfo, PaymentsSetup, AffiliateAdmin, ReferralInfo, CalendarInfo, CouponInfo, PlatformSettingsInfo, AuditEntry, PlatformDetail, PlatformOverview, LeadEventInfo, AnalyticsData, ApiKeyInfo, IntegrationsInfo, WebhookInfo, BroadcastInfo, StageDef, BillingInfo, AdminRow, AdminUser, ChatMessage, ChatTurn, Contact, Draft, Overview, PatchBody, PlatformWorkspace, ServiceDef, TemplateInfo, WaSnapshot, Workspace } from './types';
 
 export class UnauthorizedError extends Error {}
 
@@ -91,6 +91,7 @@ export const api = {
   platformUpdatePlan: (id: string, body: Record<string, unknown>) => request<{ ok: true }>(`/admin/api/super/plans/${id}`, { method: 'PUT', body: JSON.stringify(body) }),
   platformResetPlan: (id: string) => post<{ ok: true }>(`/admin/api/super/plans/${id}/reset`, {}),
   platformSetSettings: (body: { platformSender?: boolean; maxConnections?: number }) => request<PlatformSettingsInfo>('/admin/api/super/settings', { method: 'PUT', body: JSON.stringify(body) }),
+  pricingLeads: () => request<{ leads: PricingLeadRow[] }>('/admin/api/super/pricing-leads'),
   platformOverview: () => request<PlatformOverview>('/admin/api/super/overview'),
   platformDetail: (id: string) => request<PlatformDetail>(`/admin/api/super/workspaces/${encodeURIComponent(id)}`),
   platformCreate: (body: { businessName: string; email: string; password: string; plan: string; days: number }) => post<{ id: string }>('/admin/api/super/workspaces', body),
