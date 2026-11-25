@@ -1068,12 +1068,18 @@ export function registerSite(app: FastifyInstance): void {
       });
     }
     const unlocks = new Map<string, { n: number; reset: number }>();
+    const global = { n: 0, reset: 0 };
     scope.post('/pricing/unlock', async (req, reply) => {
       const b = (req.body ?? {}) as { phone?: string; next?: string };
       const next = b.next === '/pricing' ? '/pricing' : '/';
       const anchor = next === '/' ? '#pricing' : '';
       const ip = String(req.headers['x-forwarded-for'] ?? req.ip).split(',')[0].trim();
       const now = Date.now();
+      // limits: per address, and overall (the forwarded address can be spoofed, so the overall cap bounds what a flood can write)
+      if (unlocks.size > 5000) for (const [k, v] of unlocks) if (v.reset < now) unlocks.delete(k);
+      if (unlocks.size > 5000) unlocks.clear();
+      if (global.reset < now) { global.n = 0; global.reset = now + 3_600_000; }
+      if (++global.n > 600) return reply.status(429).type('text/plain').send('Too many attempts. Try again later.');
       const slot = unlocks.get(ip);
       if (!slot || slot.reset < now) unlocks.set(ip, { n: 1, reset: now + 3_600_000 });
       else if (++slot.n > 20) return reply.status(429).type('text/plain').send('Too many attempts. Try again later.');
