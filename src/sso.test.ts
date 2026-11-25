@@ -41,6 +41,13 @@ test('only platform staff can be signed in, never a customer account', async () 
   assert.equal(isStaffAccount({ isSuperAdmin: false, workspaceId: 'customer-ws' }), false);
 });
 
+test('the Authentik group is checked here too', async () => {
+  const { inRequiredGroup } = await ssoP;
+  assert.equal(inRequiredGroup(['app-wappo', 'app-mns']), true);
+  assert.equal(inRequiredGroup(['app-mns']), false);
+  assert.equal(inRequiredGroup([]), false);
+});
+
 test('signed values reject tampering and expiry', async () => {
   const { signValue, readValue } = await authP;
   const s = signValue({ state: 'abc' }, 60);

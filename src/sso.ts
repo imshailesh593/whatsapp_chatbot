@@ -32,6 +32,10 @@ export function safeNext(next: unknown): string {
   return /^\/admin(\/[A-Za-z0-9\-._~/?#&=%]*)?$/.test(s) && !s.startsWith('//') ? s : '/admin/';
 }
 
+/** Checked here too (Authentik's policy binding already enforces it). */
+export const requiredGroup = () => process.env.SSO_REQUIRED_GROUP || 'app-wappo';
+export const inRequiredGroup = (groups: string[]) => groups.includes(requiredGroup());
+
 /** The operator's team only: never a customer's account. */
 export function isStaffAccount(u: { isSuperAdmin: boolean; workspaceId: string }): boolean {
   return u.isSuperAdmin || u.workspaceId === DEFAULT_WORKSPACE_ID;
@@ -57,7 +61,7 @@ export function newAuthRequest(next: string) {
 }
 
 /** Code -> access token -> userinfo. Throws on any failure. */
-async function identityFor(code: string, verifier: string): Promise<{ sub: string; email: string }> {
+async function identityFor(code: string, verifier: string): Promise<{ sub: string; email: string; groups: string[] }> {
   const auth = Buffer.from(`${process.env.SSO_CLIENT_ID}:${process.env.SSO_CLIENT_SECRET}`).toString('base64');
   const tokenRes = await fetch(`${base()}/application/o/token/`, {
     method: 'POST',
@@ -70,9 +74,9 @@ async function identityFor(code: string, verifier: string): Promise<{ sub: strin
   if (!access_token) throw new Error('no access token');
   const infoRes = await fetch(`${base()}/application/o/userinfo/`, { headers: { authorization: `Bearer ${access_token}` }, signal: AbortSignal.timeout(10_000) });
   if (!infoRes.ok) throw new Error(`userinfo answered ${infoRes.status}`);
-  const info = (await infoRes.json()) as { sub?: string; email?: string };
+  const info = (await infoRes.json()) as { sub?: string; email?: string; groups?: unknown };
   if (!info.sub) throw new Error('no subject');
-  return { sub: String(info.sub), email: normalizeEmail(info.email) };
+  return { sub: String(info.sub), email: normalizeEmail(info.email), groups: Array.isArray(info.groups) ? info.groups.map(String) : [] };
 }
 
 function readCookie(req: FastifyRequest, name: string): string | undefined {
@@ -106,7 +110,11 @@ export function registerSso(app: FastifyInstance) {
       return fail(reply.header('Set-Cookie', clearState));
     }
     try {
-      const { sub, email } = await identityFor(q.code, saved.verifier);
+      const { sub, email, groups } = await identityFor(q.code, saved.verifier);
+      if (!inRequiredGroup(groups)) {
+        req.log.warn({ sub }, '[sso] refused: not in the required Authentik group');
+        return fail(reply.header('Set-Cookie', clearState));
+      }
       const user =
         (await prisma.adminUser.findUnique({ where: { ssoSubject: sub } })) ??
         (email ? await prisma.adminUser.findFirst({ where: { email, ssoSubject: null } }) : null);
