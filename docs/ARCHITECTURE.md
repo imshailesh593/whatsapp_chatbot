@@ -80,6 +80,8 @@ One Node process hosts everything: HTTP server, the WhatsApp sessions, the conve
 | **Billing** | `billing.ts`, `paypal.ts`, `razorpaySetup.ts`, `coupons.ts`, `affiliate.ts`, `plans.ts`, `usage.ts` | Plans and limits, checkout, webhooks, payments, redeem codes, referral commissions, usage counters |
 | **Operator tools** | `platformStats.ts`, `settings.ts`, `src/cli/*` | Platform dashboard, global settings, CLIs (`adminUser`, `razorpaySetup`, `paypalSetup`) |
 | **Auth** | `src/lib/auth.ts` | Password hashing, signed session cookies, roles |
+| **Admin Hub single sign-in** | `src/sso.ts` | Platform staff only (`isSuperAdmin` or the default workspace): `/admin/api/sso/start` → Authentik (auth.zexyai.com) → `/admin/api/sso/callback`. Never creates accounts; links by email once into `mns_admin_users.sso_subject`, then by subject. 12 h session. Off unless `SSO_ENABLED=1` (+ `SSO_CLIENT_ID`, `SSO_CLIENT_SECRET`). No button on the public login page: staff use the Admin Hub tile |
+| **Admin Hub feed** | `src/hubFeed.ts` | `GET /internal/hub/feed` with bearer `HUB_FEED_KEY` (404 while unset): chats in the operator's own workspace that asked for a person, paying businesses whose WhatsApp disconnected, past-due businesses; 7-day events (sign-ups, payments, hand-offs) for the Admin Hub at auth.zexyai.com/hub |
 
 **Background workers** (all inside the same process):
 

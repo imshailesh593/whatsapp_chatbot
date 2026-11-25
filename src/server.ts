@@ -6,6 +6,8 @@ import { qrPageHtml } from './qrPage';
 import { startWhatsApp, waFor, waSummary } from './services/whatsapp';
 import { prisma } from './lib/prisma';
 import { registerAdmin } from './admin';
+import { registerSso } from './sso';
+import { registerHubFeed } from './hubFeed';
 import { DEFAULT_WORKSPACE_ID } from './lib/workspaces';
 import { startBroadcastWorker } from './services/broadcast';
 import { startWebhookWorker } from './services/integrations';
@@ -29,6 +31,8 @@ const qrDataUrl = async (workspaceId: string) => {
 };
 
 registerAdmin(app, { getQr: qrDataUrl });
+registerSso(app);
+registerHubFeed(app);
 registerPublicApi(app);
 registerSite(app);
 

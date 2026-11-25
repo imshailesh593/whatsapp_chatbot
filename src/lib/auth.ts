@@ -36,10 +36,33 @@ const SESSION_DAYS = 30;
 
 export const authConfigured = () => secret().length > 0;
 
-export function signSession(userId: string): string {
-  const body = Buffer.from(JSON.stringify({ uid: userId, exp: Date.now() + SESSION_DAYS * 86_400_000 })).toString('base64url');
+/** `days` defaults to 30; single sign-in sessions pass 0.5 (12 hours, matching the Admin Hub session). */
+export function signSession(userId: string, days = SESSION_DAYS): string {
+  const body = Buffer.from(JSON.stringify({ uid: userId, exp: Date.now() + days * 86_400_000 })).toString('base64url');
   const sig = crypto.createHmac('sha256', secret()).update(body).digest('base64url');
   return `${body}.${sig}`;
+}
+
+/** Any small JSON value in a tamper-proof cookie (same HMAC as the session), valid for `seconds`. */
+export function signValue(value: unknown, seconds: number): string {
+  const body = Buffer.from(JSON.stringify({ v: value, exp: Date.now() + seconds * 1000 })).toString('base64url');
+  const sig = crypto.createHmac('sha256', secret()).update(body).digest('base64url');
+  return `${body}.${sig}`;
+}
+
+export function readValue<T>(signed: string | undefined): T | null {
+  if (!signed || !authConfigured()) return null;
+  const [body, sig] = signed.split('.');
+  if (!body || !sig) return null;
+  const expected = crypto.createHmac('sha256', secret()).update(body).digest('base64url');
+  const a = Buffer.from(sig), b = Buffer.from(expected);
+  if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) return null;
+  try {
+    const { v, exp } = JSON.parse(Buffer.from(body, 'base64url').toString('utf8'));
+    return typeof exp === 'number' && exp > Date.now() ? (v as T) : null;
+  } catch {
+    return null;
+  }
 }
 
 export function readSession(value: string | undefined): string | null {

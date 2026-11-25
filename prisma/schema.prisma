@@ -229,6 +229,8 @@ model AdminUser {
   isSuperAdmin Boolean   @default(false) @map("is_super_admin")
   createdAt    DateTime  @default(now()) @map("created_at")
   lastLoginAt  DateTime? @map("last_login_at")
+  /// Admin Hub (Authentik) subject, set on the first single sign-in; platform staff only
+  ssoSubject   String?   @unique @map("sso_subject")
 
   @@map("mns_admin_users")
 }

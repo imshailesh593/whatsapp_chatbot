@@ -453,6 +453,9 @@ export function serverMemory() {
   return { botRssMb: Math.round(mem.rss / 1048576), systemTotalMb: Math.round(os.totalmem() / 1048576), systemFreeMb: Math.round(os.freemem() / 1048576) };
 }
 
+/** Status of a workspace's connection if one exists, without creating one (unlike waFor). */
+export const connectionStatus = (workspaceId: string): WaStatus | null => connections.get(workspaceId)?.status ?? null;
+
 export const waSummary = () => ({
   total: connections.size,
   ready: [...connections.values()].filter((c) => c.status === 'ready').length
