@@ -371,7 +371,6 @@ export function registerAdmin(app: FastifyInstance, opts: { getQr: (workspaceId:
       admins: rows.map((a) => ({
         id: a.id,
         email: a.email,
-        phone: a.phone,
         role: a.role,
         createdAt: a.createdAt.toISOString(),
         lastLoginAt: a.lastLoginAt?.toISOString() ?? null
