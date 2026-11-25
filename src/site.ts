@@ -1060,32 +1060,37 @@ export function registerSite(app: FastifyInstance): void {
   app.get('/pricing', async (req, reply) => send(reply, pricing(regionOf(req, reply), pricesUnlocked(req.headers.cookie), (req.query as any)?.pe === '1'), 200, true));
 
   // A visitor leaves their WhatsApp number to see the prices. Plain form post (the site runs no scripts).
-  app.addContentTypeParser('application/x-www-form-urlencoded', { parseAs: 'string', bodyLimit: 4096 }, (_req, body, done) => {
-    try { done(null, Object.fromEntries(new URLSearchParams(String(body)))); } catch (e) { done(e as Error); }
-  });
-  const unlocks = new Map<string, { n: number; reset: number }>();
-  app.post('/pricing/unlock', async (req, reply) => {
-    const b = (req.body ?? {}) as { phone?: string; next?: string };
-    const next = b.next === '/pricing' ? '/pricing' : '/';
-    const anchor = next === '/' ? '#pricing' : '';
-    const ip = String(req.headers['x-forwarded-for'] ?? req.ip).split(',')[0].trim();
-    const now = Date.now();
-    const slot = unlocks.get(ip);
-    if (!slot || slot.reset < now) unlocks.set(ip, { n: 1, reset: now + 3_600_000 });
-    else if (++slot.n > 20) return reply.status(429).type('text/plain').send('Too many attempts. Try again later.');
-    const phone = cleanPhone(b.phone);
-    if (!validPhone(phone)) return reply.redirect(`${next}?pe=1${anchor}`, 303);
-    const region = detectRegion(req.headers, req.ip, {}).region;
-    try {
-      await prisma.pricingLead.upsert({
-        where: { phone },
-        create: { phone, region, source: next },
-        update: { visits: { increment: 1 }, lastSeenAt: new Date() }
+  // its own scope, so its form parser can't clash with parsers registered elsewhere
+  app.register(async (scope) => {
+    if (!scope.hasContentTypeParser('application/x-www-form-urlencoded')) {
+      scope.addContentTypeParser('application/x-www-form-urlencoded', { parseAs: 'string', bodyLimit: 4096 }, (_req, body, done) => {
+        try { done(null, Object.fromEntries(new URLSearchParams(String(body)))); } catch (e) { done(e as Error); }
       });
-    } catch (e) { console.error('[pricing lead]', (e as Error).message); }
-    const secure = String(req.headers['x-forwarded-proto'] ?? '').startsWith('https');
-    reply.header('Set-Cookie', priceCookie(phone, secure));
-    return reply.redirect(`${next}${anchor}`, 303);
+    }
+    const unlocks = new Map<string, { n: number; reset: number }>();
+    scope.post('/pricing/unlock', async (req, reply) => {
+      const b = (req.body ?? {}) as { phone?: string; next?: string };
+      const next = b.next === '/pricing' ? '/pricing' : '/';
+      const anchor = next === '/' ? '#pricing' : '';
+      const ip = String(req.headers['x-forwarded-for'] ?? req.ip).split(',')[0].trim();
+      const now = Date.now();
+      const slot = unlocks.get(ip);
+      if (!slot || slot.reset < now) unlocks.set(ip, { n: 1, reset: now + 3_600_000 });
+      else if (++slot.n > 20) return reply.status(429).type('text/plain').send('Too many attempts. Try again later.');
+      const phone = cleanPhone(b.phone);
+      if (!validPhone(phone)) return reply.redirect(`${next}?pe=1${anchor}`, 303);
+      const region = detectRegion(req.headers, req.ip, {}).region;
+      try {
+        await prisma.pricingLead.upsert({
+          where: { phone },
+          create: { phone, region, source: next },
+          update: { visits: { increment: 1 }, lastSeenAt: new Date() }
+        });
+      } catch (e) { console.error('[pricing lead]', (e as Error).message); }
+      const secure = String(req.headers['x-forwarded-proto'] ?? '').startsWith('https');
+      reply.header('Set-Cookie', priceCookie(phone, secure));
+      return reply.redirect(`${next}${anchor}`, 303);
+    });
   });
   app.get('/shipping', async (_req, reply) => send(reply, shipping()));
   app.get('/data-deletion', async (_req, reply) => send(reply, dataDeletion()));
