@@ -52,7 +52,9 @@ export async function ensureProfile(workspaceId: string, name: string): Promise<
     const r = await createProfile({ name: name.slice(0, 80), externalId: workspaceId });
     id = r.profile?._id ?? r._id ?? '';
   } catch (e) {
-    id = (e as any).data?.details?.existingProfileId ?? '';
+    if ((e as any).status !== 409) throw e;
+    // adopt an existing profile only if it really was created for this workspace
+    id = (await listProfiles()).profiles.find((p) => p.externalId === workspaceId)?._id ?? '';
     if (!id) throw e;
   }
   if (!id) throw new Error('Zernio did not return a profile id');

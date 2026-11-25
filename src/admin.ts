@@ -606,7 +606,7 @@ export function registerAdmin(app: FastifyInstance, opts: { getQr: (workspaceId:
     if (ws.zernioProfileId) {
       try {
         accounts = (await zernioAccounts(ws.zernioProfileId)).accounts
-          .filter((a) => !a.profileId || a.profileId === ws.zernioProfileId)
+          .filter((a) => a.profileId === ws.zernioProfileId)
           .map((a) => ({ id: a._id, platform: a.platform, name: a.displayName || a.username || a.platform, active: a.isActive !== false }));
       } catch (e) { console.error('[zernio] list failed:', (e as Error).message); }
     }
@@ -634,7 +634,7 @@ export function registerAdmin(app: FastifyInstance, opts: { getQr: (workspaceId:
     if (!id || !ws.zernioProfileId) return reply.status(404).send({ error: 'Account not found' });
     try {
       // only accounts that belong to this business's own profile can be removed
-      const mine = (await zernioAccounts(ws.zernioProfileId)).accounts.some((a) => a._id === id && (!a.profileId || a.profileId === ws.zernioProfileId));
+      const mine = (await zernioAccounts(ws.zernioProfileId)).accounts.some((a) => a._id === id && a.profileId === ws.zernioProfileId);
       if (!mine) return reply.status(404).send({ error: 'Account not found' });
       await zernioDelete(id);
     } catch (e) {
