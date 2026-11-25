@@ -168,6 +168,7 @@ export interface PlatformWorkspace {
   slug: string;
   industry: string;
   owner: string | null;
+  ownerPhone: string;
   whatsapp: string;
   botEnabled: boolean;
   plan: string;
@@ -201,7 +202,7 @@ export interface PlatformDetail {
   currentPeriodEnd: string | null;
   limits: { conversations: number | null; aiReplies: number | null; broadcasts: number | null };
   usage: { conversations: number; aiReplies: number; broadcasts: number };
-  users: { id: string; email: string; role: string; isSuperAdmin: boolean; lastLoginAt: string | null }[];
+  users: { id: string; email: string; phone: string; role: string; isSuperAdmin: boolean; lastLoginAt: string | null }[];
   payments: { id: string; amount: number; currency: string; status: string; plan: string; at: string }[];
   audit: { id: string; actor: string; action: string; detail: string; at: string }[];
 }

@@ -19,8 +19,8 @@ const post = <T,>(url: string, body: unknown) => request<T>(url, { method: 'POST
 export const api = {
   me: () => request<{ authed: boolean; user?: AdminUser }>('/admin/api/me'),
   login: (email: string, password: string) => post<{ ok: true; user: AdminUser }>('/admin/api/login', { email, password }),
-  signup: (businessName: string, email: string, password: string, ref?: string) =>
-    post<{ ok: true; user: AdminUser }>('/admin/api/signup', { businessName, email, password, ref }),
+  signup: (businessName: string, email: string, password: string, phone: string, ref?: string) =>
+    post<{ ok: true; user: AdminUser }>('/admin/api/signup', { businessName, email, password, phone, ref }),
   changePassword: (current: string, next: string) => post<{ ok: true }>('/admin/api/password', { current, next }),
   admins: () => request<{ admins: AdminRow[] }>('/admin/api/admins').then((r) => r.admins),
   addAdmin: (email: string, password: string, role: 'admin' | 'agent') => post<{ admin: { id: string; email: string } }>('/admin/api/admins', { email, password, role }),

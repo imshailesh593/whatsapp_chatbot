@@ -321,19 +321,21 @@ export function registerAdmin(app: FastifyInstance, opts: { getQr: (workspaceId:
   // Self-service sign-up: creates a new workspace (paused until the owner goes live) and its owner
   app.post('/admin/api/signup', async (req, reply) => {
     if (!enabled || process.env.SIGNUP_ENABLED === '0') return reply.status(404).send();
-    const b = (req.body ?? {}) as { businessName?: string; email?: string; password?: string; ref?: string };
+    const b = (req.body ?? {}) as { businessName?: string; email?: string; password?: string; phone?: string; ref?: string };
     const ip = clientIp(req);
     if (throttled(signups, `ip:${ip}`, 5)) return reply.status(429).send({ error: 'Too many sign-ups from this network. Try again later.' });
     const businessName = String(b.businessName ?? '').replace(/\s+/g, ' ').trim().slice(0, 80);
     const email = normalizeEmail(b.email);
     const password = String(b.password ?? '');
+    const phone = String(b.phone ?? '').replace(/\D/g, '');
     if (!businessName) return reply.status(400).send({ error: 'Enter your business name' });
+    if (phone.length < 8 || phone.length > 15) return reply.status(400).send({ error: 'Enter your WhatsApp number with country code, e.g. 919876543210' });
     if (!isValidEmail(email)) return reply.status(400).send({ error: 'Enter a valid email address' });
     if (password.length < MIN_PASSWORD_LENGTH) return reply.status(400).send({ error: `Password must be at least ${MIN_PASSWORD_LENGTH} characters` });
     if (await prisma.adminUser.findUnique({ where: { email } })) return reply.status(409).send({ error: 'An account with this email already exists. Sign in instead.' });
     bump(signups, `ip:${ip}`, 60 * 60_000);
     const referredById = await referrerFor(b.ref);
-    const ws = await createWorkspaceWithOwner({ businessName, email, password, referredById });
+    const ws = await createWorkspaceWithOwner({ businessName, email, password, phone, referredById });
     const owner = ws.adminUsers[0];
     setSession(req, reply, owner.id);
     return { ok: true, user: await meView({ id: owner.id, email, workspaceId: ws.id, role: 'owner', isSuperAdmin: false }) };
@@ -369,6 +371,7 @@ export function registerAdmin(app: FastifyInstance, opts: { getQr: (workspaceId:
       admins: rows.map((a) => ({
         id: a.id,
         email: a.email,
+        phone: a.phone,
         role: a.role,
         createdAt: a.createdAt.toISOString(),
         lastLoginAt: a.lastLoginAt?.toISOString() ?? null
@@ -1431,6 +1434,7 @@ export function registerAdmin(app: FastifyInstance, opts: { getQr: (workspaceId:
         slug: w.slug,
         industry: w.industry,
         owner: w.adminUsers[0]?.email ?? null,
+        ownerPhone: w.adminUsers[0]?.phone ?? '',
         whatsapp: waFor(w.id).status,
         botEnabled: w.botEnabled,
         plan: w.plan,
@@ -1485,7 +1489,7 @@ export function registerAdmin(app: FastifyInstance, opts: { getQr: (workspaceId:
       currentPeriodEnd: w.currentPeriodEnd?.toISOString() ?? null,
       limits: { conversations: lim.conversations === Infinity ? null : lim.conversations, aiReplies: lim.aiReplies === Infinity ? null : lim.aiReplies, broadcasts: lim.broadcasts === Infinity ? null : lim.broadcasts },
       usage,
-      users: w.adminUsers.map((u) => ({ id: u.id, email: u.email, role: u.role, isSuperAdmin: u.isSuperAdmin, lastLoginAt: u.lastLoginAt?.toISOString() ?? null })),
+      users: w.adminUsers.map((u) => ({ id: u.id, email: u.email, phone: u.phone, role: u.role, isSuperAdmin: u.isSuperAdmin, lastLoginAt: u.lastLoginAt?.toISOString() ?? null })),
       payments: payments.map((p) => ({ id: p.id, amount: p.amount, currency: p.currency, status: p.status, plan: p.plan, at: p.createdAt.toISOString() })),
       audit: log.map((l) => ({ id: l.id, actor: l.actor, action: l.action, detail: l.detail, at: l.createdAt.toISOString() }))
     };

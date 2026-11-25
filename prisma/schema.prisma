@@ -219,6 +219,8 @@ model AdminUser {
   workspace    Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   email        String    @unique
   passwordHash String    @map("password_hash")
+  /// WhatsApp number given at sign-up (digits with country code)
+  phone        String    @default("")
   /// owner | admin | agent
   role         String    @default("owner")
   /// Platform operator: can list and open every workspace

@@ -38,7 +38,7 @@ export default function Platform() {
     const s = q.trim().toLowerCase();
     return rows.filter(
       (w) =>
-        (!s || w.businessName.toLowerCase().includes(s) || (w.owner ?? '').toLowerCase().includes(s)) &&
+        (!s || w.businessName.toLowerCase().includes(s) || (w.owner ?? '').toLowerCase().includes(s) || w.ownerPhone.includes(s.replace(/\D/g, '') || '\u0000')) &&
         (filter === 'all' ||
           (filter === 'paying' && ['pro', 'starter', 'growth', 'scale'].includes(w.plan) && w.planStatus === 'active' && w.planAccess === 'ok') ||
           (filter === 'lapsed' && w.plan !== 'internal' && w.planAccess !== 'ok') ||
@@ -107,7 +107,7 @@ export default function Platform() {
               {shown.map((w) => (
                 <tr key={w.id} onClick={() => setOpenId(w.id)} className="hover:bg-sunken cursor-pointer">
                   <td className="py-3 px-4"><div className="font-semibold text-fg">{w.businessName}</div><div className="text-[12.5px] text-muted">{w.onboardingCompleted ? w.industry : 'setting up'} · joined {new Date(w.createdAt).toLocaleDateString()}</div></td>
-                  <td className="py-3 px-4 text-fg2">{w.owner ?? '—'}</td>
+                  <td className="py-3 px-4 text-fg2">{w.owner ?? '—'}{w.ownerPhone && <div className="text-[12.5px] text-muted">+{w.ownerPhone}</div>}</td>
                   <td className={`py-3 px-4 font-semibold ${WA[w.whatsapp] ?? 'text-warn'}`}>{w.whatsapp}</td>
                   <td className="py-3 px-4 text-fg2">{planLabel(w)}</td>
                   <td className="py-3 px-4 text-fg2">{w.conversationsThisMonth}</td>
@@ -239,7 +239,7 @@ function Detail({ id, onClose }: { id: string; onClose: () => void }) {
           <div className="divide-y divide-line border border-line rounded-xl overflow-hidden">
             {d.users.map((u) => (
               <div key={u.id} className="flex items-center justify-between px-3 py-2 bg-card">
-                <div><div className="text-fg">{u.email} <span className="ml-1 text-[12px] px-1.5 py-0.5 rounded bg-subtle text-fg2">{u.role}{u.isSuperAdmin ? ' · platform' : ''}</span></div><div className="text-[12.5px] text-muted">Last sign-in: {u.lastLoginAt ? ago(u.lastLoginAt) : 'never'}</div></div>
+                <div><div className="text-fg">{u.email} <span className="ml-1 text-[12px] px-1.5 py-0.5 rounded bg-subtle text-fg2">{u.role}{u.isSuperAdmin ? ' · platform' : ''}</span></div><div className="text-[12.5px] text-muted">{u.phone ? `WhatsApp +${u.phone} · ` : ''}Last sign-in: {u.lastLoginAt ? ago(u.lastLoginAt) : 'never'}</div></div>
                 <div className="flex gap-1.5">
                   <button onClick={() => { const p = window.prompt(`New password for ${u.email} (min 10 characters):`); if (p) run(() => api.platformResetPassword(u.id, p), `Password reset for ${u.email}`); }} className="px-2.5 py-1 bg-subtle hover:bg-subtle rounded-lg border border-line-strong text-fg">Reset password</button>
                   <button onClick={() => { if (window.confirm(`Remove ${u.email}?`)) run(() => api.platformRemoveUser(u.id)); }} className="p-1.5 text-muted hover:text-danger"><Trash2 className="w-3.5 h-3.5" /></button>

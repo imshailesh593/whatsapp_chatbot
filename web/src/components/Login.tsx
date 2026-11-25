@@ -42,6 +42,7 @@ export default function Login({ onDone }: { onDone: (user: AdminUser) => void })
   const [businessName, setBusinessName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [phone, setPhone] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const signup = mode === 'signup' && (product.signupEnabled || !!ref);
@@ -51,7 +52,7 @@ export default function Login({ onDone }: { onDone: (user: AdminUser) => void })
     setBusy(true);
     setError('');
     try {
-      const res = signup ? await api.signup(businessName, email, password, ref || undefined) : await api.login(email, password);
+      const res = signup ? await api.signup(businessName, email, password, phone, ref || undefined) : await api.login(email, password);
       onDone(res.user);
     } catch (err) {
       setError((err as Error).message);
@@ -101,6 +102,14 @@ export default function Login({ onDone }: { onDone: (user: AdminUser) => void })
             </div>
           )}
 
+          {signup && (
+            <div className="mb-4">
+              <label className={label} htmlFor="wa">Your WhatsApp number</label>
+              <input id="wa" type="tel" inputMode="tel" autoComplete="tel" required value={phone} onChange={(e) => setPhone(e.target.value)} className={input} placeholder="+91 98765 43210" />
+              <p className="text-xs text-muted mt-1">Include the country code. We use it to reach you about your account.</p>
+            </div>
+          )}
+
           <div className="mb-4">
             <label className={label} htmlFor="email">Email</label>
             <input id="email" type="email" autoComplete="username" autoFocus={!signup} required value={email} onChange={(e) => setEmail(e.target.value)} className={input} placeholder="you@example.com" />
@@ -113,7 +122,7 @@ export default function Login({ onDone }: { onDone: (user: AdminUser) => void })
 
           {error && <p className="text-sm text-danger bg-danger-soft border border-danger-line rounded-lg px-3 py-2 mt-4" role="alert">{error}</p>}
           <button
-            disabled={busy || !email || !password || (signup && !businessName.trim())}
+            disabled={busy || !email || !password || (signup && (!businessName.trim() || phone.replace(/\D/g, '').length < 8))}
             className="w-full mt-6 py-3 bg-brand hover:bg-brand-strong text-on-brand font-semibold text-sm rounded-lg shadow-card transition disabled:opacity-50"
           >
             {busy ? (signup ? 'Creating…' : 'Signing in…') : signup ? 'Create account' : 'Sign in'}
