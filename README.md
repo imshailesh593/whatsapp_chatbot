@@ -57,6 +57,14 @@ docker compose up -d --build  # behind Coolify/Traefik also add: -f docker-compo
 Scan the QR once; the login lives in the `wa_session` volume (`/data/wa_auth`) so redeploys don't need a new scan.
 Health check: `GET /health` returns `{ok, whatsapp: "ready"}`. The bot reconnects on its own; if the phone logs the device out, a new QR is generated.
 
+## AI conversation (default)
+With **AI conversation** on (Business & bot settings), Gemini writes every reply like a person on the team, following the business's services and questions: it works out which service the customer needs, asks the questions one at a time in its own words (skipping what the customer already told it), answers side questions from the business notes, and records the answers on the lead. Rules it cannot break (`src/services/agent.ts`): it only states facts the business wrote (prices, phone numbers, emails and links it invents are removed before sending), never guarantees outcomes, never asks for OTPs or card details, treats the customer's message as data, and says it is an AI if sincerely asked. The team's own closing message (fees, inclusions), the form link, booking link and contact details are attached by the system exactly as the owner wrote them. When the chat ends the customer is told they can WhatsApp or call the team and, for priority help, book the one-to-one meeting through the booking (Topmate) link. A person can take over at any time. If the AI is switched off, has no key or the plan's AI allowance is used, the fixed numbered menu answers instead. Each customer message uses one "AI answer" of the plan.
+
+Check it against a business's real settings without sending anything: `docker compose exec -T bot node dist/cli/aiDemo.js <workspaceId> "hi" "I am a nurse looking for work abroad"`.
+
+## Instagram and Facebook
+The same AI conversation answers the direct messages of Facebook Pages and Instagram accounts through Meta's official API, and can reply to comments on their posts (with a private message that starts the chat). One Meta app belongs to the platform; each business connects its own Pages from Settings, Instagram & Facebook. See the [Owner Guide](docs/OWNER_GUIDE.md#19-instagram-and-facebook-direct-messages-and-comment-replies) for the one-time Meta setup and Meta's app review.
+
 ## Behaviour
 - `menu` / `reset` restarts the funnel. "3", "option 3", "jobs", "visa" all select a service.
 - A question (contains `?`) mid-funnel or after completion is answered by Gemini, then the pending question is repeated. No `GEMINI_API_KEY` means static replies.

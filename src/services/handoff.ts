@@ -1,3 +1,4 @@
+import { contactLabel } from '../lib/channel';
 import { Prisma } from '@prisma/client';
 import { prisma } from '../lib/prisma';
 import { summarizeForAgent } from './gemini';
@@ -100,7 +101,7 @@ async function briefTeam(cfg: BotConfig, workspaceId: string, phone: string, ses
     summary = summary || plainSummary(session.contactName, answers, turns);
     await prisma.session.update({ where: { id: sessionId }, data: { handoffSummary: summary.slice(0, 1500) } });
     if (session.lead) void logLeadEvent(session.lead.id, workspaceId, 'handoff', 'Customer asked for a person; bot paused', 'bot');
-    const who = `${session.contactName || 'A customer'} · ${/^\d+$/.test(phone) ? '+' + phone : phone}`;
+    const who = `${session.contactName || 'A customer'} · ${contactLabel(phone)}`;
     const link = (process.env.PUBLIC_URL || '').replace(/\/$/, '');
     await deliverAlert(
       workspaceId,

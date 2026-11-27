@@ -1,0 +1,52 @@
+name: Deploy to server
+
+# Manual for now (Actions tab -> Deploy to server -> Run workflow). To deploy on every push, add:
+#   push:
+#     branches: [main]
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: deploy
+  cancel-in-progress: false
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx prisma generate
+      - run: npx tsc --noEmit
+      - run: npm --prefix web ci && npm --prefix web run build
+
+  deploy:
+    needs: check
+    # Only main may deploy, so a branch cannot send its own copy of the script to the server
+    if: github.ref == 'refs/heads/main'
+    # Optional: in Settings > Environments > production, add a required reviewer and move DEPLOY_KEY there
+    environment: production
+    runs-on: ubuntu-latest
+    env:
+      DEPLOY_HOST: 201.18.198.8
+      # The server's public host key, so the connection cannot be silently redirected
+      KNOWN_HOSTS: "201.18.198.8 ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIPvpKhPpxBbTtto0mM6W++aZWiOHJQ69Kk6DM6NThkSQ"
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up SSH
+        env:
+          DEPLOY_KEY: ${{ secrets.DEPLOY_KEY }}
+        run: |
+          [ -n "$DEPLOY_KEY" ] || { echo "Add the DEPLOY_KEY secret first (repo Settings > Secrets and variables > Actions)"; exit 1; }
+          install -d -m 700 ~/.ssh
+          printf '%s\n' "$DEPLOY_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          printf '%s\n' "$KNOWN_HOSTS" > ~/.ssh/known_hosts
+      - name: Deploy
+        run: |
+          scp -i ~/.ssh/deploy_key scripts/deploy-server.sh root@$DEPLOY_HOST:/tmp/wappo-deploy.sh
+          ssh -i ~/.ssh/deploy_key root@$DEPLOY_HOST 'bash /tmp/wappo-deploy.sh'

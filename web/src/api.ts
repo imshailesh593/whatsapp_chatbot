@@ -1,4 +1,4 @@
-import type { ConfigInfo, PaymentsSetup, AffiliateAdmin, ReferralInfo, CalendarInfo, CouponInfo, PlatformSettingsInfo, AuditEntry, PlatformDetail, PlatformOverview, LeadEventInfo, AnalyticsData, ApiKeyInfo, IntegrationsInfo, WebhookInfo, BroadcastInfo, StageDef, BillingInfo, AdminRow, AdminUser, ChatMessage, ChatTurn, Contact, Draft, Overview, PatchBody, PlatformWorkspace, ServiceDef, TemplateInfo, WaSnapshot, Workspace } from './types';
+import type { CommentEvent, CommentSettings, MetaStatus, PricingLeadRow, ZernioStatus, ConfigInfo, PaymentsSetup, AffiliateAdmin, ReferralInfo, CalendarInfo, CouponInfo, PlatformSettingsInfo, AuditEntry, PlatformDetail, PlatformOverview, LeadEventInfo, AnalyticsData, ApiKeyInfo, IntegrationsInfo, WebhookInfo, BroadcastInfo, StageDef, BillingInfo, AdminRow, AdminUser, ChatMessage, ChatTurn, Contact, Draft, Overview, PatchBody, PlatformWorkspace, ServiceDef, TemplateInfo, WaSnapshot, Workspace } from './types';
 
 export class UnauthorizedError extends Error {}
 
@@ -19,8 +19,8 @@ const post = <T,>(url: string, body: unknown) => request<T>(url, { method: 'POST
 export const api = {
   me: () => request<{ authed: boolean; user?: AdminUser }>('/admin/api/me'),
   login: (email: string, password: string) => post<{ ok: true; user: AdminUser }>('/admin/api/login', { email, password }),
-  signup: (businessName: string, email: string, password: string, ref?: string) =>
-    post<{ ok: true; user: AdminUser }>('/admin/api/signup', { businessName, email, password, ref }),
+  signup: (businessName: string, email: string, password: string, phone: string, ref?: string) =>
+    post<{ ok: true; user: AdminUser }>('/admin/api/signup', { businessName, email, password, phone, ref }),
   changePassword: (current: string, next: string) => post<{ ok: true }>('/admin/api/password', { current, next }),
   admins: () => request<{ admins: AdminRow[] }>('/admin/api/admins').then((r) => r.admins),
   addAdmin: (email: string, password: string, role: 'admin' | 'agent') => post<{ admin: { id: string; email: string } }>('/admin/api/admins', { email, password, role }),
@@ -48,6 +48,14 @@ export const api = {
   leadEvents: (phone: string) => request<{ events: LeadEventInfo[] }>(`/admin/api/contacts/${encodeURIComponent(phone)}/events`).then((r) => r.events),
   alertInfo: () => request<{ emailAvailable: boolean; whatsappReady: boolean }>('/admin/api/alerts'),
   testAlert: () => post<{ whatsapp: string; email: string }>('/admin/api/alerts/test', {}),
+  zernioStatus: () => request<ZernioStatus>('/admin/api/zernio/status'),
+  zernioConnect: (platform: string) => post<{ url: string }>('/admin/api/zernio/connect', { platform }),
+  zernioDisconnect: (accountId: string) => post<{ ok: true }>('/admin/api/zernio/disconnect', { accountId }),
+  metaStatus: () => request<MetaStatus>('/admin/api/meta/status'),
+  metaConnect: () => request<{ url: string }>('/admin/api/meta/connect'),
+  metaDisconnect: (pageId: string) => post<{ ok: true }>('/admin/api/meta/disconnect', { pageId }),
+  metaComments: () => request<{ settings: CommentSettings; events: CommentEvent[] }>('/admin/api/meta/comments'),
+  saveMetaComments: (s: CommentSettings) => request<{ settings: CommentSettings }>('/admin/api/meta/comments', { method: 'PUT', body: JSON.stringify(s) }),
   calendar: () => request<CalendarInfo>('/admin/api/calendar'),
   calendarBuiltin: () => post<{ ok: true }>('/admin/api/calendar/builtin', {}),
   calendarConnect: () => request<{ url: string }>('/admin/api/calendar/connect'),
@@ -65,14 +73,14 @@ export const api = {
   platformCouponActive: (id: string, active: boolean) => post<{ ok: true }>(`/admin/api/super/coupons/${id}/active`, { active }),
   platformDeleteCoupon: (id: string) => request<{ ok: true }>(`/admin/api/super/coupons/${id}`, { method: 'DELETE' }),
   billing: () => request<BillingInfo>('/admin/api/billing'),
-  checkout: (plan: string, provider: 'stripe' | 'razorpay' | 'paypal') => post<{ url: string }>('/admin/api/billing/checkout', { plan, provider }),
+  checkout: (plan: string, provider: 'stripe' | 'razorpay' | 'paypal', period: 'month' | 'year' = 'month') => post<{ url: string }>('/admin/api/billing/checkout', { plan, provider, period }),
   billingPortal: () => post<{ url: string }>('/admin/api/billing/portal', {}),
   cancelSubscription: () => post<{ ok: true }>('/admin/api/billing/cancel', {}),
   platformDashboard: (days: number) => request<any>(`/admin/api/super/dashboard?days=${days}`),
   platformSubscriptions: () => request<{ subscriptions: { id: string; business: string; owner: string | null; plan: string; status: string; access: string; provider: string | null; renews: string | null; cancelAtPeriodEnd: boolean; priceInr: number }[] }>('/admin/api/super/subscriptions').then((r) => r.subscriptions),
   platformPaymentsSetup: (live: boolean) => request<PaymentsSetup>(`/admin/api/super/payments-setup${live ? '?live=1' : ''}`),
   platformPayments: () => request<{ payments: { id: string; business: string; provider: string; plan: string; amount: number; currency: string; status: string; at: string }[] }>('/admin/api/super/payments').then((r) => r.payments),
-  platformPlans: () => request<{ plans: { id: string; name: string; blurb: string; price: { INR: number; USD: number }; limits: { conversations: number; aiReplies: number; seats: number; broadcasts: number }; integrations: boolean; clients: number }[]; internal: number }>('/admin/api/super/plans'),
+  platformPlans: () => request<{ plans: { id: string; name: string; blurb: string; price: { INR: number; USD: number }; yearlyUSD: number; yearlyINR: number; limits: { conversations: number; aiReplies: number; seats: number; broadcasts: number }; integrations: boolean; clients: number }[]; internal: number }>('/admin/api/super/plans'),
   platformSettings: () => request<PlatformSettingsInfo>('/admin/api/super/settings'),
   platformConfig: () => request<ConfigInfo>('/admin/api/super/config'),
   platformSaveConfig: (values: Record<string, string>) => request<ConfigInfo>('/admin/api/super/config', { method: 'PUT', body: JSON.stringify({ values }) }),
@@ -83,6 +91,7 @@ export const api = {
   platformUpdatePlan: (id: string, body: Record<string, unknown>) => request<{ ok: true }>(`/admin/api/super/plans/${id}`, { method: 'PUT', body: JSON.stringify(body) }),
   platformResetPlan: (id: string) => post<{ ok: true }>(`/admin/api/super/plans/${id}/reset`, {}),
   platformSetSettings: (body: { platformSender?: boolean; maxConnections?: number }) => request<PlatformSettingsInfo>('/admin/api/super/settings', { method: 'PUT', body: JSON.stringify(body) }),
+  pricingLeads: () => request<{ leads: PricingLeadRow[] }>('/admin/api/super/pricing-leads'),
   platformOverview: () => request<PlatformOverview>('/admin/api/super/overview'),
   platformDetail: (id: string) => request<PlatformDetail>(`/admin/api/super/workspaces/${encodeURIComponent(id)}`),
   platformCreate: (body: { businessName: string; email: string; password: string; plan: string; days: number }) => post<{ id: string }>('/admin/api/super/workspaces', body),
@@ -113,6 +122,8 @@ export const api = {
       method: 'PATCH',
       body: JSON.stringify(body)
     }).then((r) => r.contact),
+  markRead: (phone: string) => post<{ ok: true }>(`/admin/api/contacts/${encodeURIComponent(phone)}/read`, {}),
+  sendMedia: (phone: string, name: string, data: string, caption: string) => post<{ ok: true }>(`/admin/api/contacts/${encodeURIComponent(phone)}/send-media`, { name, data, caption }),
   send: (phone: string, text: string) => post<{ ok: true }>(`/admin/api/contacts/${encodeURIComponent(phone)}/send`, { text }),
   simulate: (id: string, name: string, text: string) =>
     post<{ replies: string[]; state: { stage: string; service: string | null; step: number; totalSteps: number } }>(

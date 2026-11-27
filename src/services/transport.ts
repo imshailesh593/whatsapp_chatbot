@@ -1,15 +1,28 @@
 import { AsyncLocalStorage } from 'async_hooks';
 import { prisma } from '../lib/prisma';
+import { isSocial } from '../lib/channel';
+import { saveMedia } from './mediaStore';
 
 /** Thin seam between the conversation engine and whatever actually delivers messages (a WhatsApp link per workspace, or a fake in tests). */
+export type MediaKind = 'image' | 'video' | 'document';
+export interface OutgoingMedia { kind: MediaKind; buffer: Buffer; mime: string; fileName: string; caption?: string }
+
 export interface Transport {
   sendText(to: string, text: string): Promise<void>;
+  /** Sends a photo, video or document (WhatsApp only) */
+  sendMedia?(to: string, media: OutgoingMedia): Promise<void>;
   /** Is the underlying connection usable right now? */
   ready?(): boolean;
 }
 
 const transports = new Map<string, Transport>();
 const capture = new AsyncLocalStorage<string[]>();
+
+/** Instagram and Facebook Messenger go out through Meta, not WhatsApp (registered by services/meta.ts). */
+let social: ((workspaceId: string, to: string, text: string) => Promise<void>) | null = null;
+export const setSocialSender = (fn: typeof social) => {
+  social = fn;
+};
 
 export function setTransport(workspaceId: string, t: Transport | null): void {
   if (t) transports.set(workspaceId, t);
@@ -31,14 +44,32 @@ export async function logMessage(
   phone: string,
   direction: 'INBOUND' | 'OUTBOUND',
   text: string,
-  wamid?: string
+  wamid?: string,
+  extra?: Record<string, unknown>
 ): Promise<void> {
   try {
     await prisma.webhookLog.create({
-      data: { workspaceId, phoneNumber: phone, direction, payload: wamid ? { text, wamid } : { text } }
+      data: { workspaceId, phoneNumber: phone, direction, payload: { text, ...(wamid ? { wamid } : {}), ...(extra ?? {}) } as any }
     });
   } catch (err) {
     console.error('[log] failed to store message:', (err as Error).message);
+  }
+}
+
+const MEDIA_ICON: Record<MediaKind, string> = { image: '📷', video: '🎥', document: '📄' };
+
+/** Sends an attachment from the Inbox and records it in the chat log (name and kind, not the file itself). */
+export async function sendMediaMessage(workspaceId: string, to: string, media: OutgoingMedia): Promise<void> {
+  if (isSocial(to)) throw new Error('Attachments are not supported for Instagram / Facebook chats yet');
+  const t = transports.get(workspaceId);
+  if (!t?.sendMedia) throw new Error('WhatsApp is not connected for this workspace');
+  await t.sendMedia(to, media);
+  const label = `${MEDIA_ICON[media.kind]} ${media.fileName}` + (media.caption ? `\n${media.caption}` : '');
+  try {
+    const stored = saveMedia(workspaceId, media.buffer, { kind: media.kind, mime: media.mime, name: media.fileName, caption: media.caption });
+    await logMessage(workspaceId, to, 'OUTBOUND', label, undefined, { media: stored });
+  } catch (err) {
+    console.error('[log] failed to store attachment:', (err as Error).message);
   }
 }
 
@@ -64,6 +95,12 @@ async function deliver(workspaceId: string, to: string, text: string): Promise<v
   const buf = capture.getStore();
   if (buf) {
     buf.push(text);
+    return;
+  }
+  if (isSocial(to)) {
+    if (!social) throw new Error('Instagram / Facebook is not set up on this server');
+    await social(workspaceId, to, text);
+    await logMessage(workspaceId, to, 'OUTBOUND', text);
     return;
   }
   const t = transports.get(workspaceId);

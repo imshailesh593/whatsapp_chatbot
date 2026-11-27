@@ -6,6 +6,7 @@ interface PlanOverride {
   name?: string;
   blurb?: string;
   price?: { INR: number; USD: number };
+  yearly?: { INR: number; USD: number };
   limits?: Limits;
   integrations?: boolean;
 }
@@ -18,6 +19,8 @@ function applyOne(def: PlanDef, o: PlanOverride | undefined) {
   def.name = o?.name ?? base.name;
   def.blurb = o?.blurb ?? base.blurb;
   def.price = clone(o?.price ?? base.price);
+  def.yearlyINR = o?.yearly?.INR ?? base.yearlyINR;
+  def.yearlyUSD = o?.yearly?.USD ?? base.yearlyUSD;
   def.limits = clone(o?.limits ?? base.limits);
   def.integrations = o?.integrations ?? base.integrations;
 }
@@ -42,6 +45,7 @@ export async function updatePlan(id: string, body: Record<string, any>): Promise
     name: def.name,
     blurb: def.blurb,
     price: clone(def.price),
+    yearly: { INR: def.yearlyINR, USD: def.yearlyUSD },
     limits: clone(def.limits),
     integrations: def.integrations
   };
@@ -57,6 +61,8 @@ export async function updatePlan(id: string, body: Record<string, any>): Promise
   }
   if (body.priceInr !== undefined) next.price!.INR = Math.round(whole(Math.round(Number(body.priceInr) * 100), 100, 100_000_00, 'The rupee price (₹1 to ₹1,00,000)'));
   if (body.priceUsd !== undefined) next.price!.USD = Math.round(whole(Math.round(Number(body.priceUsd) * 100), 100, 10_000_00, 'The dollar price ($1 to $10,000)'));
+  if (body.yearlyInr !== undefined) next.yearly!.INR = Math.round(whole(Math.round(Number(body.yearlyInr) * 100), 100, 1_000_000_00, 'The yearly rupee price (₹1 to ₹10,00,000)'));
+  if (body.yearlyUsd !== undefined) next.yearly!.USD = Math.round(whole(Math.round(Number(body.yearlyUsd) * 100), 100, 100_000_00, 'The yearly dollar price ($1 to $100,000)'));
   const lim = body.limits ?? {};
   if (lim.conversations !== undefined) next.limits!.conversations = whole(lim.conversations, 1, 10_000_000, 'Conversations');
   if (lim.aiReplies !== undefined) next.limits!.aiReplies = whole(lim.aiReplies, 0, 10_000_000, 'AI answers');

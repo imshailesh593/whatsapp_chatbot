@@ -50,12 +50,12 @@ async function cleanup() {
   ok((await call(J, 'POST', '/admin/api/signup', { businessName: '', email: `a${DOMAIN}`, password: 'long enough pw' })).statusCode === 400, 'sign-up needs a business name');
   ok((await call(J, 'POST', '/admin/api/signup', { businessName: 'Acme', email: 'bad', password: 'long enough pw' })).statusCode === 400, 'sign-up needs a valid email');
   ok((await call(J, 'POST', '/admin/api/signup', { businessName: 'Acme', email: `a${DOMAIN}`, password: 'short' })).statusCode === 400, 'sign-up needs a long password');
-  r = await call(J, 'POST', '/admin/api/signup', { businessName: 'Acme Test', email: `A${DOMAIN}`, password: 'acme owner password' });
+  r = await call(J, 'POST', '/admin/api/signup', { phone: '919876543210', businessName: 'Acme Test', email: `A${DOMAIN}`, password: 'acme owner password' });
   ok(r.statusCode === 200 && r.json().user.role === 'owner' && r.json().user.workspace.onboardingCompleted === false && r.json().user.workspace.botEnabled === false, 'sign-up: owner of a new workspace, onboarding pending, bot off');
   const hA = cookieOf(r);
   const wsA = r.json().user.workspace.id as string;
-  ok((await call(J, 'POST', '/admin/api/signup', { businessName: 'Dup', email: `a${DOMAIN}`, password: 'acme owner password' })).statusCode === 409, 'duplicate email refused');
-  r = await call(J, 'POST', '/admin/api/signup', { businessName: 'Bravo Test', email: `b${DOMAIN}`, password: 'bravo owner password' });
+  ok((await call(J, 'POST', '/admin/api/signup', { phone: '919876543210', businessName: 'Dup', email: `a${DOMAIN}`, password: 'acme owner password' })).statusCode === 409, 'duplicate email refused');
+  r = await call(J, 'POST', '/admin/api/signup', { phone: '919876543210', businessName: 'Bravo Test', email: `b${DOMAIN}`, password: 'bravo owner password' });
   const hB = cookieOf(r);
   const wsB = r.json().user.workspace.id as string;
 
@@ -407,18 +407,18 @@ async function cleanup() {
   const refCode = r.json().code as string;
   ok(r.json().enabled === false && /^[A-Z2-9]{7}$/.test(refCode) && r.json().link.endsWith('/admin/?ref=' + refCode), 'every business gets a referral code and link (programme off by default)');
   ok((await call(hA, 'GET', '/admin/api/referral')).json().code === refCode, 'the code is stable');
-  r = await call(J, 'POST', '/admin/api/signup', { businessName: 'Early Bird', email: `early${DOMAIN}`, password: 'early owner password', ref: refCode });
+  r = await call(J, 'POST', '/admin/api/signup', { phone: '919876543210', businessName: 'Early Bird', email: `early${DOMAIN}`, password: 'early owner password', ref: refCode });
   ok((await prisma.workspace.findUnique({ where: { id: r.json().user.workspace.id } }))!.referredById === null, 'while the programme is off, referral links are ignored');
   ok((await call(hA, 'PUT', '/admin/api/super/affiliates/settings', { enabled: true })).statusCode === 403, 'a business cannot change the programme');
   ok((await call(hRoot, 'PUT', '/admin/api/super/affiliates/settings', { percent: 95 })).statusCode === 400 && (await call(hRoot, 'PUT', '/admin/api/super/affiliates/settings', { months: 0 })).statusCode === 400, 'out-of-range programme settings are refused');
   r = await call(hRoot, 'PUT', '/admin/api/super/affiliates/settings', { enabled: true, percent: 20, months: 3 });
   ok(r.statusCode === 200 && r.json().enabled && r.json().percent === 20, 'the operator switches the programme on');
-  r = await call(J, 'POST', '/admin/api/signup', { businessName: 'Referred Co', email: `ref1${DOMAIN}`, password: 'referred owner password', ref: refCode.toLowerCase() });
+  r = await call(J, 'POST', '/admin/api/signup', { phone: '919876543210', businessName: 'Referred Co', email: `ref1${DOMAIN}`, password: 'referred owner password', ref: refCode.toLowerCase() });
   const wsR = r.json().user.workspace.id as string;
   const refRow = (await prisma.workspace.findUnique({ where: { id: wsR } }))!;
   ok(refRow.referredById === wsA, 'signing up through the link records who referred the business (case-insensitive)');
   ok(refRow.planStatus === 'inactive' && refRow.plan === 'pro', 'a referred business gets no free days: it pays first like everyone else');
-  r = await call(J, 'POST', '/admin/api/signup', { businessName: 'Bogus Ref', email: `ref2${DOMAIN}`, password: 'bogus owner password', ref: 'ZZZZZZZ' });
+  r = await call(J, 'POST', '/admin/api/signup', { phone: '919876543210', businessName: 'Bogus Ref', email: `ref2${DOMAIN}`, password: 'bogus owner password', ref: 'ZZZZZZZ' });
   const bogus = (await prisma.workspace.findUnique({ where: { id: r.json().user.workspace.id } }))!;
   ok(r.statusCode === 200 && bogus.referredById === null, 'an unknown code does not block sign-up');
 

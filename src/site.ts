@@ -1,8 +1,12 @@
 import { SITE_JS } from './siteScript';
+import fastifyStatic from '@fastify/static';
+import path from 'path';
 import type { FastifyInstance, FastifyReply } from 'fastify';
 import { PRODUCT_NAME } from './brand';
 import { PLANS, GRACE_DAYS } from './plans';
 import { detectRegion, type Region } from './lib/geo';
+import { cleanPhone, priceCookie, pricesUnlocked, validPhone } from './lib/priceGate';
+import { prisma } from './lib/prisma';
 
 /**
  * The public website: landing page, privacy policy, terms, refund policy and contact page.
@@ -65,6 +69,7 @@ h3{font-size:19px;margin:0 0 8px;letter-spacing:-.02em;font-weight:650}
 .lead{font-size:20px;color:var(--ink2);max-width:30em;line-height:1.55;letter-spacing:-.01em}
 .cta{display:flex;flex-wrap:wrap;gap:12px;margin:32px 0 14px}
 .fine{font-size:14px;color:var(--mute)}
+.gate{max-width:460px;margin:8px auto 0;background:var(--card);border:1px solid var(--line);border-radius:18px;padding:28px;text-align:center}.gate h3{margin:0 0 6px;font-size:20px}.gate p{margin:0 0 16px;color:var(--mute);font-size:15px}.gate input{width:100%;box-sizing:border-box;padding:14px 16px;border-radius:12px;border:1px solid var(--line);font-size:17px;margin-bottom:12px;background:var(--bg);color:var(--ink)}.gate .err{color:#b91c1c;font-size:14px;margin:0 0 10px}.gate button{width:100%;cursor:pointer;font-family:inherit}
 .chips{display:flex;flex-wrap:wrap;gap:8px 22px;margin-top:26px;color:var(--ink2);font-size:14.5px;font-weight:500}
 .chips span:before{content:"✓";color:var(--brand);font-weight:800;margin-right:7px}
 /* product preview */
@@ -84,6 +89,8 @@ h3{font-size:19px;margin:0 0 8px;letter-spacing:-.02em;font-weight:650}
 .pill{font-style:normal;font-size:12px;font-weight:600;padding:3px 11px;border-radius:99px;background:var(--alt);color:var(--ink2);border:1px solid var(--line);white-space:nowrap}
 .pill.hot{background:#ffe8e3;color:#b3261e;border-color:#ffd0c8}.pill.ok{background:var(--soft);color:var(--brand);border-color:color-mix(in srgb,var(--brand) 25%,transparent)}
 .phone{background:#0b141a;border-radius:30px;padding:10px;max-width:300px;box-shadow:0 40px 70px -20px rgba(0,0,0,.55),0 0 0 1px rgba(255,255,255,.07) inset}
+.snd{position:absolute;left:18px;bottom:18px;z-index:3;display:inline-flex;align-items:center;gap:6px;border:0;border-radius:99px;padding:8px 13px;background:rgba(11,20,26,.78);color:#fff;font:600 12.5px/1 inherit;cursor:pointer;backdrop-filter:blur(6px)}.snd:hover{background:rgba(11,20,26,.92)}.snd:focus-visible{outline:2px solid #fff;outline-offset:2px}
+.phone video.reel{display:block;width:100%;aspect-ratio:9/16;object-fit:cover;border-radius:21px;background:#0b141a}
 .stage .phone{position:absolute;right:-30px;bottom:0;width:230px;transform:rotate(3deg);z-index:2}
 .phone .bar{background:#075e54;color:#fff;border-radius:20px 20px 0 0;padding:11px 14px;font-weight:600;font-size:13.5px;display:flex;align-items:center;gap:9px}
 .phone .bar:before{content:"";width:26px;height:26px;border-radius:50%;background:rgba(255,255,255,.22)}
@@ -170,6 +177,26 @@ table.cmp .us{background:var(--soft);font-weight:600;color:var(--ink)}
 .plan li:before{content:"✓";position:absolute;left:0;top:2px;width:19px;height:19px;border-radius:50%;background:var(--soft);color:var(--brand);font-weight:800;font-size:11px;display:flex;align-items:center;justify-content:center}
 .plan li.no{color:var(--mute)}.plan li.no:before{content:"–";color:var(--mute);background:transparent}
 .plan .btn{width:100%}
+/* two plans: a card with the name and price, a Choose button under it, then what is included (the highlighted plan has a grainy gradient) */
+.pl{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));max-width:960px;margin:0 auto}
+.pcol{padding:0 18px;border-left:1px solid var(--line);display:flex;flex-direction:column}.pcol:last-child{border-right:1px solid var(--line)}
+.pc{position:relative;overflow:hidden;border-radius:26px;min-height:300px;padding:28px;display:flex;flex-direction:column;justify-content:space-between;isolation:isolate}
+.pc h3{font-size:34px;letter-spacing:-.03em;font-weight:560;margin:0;line-height:1.1}
+.pc p{margin:8px 0 0;font-size:15px;opacity:.78}
+.pl .pc p{color:inherit}
+.pc.light{background:color-mix(in srgb,var(--ink) 5%,var(--bg));color:var(--ink)}
+.pc.hot{color:#fff;background:radial-gradient(95% 80% at 8% 10%,#22d3ee 0%,transparent 62%),radial-gradient(90% 85% at 96% 92%,#0a8a64 0%,transparent 66%),radial-gradient(70% 70% at 88% 8%,#34d399 0%,transparent 60%),#0a2540}
+.pc.hot:after{content:"";position:absolute;inset:0;z-index:-1;border-radius:inherit;opacity:.55;mix-blend-mode:overlay;pointer-events:none;background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='180' height='180'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 .9 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>")}
+.pbadge{display:inline-block;margin-top:12px;font-style:normal;font-size:14px;font-weight:600;padding:4px 14px;border-radius:99px;border:1.5px solid rgba(255,255,255,.85)}
+.pp b{font-size:56px;font-weight:560;letter-spacing:-.045em;line-height:1}.pp small{font-size:18px;opacity:.75;font-weight:500;margin-left:4px}.pp span{display:block;margin-top:6px;font-size:16px;opacity:.85}
+.pbtn{margin-top:22px;width:100%;padding:18px 26px;font-size:18px}
+.pfine{margin:10px 0 0;font-size:13px;color:var(--mute);text-align:center}
+.pcol h4{margin:34px 0 8px;font-size:17px;font-weight:500;color:var(--ink2);display:flex;gap:10px;align-items:center}.pcol h4 i{font-style:normal;color:var(--mute)}
+.pf{list-style:none;margin:0;padding:0;border-top:1px dotted color-mix(in srgb,var(--ink) 28%,var(--line))}
+.pf li{display:flex;gap:16px;align-items:center;padding:17px 2px;font-size:17px;color:var(--ink);border-bottom:1px dotted color-mix(in srgb,var(--ink) 28%,var(--line))}
+.pi{flex:none;color:var(--ink2)}
+.pl .pf{padding:0;margin:0}.pl .pf li{margin:0;padding-left:2px}.pl h4,.pl p.pfine{max-width:none}
+.doc.wide{max-width:1000px}.doc.wide>:not(.pl){max-width:760px}.doc.wide>p.center{max-width:none}
 .plan h3{font-size:22px}
 .note{background:var(--warn);border:1px solid var(--warnline);border-radius:18px;padding:20px 24px;font-size:15.5px}
 details{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:0 24px;margin:12px 0;transition:border-color .15s,box-shadow .15s}
@@ -193,6 +220,7 @@ footer a{color:var(--ink2);margin-right:20px;text-decoration:none;display:inline
 table.t{width:100%;border-collapse:collapse;font-size:15px;margin:14px 0}
 table.t th,table.t td{border:1px solid var(--line);padding:11px 15px;text-align:left;vertical-align:top}table.t th{background:var(--alt)}
 @media (max-width:980px){.hero .wrap{grid-template-columns:1fr;gap:36px}.stage{padding:0 0 64px 0;max-width:560px;margin:0 auto;width:100%}.stage .phone{right:-6px}.split{grid-template-columns:1fr;gap:40px}.rev .vis{order:2}.split .vis{order:2}.vs{grid-template-columns:1fr}.fl{grid-template-columns:1fr 1fr}.uses{grid-template-columns:1fr 1fr}.uses .card{border-right:1px solid var(--line)!important;border-bottom:1px solid var(--line)!important}.g3,.g4{grid-template-columns:1fr 1fr}.stats .wrap{grid-template-columns:1fr 1fr}.stat:nth-child(3){border-left:0;padding-left:0}section{padding:72px 0}nav.main a.h{display:none}}
+@media (max-width:760px){.pl{grid-template-columns:none;grid-auto-flow:column;grid-auto-columns:84%;overflow-x:auto;scroll-snap-type:x mandatory;margin:0 -20px;padding:0 20px 6px;-webkit-overflow-scrolling:touch}.pcol{scroll-snap-align:start;padding:0 12px}.pc{min-height:270px;padding:24px}.pc h3{font-size:30px}.pp b{font-size:48px}.pf li{font-size:16px}}
 @media (max-width:620px){.fl,.uses,.g3,.g2,.g4{grid-template-columns:1fr}.plan ul{grid-template-columns:1fr}.plan.pop{padding:28px 22px}.cta-band{padding:56px 22px;border-radius:24px}.wrap{padding:0 20px}.hero{padding:44px 0 24px}.stage .phone{width:200px;right:-6px}.stage{padding-bottom:60px}.stat b{font-size:38px}.price{font-size:52px}}
 @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important;scroll-behavior:auto!important}.stage .chat .b{opacity:1}.win{transform:none}}
 
@@ -373,42 +401,85 @@ const FEATURES: { title: string; items: string[] }[] = [
 /** The sentence above the price: which currency is shown and why. */
 const pricingLead = (region: Region) =>
   region === 'IN'
-    ? 'One plan with everything included, shown in Indian rupees with UPI and card payment. The price is for your country, found from your IP address.'
-    : 'One plan with everything included, shown in US dollars with PayPal and card payment. The price is for your country, found from your IP address.';
+    ? 'Two plans with everything included in both: pay monthly, or yearly for the best value. Shown in Indian rupees with UPI AutoPay and card payment. The price is for your country, found from your IP address.'
+    : 'Two plans with everything included in both: pay monthly, or yearly for the best value. Shown in US dollars with PayPal and card payment. The price is for your country, found from your IP address.';
 
-/** The plan card in the visitor's currency, with a link to see the other one (a wrong guess is one click to fix). */
+/** Small line icons for the feature rows (Lucide shapes). */
+const PLAN_ICONS: Record<string, string> = {
+  chat: '<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>',
+  ai: '<path d="m12 3-1.9 5.8a2 2 0 0 1-1.3 1.3L3 12l5.8 1.9a2 2 0 0 1 1.3 1.3L12 21l1.9-5.8a2 2 0 0 1 1.3-1.3L21 12l-5.8-1.9a2 2 0 0 1-1.3-1.3z"/>',
+  team: '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>',
+  mega: '<path d="m3 11 18-5v12L3 14v-3z"/><path d="M11.6 16.8a3 3 0 1 1-5.8-1.6"/>',
+  phone: '<path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/>',
+  crm: '<rect x="3" y="3" width="7" height="9"/><rect x="14" y="3" width="7" height="5"/><rect x="14" y="12" width="7" height="9"/><rect x="3" y="16" width="7" height="5"/>',
+  cal: '<rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/>',
+  plug: '<path d="M12 22v-5M9 8V2M15 8V2M18 8v5a4 4 0 0 1-4 4h-4a4 4 0 0 1-4-4V8z"/>',
+  sync: '<path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/>',
+  card: '<rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/>'
+};
+const planIcon = (k: string) => `<svg class="pi" viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${PLAN_ICONS[k]}</svg>`;
+
+/**
+ * The two plans as two columns: a card with the plan name and price, a black "Choose" button under it, then everything that is
+ * included. Yearly is the highlighted one. Visitors in India see rupees (UPI AutoPay or card), everyone else dollars (PayPal or
+ * card); a link under the plans switches the currency (a wrong guess is one click to fix).
+ */
+function priceGateHtml(path: string, error: boolean): string {
+  return `<form class="gate" method="post" action="/pricing/unlock"><input type="hidden" name="next" value="${esc(path)}">
+<h3>See the plans and prices</h3><p>Enter your WhatsApp number to view our plans. We will only use it to help you get started.</p>
+${error ? '<p class="err">Enter a valid WhatsApp number with country code, for example +91 98765 43210.</p>' : ''}
+<input type="tel" name="phone" inputmode="tel" autocomplete="tel" required placeholder="+91 98765 43210" aria-label="Your WhatsApp number">
+<button class="btn p" type="submit">Show me the prices</button></form>`;
+}
+
 function planCardsHtml(region: Region, path: string): string {
   const rupees = region === 'IN';
   const anchor = path === '/' ? '#pricing' : '';
-  return PLANS.map((p) => {
-    const l = p.limits;
-    const price = rupees
-      ? `<div class="price">${inr(p.price.INR)}<small> / month</small></div><div class="fine" style="margin-top:4px">Shown in Indian rupees. <a href="${path}?region=world${anchor}">Show US dollars (${usd(p.price.USD)})</a></div>`
-      : `<div class="price">${usd(p.price.USD)}<small> / month</small></div><div class="fine" style="margin-top:4px">Shown in US dollars. <a href="${path}?region=in${anchor}">Paying from India? Show rupees (${inr(p.price.INR)})</a></div>`;
-    return `<div class="card plan pop">
-<h3>${esc(p.name)}</h3><p class="fine" style="margin:0 0 8px">${esc(p.blurb)}</p>
-${price}
-<ul>
-<li>${n(l.conversations)} new conversations a month</li>
-<li>${n(l.aiReplies)} AI answers a month</li>
-<li>${l.seats} team members</li>
-<li>${n(l.broadcasts)} broadcast messages a month</li>
-<li>1 WhatsApp number</li>
-<li>CRM, inbox, simulator, analytics</li>
-<li>In-chat appointment booking and human hand-off</li>
-<li class="${p.integrations ? '' : 'no'}">Webhooks and REST API${p.integrations ? '' : ' (not included)'}</li>
-<li>Free updates and email support</li>
-<li>${rupees ? 'Monthly subscription: UPI AutoPay or card' : 'Monthly subscription: PayPal or card'}</li>
-</ul>
-<a class="btn p" href="/admin/?plan=pro">Subscribe</a>
-<p class="fine" style="margin-top:8px">Renews automatically every month. Cancel any time.</p>
+  const p = PLANS[0];
+  const l = p.limits;
+  const money = (minor: number) => (rupees ? inr(minor) : usd(minor));
+  const month = rupees ? p.price.INR : p.price.USD;
+  const year = rupees ? p.yearlyINR : p.yearlyUSD;
+  const save = Math.round(100 - (year / (month * 12)) * 100);
+  const perMonth = rupees ? inr(Math.round(year / 12)) : '$' + (year / 1200).toFixed(2);
+  const how = rupees ? 'Pay by UPI AutoPay or card' : 'Pay by PayPal or card';
+  const rows: [string, string][] = [
+    ['chat', `${n(l.conversations)} new conversations a month`],
+    ['ai', `${n(l.aiReplies)} AI answers a month`],
+    ['team', `${l.seats} team members`],
+    ['mega', `${n(l.broadcasts)} broadcast messages a month`],
+    ['phone', '1 WhatsApp number'],
+    ['crm', 'CRM, inbox, simulator and analytics'],
+    ['cal', 'In-chat appointment booking and human hand-off'],
+    ...(p.integrations ? ([['plug', 'Webhooks and REST API']] as [string, string][]) : []),
+    ['sync', 'Free updates and email support'],
+    ['card', how]
+  ];
+  const list = `<ul class="pf">${rows.map(([k, t]) => `<li>${planIcon(k)}<span>${t}</span></li>`).join('')}</ul>`;
+  const monthly = `<div class="pcol">
+<div class="pc light"><div><h3>Monthly</h3><p>${esc(p.name)} plan, paid month by month</p></div>
+<div class="pp"><b>${money(month)}</b><small> / month</small><span>Cancel any time</span></div></div>
+<a class="btn p pbtn" href="/admin/?plan=pro&amp;period=month">Choose Monthly</a>
+<p class="pfine">Renews automatically every month.</p>
+<h4>Everything included <i>↴</i></h4>${list}
 </div>`;
-  }).join('');
+  const yearly = `<div class="pcol">
+<div class="pc hot"><div><h3>Yearly</h3><em class="pbadge">Best value</em><p>${esc(p.name)} plan, paid once a year</p></div>
+<div class="pp"><b>${money(year)}</b><small> / year</small><span>Just ${perMonth} a month · save ${save}%</span></div></div>
+<a class="btn p pbtn" href="/admin/?plan=pro&amp;period=year">Choose Yearly</a>
+<p class="pfine">Renews automatically every year.</p>
+<h4>Everything in Monthly, plus <i>↴</i></h4>
+<ul class="pf"><li>${planIcon('card')}<span>You save ${money(month * 12 - year)} a year</span></li><li>${planIcon('sync')}<span>One payment a year, no monthly bills</span></li></ul>
+</div>`;
+  const switcher = rupees
+    ? `Prices shown in Indian rupees. <a href="${path}?region=world${anchor}">Show US dollars (${usd(p.price.USD)} a month, ${usd(p.yearlyUSD)} a year)</a>`
+    : `Prices shown in US dollars. <a href="${path}?region=in${anchor}">Paying from India? Show rupees (${inr(p.price.INR)} a month, ${inr(p.yearlyINR)} a year)</a>`;
+  return `<div class="pl">${monthly}${yearly}</div><p class="fine center" style="margin-top:20px">${switcher}</p>`;
 }
 
-function landing(region: Region): string {
+function landing(region: Region, unlocked: boolean, gateError = false): string {
   const name = esc(PRODUCT_NAME);
-  const planCards = planCardsHtml(region, '/');
+  const planCards = unlocked ? planCardsHtml(region, '/') : priceGateHtml('/', gateError);
 
   const faq: [string, string][] = [
     ['Do I need the official WhatsApp Business API?', `No. ${PRODUCT_NAME} links to your existing WhatsApp number through WhatsApp's "Linked devices" feature, the same way WhatsApp Web works. There is no Meta approval process and no per-message fee from us.`],
@@ -416,7 +487,7 @@ function landing(region: Region): string {
     ['What does the AI do, and what does it not do?', 'It answers questions from the facts you give it (prices, hours, policies), in the language the customer writes in. If the answer is not in your notes it does not guess. It also writes the short briefing when a customer asks for a person, and helps you set up. The questions customers must answer are always the ones you wrote.'],
     ['Can customers talk to a real person?', 'Yes. If a customer asks for a human, the bot stops replying in that chat and alerts you with a summary. You reply from your phone or the dashboard, then hand the chat back to the bot when you are done.'],
     ['How does appointment booking work?', 'Set your working days, hours and appointment length once. The customer replies BOOK, picks a date, then picks a time. The bot books it, confirms it to them on WhatsApp, alerts you and reminds them before it starts. You can use the built-in calendar or connect Google Calendar.'],
-    ['How much does it cost, and can I cancel?', `One plan with everything included: ${inr(PLANS[0].price.INR)} a month in India, ${usd(PLANS[0].price.USD)} a month everywhere else. It is a monthly subscription that renews automatically. Cancel any time from your dashboard and keep access until the end of the period you paid for. See the <a href="/refunds">refund and cancellation policy</a>.`],
+    ['How much does it cost, and can I cancel?', `Two plans with everything included: monthly or yearly (see the plans above once you have entered your WhatsApp number). It is a monthly subscription that renews automatically. Cancel any time from your dashboard and keep access until the end of the period you paid for. See the <a href="/refunds">refund and cancellation policy</a>.`],
     ['How does the monthly auto-debit work?', `You subscribe once and approve the recurring payment: in India with UPI AutoPay or a card (through Razorpay), elsewhere with PayPal or a card. After that the monthly amount is debited automatically on the same date, and you are notified before each debit. Nothing is charged until you approve. To stop, cancel under Plan &amp; billing (or from your UPI app or PayPal) and no further payments are taken.`],
     ['What happens when my plan ends?', `The bot stops replying to new messages, but your leads and settings stay safe. A paid plan whose renewal fails keeps working for a ${GRACE_DAYS}-day grace period so you can fix the payment.`],
     ['Who can see my customers\' chats?', `Only you and the team members you add. We process the messages to run the service and never sell them. Read the <a href="/privacy">privacy policy</a> for details, including which providers are involved.`],
@@ -433,19 +504,15 @@ function landing(region: Region): string {
 <div class="fine">${signupOpen() ? 'No card needed to start. ' : ''}Set up in about ten minutes.</div>
 <div class="chips"><span>Your own number</span><span>Replies in the customer's language</span><span>Book dates and times in chat</span><span>Built-in CRM</span></div>
 </div>
-<div class="stage" aria-hidden="true">
-<div class="win"><div class="win-bar"><i></i><i></i><i></i><span>Leads · Glow Dental Clinic</span></div>
+<div class="stage">
+<div class="win" aria-hidden="true"><div class="win-bar"><i></i><i></i><i></i><span>Leads · Glow Dental Clinic</span></div>
 <div class="win-body">
 <div class="win-stats"><div><b>128</b><span>Conversations</span></div><div><b>46</b><span>Qualified</span></div><div><b>19</b><span>Booked</span></div></div>
 <div class="row"><span class="av">PS</span><div><b>Priya S.</b><small>Whitening · all 4 answers saved</small></div><em class="pill hot">Hot lead</em></div>
 <div class="row"><span class="av">RM</span><div><b>Rohan M.</b><small>Braces · asked for a person</small></div><em class="pill">Follow-up</em></div>
 <div class="row"><span class="av">ND</span><div><b>Neha D.</b><small>Check-up · reminder sent</small></div><em class="pill ok">Booked Tue 11:00</em></div>
 </div></div>
-<div class="phone"><div class="bar">Glow Dental Clinic</div><div class="chat">
-<div class="b out">Hi, do you do teeth whitening?</div>
-<div class="b in">Welcome! Reply with a number:<br>1️⃣ Check-up 2️⃣ Whitening 3️⃣ Braces</div>
-<div class="b out">2</div>
-<div class="b in">Great! Reply <b>BOOK</b> to pick a date and time.</div></div></div>
+<div class="phone"><video class="reel" src="/media/hero.mp4" poster="/media/hero-poster.jpg" autoplay muted loop playsinline preload="metadata"></video></div></div>
 </div>
 </div></section>
 
@@ -608,9 +675,9 @@ function landing(region: Region): string {
 </div></section>
 
 <section class="alt" id="pricing"><div class="wrap">
-<div class="center"><h2>Simple monthly pricing</h2>
-<p class="sub">${pricingLead(region)} It is a subscription: you approve it once, it is debited automatically every month, and you can cancel at any time. Taxes, if applicable, are extra.</p></div>
-<div class="grid" style="max-width:720px;margin:0 auto">${planCards}</div>
+<div class="center"><h2>Simple pricing: monthly or yearly</h2>
+<p class="sub">${pricingLead(region)} It is a subscription: you approve it once, it is debited automatically every month (or every year on the yearly plan), and you can cancel at any time. Taxes, if applicable, are extra.</p></div>
+${planCards}
 <p class="fine center" style="margin-top:20px">What counts: a "new conversation" is a customer who messages you for the first time in a calendar month; limits reset every month. See the <a href="/refunds">refund and cancellation policy</a> and the <a href="/terms">terms</a>.</p>
 </div></section>
 
@@ -633,7 +700,7 @@ ${faq.map(([q, a]) => `<details><summary>${esc(q)}</summary><p>${a}</p></details
 <p>${signupOpen() ? `Get ${name} running on your own WhatsApp number.` : `Open the dashboard to get started.`}</p>
 <a class="btn p" href="/admin/?plan=pro">${signupOpen() ? 'Get started' : 'Open the dashboard'}</a>
 </div></div></section>`;
-  return page({ title: `${PRODUCT_NAME}: WhatsApp lead capture, CRM and appointment booking`, description: `${PRODUCT_NAME} turns WhatsApp enquiries into qualified leads: guided questions, AI answers, human hand-off, in-chat appointment booking, CRM, broadcasts and analytics on your own number. ${inr(PLANS[0].price.INR)} a month in India, ${usd(PLANS[0].price.USD)} elsewhere.`, path: '/', body, landing: true });
+  return page({ title: `${PRODUCT_NAME}: WhatsApp lead capture, CRM and appointment booking`, description: `${PRODUCT_NAME} turns WhatsApp enquiries into qualified leads: guided questions, AI answers, human hand-off, in-chat appointment booking, CRM, broadcasts and analytics on your own number. Plans for monthly or yearly billing.`, path: '/', body, landing: true });
 }
 
 // ---------- legal pages ----------
@@ -699,6 +766,7 @@ function privacy(): string {
 <tr><td>Google (Gemini AI)</td><td>Generates answers, onboarding suggestions and hand-off briefings. The text of the relevant conversation and your business notes are sent to the model to produce a reply.</td></tr>
 <tr><td>Google (Sign-in and Calendar)</td><td>Only if you connect a calendar. We use the access only to read free/busy times and create or delete booking events.</td></tr>
 <tr><td>Razorpay, Stripe and PayPal</td><td>Payment processing for subscriptions.</td></tr>
+<tr><td>Meta (Instagram and Facebook)</td><td>Delivering the direct messages and comments of the business accounts that connect them.</td></tr>
 <tr><td>Resend or another email provider</td><td>Sends alert emails, if you enable email alerts.</td></tr>
 <tr><td>Cloud hosting provider</td><td>Servers and storage on which the Service and its database run.</td></tr>
 </table>
@@ -871,6 +939,26 @@ ${contactLines()}
   });
 }
 
+/** Where Meta's data-deletion request sends a person: what is kept and how to have it removed. */
+function dataDeletion(): string {
+  const p = esc(PRODUCT_NAME);
+  return page({
+    title: `Delete your data | ${PRODUCT_NAME}`,
+    description: `How to have your Instagram or Facebook messages and comments removed from ${PRODUCT_NAME}.`,
+    path: '/data-deletion',
+    body: `<main class="doc"><h1>Delete your data</h1><p class="meta">Instagram and Facebook messages handled by ${p}</p>
+<p>${p} is a service used by businesses to answer their customers' messages. When you message or comment on a business's Instagram account or Facebook Page that uses ${p}, the business receives your message, your public name and the id Meta gives us for you, and the answers you gave to its questions. We do not collect anything else from your Facebook or Instagram profile.</p>
+<h2>How to have it removed</h2>
+<ol>
+<li>Ask the business whose account you messaged to delete your conversation and lead from its ${p} dashboard (Contacts, then delete), or</li>
+<li>contact us with the name of the business and your Instagram or Facebook name, and we will remove it for you within 30 days. Details are on the <a href="/contact">contact page</a>.</li>
+</ol>
+<p>If you started the request from Facebook or Instagram settings (Settings, Apps and websites, remove ${p}), it has been recorded and the steps above complete it. See our <a href="/privacy">Privacy Policy</a> for more.</p>
+${contactLines()}
+</main>`
+  });
+}
+
 function shipping(): string {
   const p = esc(PRODUCT_NAME);
   return doc('Shipping & Delivery Policy', '/shipping', `How ${PRODUCT_NAME} is delivered: it is a digital subscription service with no physical shipping.`, `
@@ -912,18 +1000,18 @@ ${contactLines()}
   });
 }
 
-function pricing(region: Region): string {
+function pricing(region: Region, unlocked: boolean, gateError = false): string {
   const p = esc(PRODUCT_NAME);
   return page({
     title: `Pricing | ${PRODUCT_NAME}`,
-    description: `${PRODUCT_NAME} pricing: ${inr(PLANS[0].price.INR)} a month in India, ${usd(PLANS[0].price.USD)} a month elsewhere.`,
+    description: `${PRODUCT_NAME} plans and pricing for WhatsApp lead capture, monthly or yearly.`,
     path: '/pricing',
-    body: `<main class="doc" style="max-width:760px"><h1>Pricing</h1>
+    body: `<main class="doc wide"><h1>Pricing</h1>
 <p>${pricingLead(region)} Customers in India pay in Indian rupees by subscription (UPI AutoPay or card, through Razorpay); customers elsewhere pay in US dollars (PayPal or card).</p>
-<div class="grid" style="max-width:460px;margin:24px 0">${planCardsHtml(region, '/pricing')}</div>
+${unlocked ? planCardsHtml(region, '/pricing') : priceGateHtml('/pricing', gateError)}
 <h2>Good to know</h2>
 <ul>
-<li>It is a monthly subscription: you approve the recurring payment once and it is debited automatically every month on the same date, with a reminder before each debit. Cancel any time and you keep access until the end of the period you have paid for.</li>
+<li>Both plans are subscriptions: you approve the recurring payment once and it is debited automatically every month (or every year on the yearly plan) on the same date, with a reminder before each debit. Cancel any time and you keep access until the end of the period you have paid for.</li>
 <li>If we change the price later, people already subscribed keep the price they signed up at.</li>
 <li>Prices are per business, per month. Taxes such as GST, where they apply, are added at checkout.</li>
 <li>A "new conversation" is a customer who messages you for the first time in a calendar month. Limits reset every month.</li>
@@ -949,7 +1037,7 @@ export function registerSite(app: FastifyInstance): void {
       .header('Content-Type', 'text/html; charset=utf-8')
       .header('Cache-Control', perVisitor ? 'private, no-cache' : 'public, max-age=300')
       .header('Vary', perVisitor ? 'Cookie, X-Real-Ip, X-Forwarded-For' : 'Accept-Encoding')
-      .header('Content-Security-Policy', "default-src 'none'; script-src 'self'; style-src 'unsafe-inline'; font-src 'self'; img-src 'self' data:; base-uri 'none'; form-action 'self'; frame-ancestors 'none'")
+      .header('Content-Security-Policy', "default-src 'none'; script-src 'self'; style-src 'unsafe-inline'; font-src 'self'; img-src 'self' data:; media-src 'self'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'")
       .header('X-Content-Type-Options', 'nosniff')
       .header('Referrer-Policy', 'strict-origin-when-cross-origin')
       .send(html);
@@ -960,14 +1048,61 @@ export function registerSite(app: FastifyInstance): void {
     return d.region;
   };
 
-  app.get('/', async (req, reply) => send(reply, landing(regionOf(req, reply)), 200, true));
+  // Hero video and poster (range requests supported, so playback starts quickly)
+  app.register(fastifyStatic, { root: path.join(__dirname, '..', 'public'), prefix: '/media/', decorateReply: false, maxAge: '7d' });
+
+  app.get('/', async (req, reply) => send(reply, landing(regionOf(req, reply), pricesUnlocked(req.headers.cookie), (req.query as any)?.pe === '1'), 200, true));
   app.get('/privacy', async (_req, reply) => send(reply, privacy()));
   app.get('/terms', async (_req, reply) => send(reply, terms()));
   app.get('/refunds', async (_req, reply) => send(reply, refunds()));
   app.get('/contact', async (_req, reply) => send(reply, contact()));
   app.get('/about', async (_req, reply) => send(reply, about()));
-  app.get('/pricing', async (req, reply) => send(reply, pricing(regionOf(req, reply)), 200, true));
+  app.get('/pricing', async (req, reply) => send(reply, pricing(regionOf(req, reply), pricesUnlocked(req.headers.cookie), (req.query as any)?.pe === '1'), 200, true));
+
+  // A visitor leaves their WhatsApp number to see the prices. Plain form post (the site runs no scripts).
+  // its own scope, so its form parser can't clash with parsers registered elsewhere
+  app.register(async (scope) => {
+    if (!scope.hasContentTypeParser('application/x-www-form-urlencoded')) {
+      scope.addContentTypeParser('application/x-www-form-urlencoded', { parseAs: 'string', bodyLimit: 4096 }, (_req, body, done) => {
+        try { done(null, Object.fromEntries(new URLSearchParams(String(body)))); } catch (e) { done(e as Error); }
+      });
+    }
+    const unlocks = new Map<string, { n: number; reset: number }>();
+    const global = { n: 0, reset: 0 };
+    scope.post('/pricing/unlock', async (req, reply) => {
+      const b = (req.body ?? {}) as { phone?: string; next?: string };
+      const next = b.next === '/pricing' ? '/pricing' : '/';
+      const anchor = next === '/' ? '#pricing' : '';
+      const ip = String(req.headers['x-forwarded-for'] ?? req.ip).split(',')[0].trim();
+      const now = Date.now();
+      // limits: per address, and overall (the forwarded address can be spoofed, so the overall cap bounds what a flood can write)
+      if (unlocks.size > 5000) {
+        for (const [k, v] of unlocks) if (v.reset < now) unlocks.delete(k);
+        for (const k of unlocks.keys()) { if (unlocks.size <= 4000) break; unlocks.delete(k); } // oldest first
+      }
+      const slot = unlocks.get(ip);
+      if (!slot || slot.reset < now) unlocks.set(ip, { n: 1, reset: now + 3_600_000 });
+      else if (++slot.n > 20) return reply.status(429).type('text/plain').send('Too many attempts. Try again later.');
+      const phone = cleanPhone(b.phone);
+      if (!validPhone(phone)) return reply.redirect(`${next}?pe=1${anchor}`, 303);
+      const region = detectRegion(req.headers, req.ip, {}).region;
+      // past the overall hourly cap the number is not stored, but the visitor still gets the prices
+      if (global.reset < now) { global.n = 0; global.reset = now + 3_600_000; }
+      const store = ++global.n <= 600;
+      try {
+        if (store) await prisma.pricingLead.upsert({
+          where: { phone },
+          create: { phone, region, source: next },
+          update: { visits: { increment: 1 }, lastSeenAt: new Date() }
+        });
+      } catch (e) { console.error('[pricing lead]', (e as Error).message); }
+      const secure = String(req.headers['x-forwarded-proto'] ?? '').startsWith('https');
+      reply.header('Set-Cookie', priceCookie(phone, secure));
+      return reply.redirect(`${next}${anchor}`, 303);
+    });
+  });
   app.get('/shipping', async (_req, reply) => send(reply, shipping()));
+  app.get('/data-deletion', async (_req, reply) => send(reply, dataDeletion()));
 
   app.get('/site.js', async (_req, reply) => reply.header('Content-Type', 'application/javascript; charset=utf-8').header('Cache-Control', 'public, max-age=300').header('X-Content-Type-Options', 'nosniff').send(SITE_JS));
 

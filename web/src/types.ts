@@ -31,6 +31,10 @@ export interface Contact {
   hasLead: boolean;
   receivedAt: string;
   lastActivity: string;
+  /** Customer messages the team has not opened yet */
+  unread: number;
+  /** Newest message in the chat (for the list preview) */
+  lastMessage: { direction: 'INBOUND' | 'OUTBOUND'; text: string } | null;
   isTest: boolean;
 }
 
@@ -72,6 +76,7 @@ export interface Workspace {
   languageStep: boolean;
   languageWelcome: string;
   followUpsEnabled: boolean;
+  aiConversation: boolean;
   onboardingCompleted: boolean;
   botEnabled: boolean;
 }
@@ -88,6 +93,8 @@ export interface ChatMessage {
   direction: 'INBOUND' | 'OUTBOUND';
   text: string;
   at: string;
+  /** A photo, video or document attached to the message */
+  media?: { id: string; kind: 'image' | 'video' | 'document'; mime: string; name: string; size: number; caption?: string } | null;
 }
 
 export interface PatchBody {
@@ -161,6 +168,7 @@ export interface PlatformWorkspace {
   slug: string;
   industry: string;
   owner: string | null;
+  ownerPhone: string;
   whatsapp: string;
   botEnabled: boolean;
   plan: string;
@@ -194,7 +202,7 @@ export interface PlatformDetail {
   currentPeriodEnd: string | null;
   limits: { conversations: number | null; aiReplies: number | null; broadcasts: number | null };
   usage: { conversations: number; aiReplies: number; broadcasts: number };
-  users: { id: string; email: string; role: string; isSuperAdmin: boolean; lastLoginAt: string | null }[];
+  users: { id: string; email: string; phone: string; role: string; isSuperAdmin: boolean; lastLoginAt: string | null }[];
   payments: { id: string; amount: number; currency: string; status: string; plan: string; at: string }[];
   audit: { id: string; actor: string; action: string; detail: string; at: string }[];
 }
@@ -213,6 +221,8 @@ export interface BillingPlan {
   name: string;
   blurb: string;
   price: { INR: number; USD: number };
+  yearlyUSD: number;
+  yearlyINR: number;
   limits: { conversations: number; aiReplies: number; seats: number; broadcasts: number };
 }
 
@@ -255,7 +265,7 @@ export interface BillingInfo {
   provider: string | null;
   limits: { conversations: number | null; aiReplies: number | null; seats: number | null; broadcasts: number | null };
   usage: { conversations: number; aiReplies: number; seats: number; broadcasts: number };
-  providers: { stripe: boolean; razorpay: boolean; paypal: boolean };
+  providers: { stripe: boolean; razorpay: boolean; paypal: boolean; paypalYearly: boolean; razorpayYearly: boolean };
   /** The currency to lead with, from the owner's IP address */
   currency: 'INR' | 'USD';
   plans: BillingPlan[];
@@ -376,4 +386,46 @@ export interface AffiliateAdmin {
   settings: { enabled: boolean; percent: number; months: number };
   affiliates: { id: string; businessName: string; code: string | null; payoutDetails: string; referred: number; totals: Totals }[];
   commissions: { id: string; affiliate: string; payoutDetails: string; referred: string; amount: number; currency: string; status: string; at: string; paidAt: string | null }[];
+}
+
+export interface PricingLeadRow {
+  id: string;
+  phone: string;
+  region: string;
+  source: string;
+  visits: number;
+  createdAt: string;
+  lastSeenAt: string;
+}
+
+export interface ZernioStatus {
+  configured: boolean;
+  platforms: string[];
+  accounts: { id: string; platform: string; name: string; active: boolean }[];
+}
+
+export interface MetaStatus {
+  configured: boolean;
+  connected: boolean;
+  accounts: { pageId: string; pageName: string; igUsername: string; hasInstagram: boolean }[];
+}
+
+export interface CommentSettings {
+  enabled: boolean;
+  mode: 'all' | 'keywords';
+  keywords: string;
+  sendDm: boolean;
+  template: string;
+}
+
+export interface CommentEvent {
+  id: string;
+  channel: 'ig' | 'fb';
+  commenter: string;
+  text: string;
+  reply: string;
+  dm: string;
+  status: 'replied' | 'skipped' | 'failed' | 'processing';
+  note: string;
+  at: string;
 }

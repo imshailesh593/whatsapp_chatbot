@@ -52,11 +52,15 @@ model Workspace {
   languageWelcome        String    @default("") @map("language_welcome")
   /// Automatic nudges to customers who go quiet (1, 3, 6 and 48 hours after their last message)
   followUpsEnabled       Boolean   @default(false) @map("follow_ups_enabled")
+  /// The whole chat is written by the AI around the business's questions (falls back to the fixed menu when the AI is unavailable)
+  aiConversation         Boolean   @default(true) @map("ai_conversation")
   /// Short code in this business referral link
   referralCode           String?   @unique @map("referral_code")
   /// Workspace that referred this one (plain text so deleting a referrer does not touch the referred)
   referredById           String?   @map("referred_by_id")
   payoutDetails          String    @default("") @map("payout_details")
+  /// Zernio profile that holds this business's connected social accounts
+  zernioProfileId        String    @default("") @map("zernio_profile_id")
   /// pro | internal (unlimited, for the operator's own business); older starter / growth / scale count as pro
   plan                   String    @default("pro")
   /// inactive (not paid yet) | active | past_due | canceled
@@ -86,6 +90,17 @@ model Workspace {
   couponRedemptions CouponRedemption[]
 
   @@map("saas_workspaces")
+  metaConnections        MetaConnection[]
+  commentEvents          CommentEvent[]
+  /// Reply to comments on the business's Facebook and Instagram posts, and message the commenter privately
+  commentRepliesEnabled  Boolean   @default(false) @map("comment_replies_enabled")
+  /// 'all' comments, or only those that contain one of the keywords
+  commentReplyMode       String    @default("keywords") @map("comment_reply_mode")
+  commentKeywords        String    @default("price, cost, fee, fees, info, details, interested, how much, dm") @map("comment_keywords")
+  /// Also send the commenter a private message that starts the conversation
+  commentSendDm          Boolean   @default(true) @map("comment_send_dm")
+  /// The public reply to use when the AI is not available (empty: a standard one)
+  commentReplyTemplate   String    @default("") @map("comment_reply_template")
 }
 
 /// A menu option ("Coaching", "Book a viewing", ...) with its own question list.
@@ -147,6 +162,8 @@ model Session {
   /// Campaign tag from a click-to-chat link ("(ref: summer24)" in the first message)
   source            String?
   lastInteractionAt DateTime     @default(now()) @map("last_interaction_at")
+  /// The team has read this chat up to here; customer messages after it count as unread
+  readAt            DateTime     @default(now()) @map("read_at")
   createdAt         DateTime     @default(now()) @map("created_at")
   updatedAt         DateTime     @updatedAt @map("updated_at")
   lead              Lead?
@@ -204,12 +221,16 @@ model AdminUser {
   workspace    Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   email        String    @unique
   passwordHash String    @map("password_hash")
+  /// WhatsApp number given at sign-up (digits with country code)
+  phone        String    @default("")
   /// owner | admin | agent
   role         String    @default("owner")
   /// Platform operator: can list and open every workspace
   isSuperAdmin Boolean   @default(false) @map("is_super_admin")
   createdAt    DateTime  @default(now()) @map("created_at")
   lastLoginAt  DateTime? @map("last_login_at")
+  /// Admin Hub (Authentik) subject, set on the first single sign-in; platform staff only
+  ssoSubject   String?   @unique @map("sso_subject")
 
   @@map("mns_admin_users")
 }
@@ -490,4 +511,60 @@ model Appointment {
   @@index([workspaceId, startsAt])
   @@index([status, startsAt])
   @@map("saas_appointments")
+}
+
+/// A Facebook Page (and the Instagram account linked to it) of a business, whose direct messages the bot answers.
+/// A business can connect several: every Page and Instagram handle it shares when it logs in with Facebook.
+model MetaConnection {
+  pageId      String    @id @map("page_id")
+  workspaceId String    @map("workspace_id")
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  pageName    String    @default("") @map("page_name")
+  /// The Instagram professional account linked to the Page, when there is one
+  igUserId    String?   @unique @map("ig_user_id")
+  igUsername  String    @default("") @map("ig_username")
+  /// The Page access token, encrypted (same scheme as the Google tokens)
+  tokenEnc    String    @map("token_enc")
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  @@index([workspaceId])
+  @@map("saas_meta_connections")
+}
+
+/// One comment on a Facebook or Instagram post and what we did about it (also stops a resent webhook being answered twice)
+model CommentEvent {
+  /// The comment's id from Meta
+  id            String    @id
+  workspaceId   String    @map("workspace_id")
+  workspace     Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  channel       String
+  accountId     String    @map("account_id")
+  postId        String    @default("") @map("post_id")
+  commenterId   String    @default("") @map("commenter_id")
+  commenterName String    @default("") @map("commenter_name")
+  text          String    @default("")
+  replyText     String    @default("") @map("reply_text")
+  dmText        String    @default("") @map("dm_text")
+  /// replied | skipped | failed
+  status        String
+  note          String    @default("")
+  createdAt     DateTime  @default(now()) @map("created_at")
+
+  @@index([workspaceId, createdAt])
+  @@index([accountId, createdAt])
+  @@map("saas_comment_events")
+}
+
+/// A website visitor who left their WhatsApp number to see the prices
+model PricingLead {
+  id         String   @id @default(uuid())
+  phone      String   @unique
+  region     String   @default("")
+  /// Page they unlocked from (/ or /pricing)
+  source     String   @default("")
+  visits     Int      @default(1)
+  createdAt  DateTime @default(now()) @map("created_at")
+  lastSeenAt DateTime @default(now()) @map("last_seen_at")
+
+  @@map("saas_pricing_leads")
 }

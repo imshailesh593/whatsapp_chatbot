@@ -6,9 +6,12 @@ import { qrPageHtml } from './qrPage';
 import { startWhatsApp, waFor, waSummary } from './services/whatsapp';
 import { prisma } from './lib/prisma';
 import { registerAdmin } from './admin';
+import { registerSso } from './sso';
+import { registerHubFeed } from './hubFeed';
 import { DEFAULT_WORKSPACE_ID } from './lib/workspaces';
 import { startBroadcastWorker } from './services/broadcast';
 import { startWebhookWorker } from './services/integrations';
+import { startMediaSweep } from './services/mediaStore';
 import { startFollowUpWorker } from './services/crm';
 import { startAppointmentWorker } from './services/calendar';
 import { startRenewalWorker } from './services/billing';
@@ -28,6 +31,8 @@ const qrDataUrl = async (workspaceId: string) => {
 };
 
 registerAdmin(app, { getQr: qrDataUrl });
+registerSso(app);
+registerHubFeed(app);
 registerPublicApi(app);
 registerSite(app);
 
@@ -64,6 +69,7 @@ const followUps = startFollowUpWorker();
 const appointments = startAppointmentWorker();
 const renewals = startRenewalWorker();
 const customerFollowUps = startCustomerFollowUps();
+const mediaSweep = startMediaSweep();
 let client: { stop(): Promise<void> } | null = null;
 startWhatsApp()
   .then((c) => (client = c))
@@ -75,6 +81,7 @@ const shutdown = async () => {
   followUps.stop();
   appointments.stop();
   customerFollowUps.stop();
+  mediaSweep.stop();
   renewals.stop();
   await app.close();
   await client?.stop();

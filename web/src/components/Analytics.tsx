@@ -8,9 +8,9 @@ const card = 'bg-card border border-line rounded-2xl p-5 shadow-lg';
 function Tile({ label, value, hint }: { label: string; value: string | number; hint?: string }) {
   return (
     <div className="bg-card/70 border border-line/80 rounded-xl p-3.5">
-      <p className="text-[11px] font-medium text-muted uppercase tracking-wider">{label}</p>
+      <p className="text-[12.5px] font-medium text-muted uppercase tracking-wider">{label}</p>
       <p className="text-2xl font-bold mt-0.5 text-fg">{value}</p>
-      {hint && <p className="text-[11px] text-muted mt-0.5">{hint}</p>}
+      {hint && <p className="text-[12.5px] text-muted mt-0.5">{hint}</p>}
     </div>
   );
 }
@@ -74,7 +74,7 @@ export default function Analytics() {
       <div className={card}>
         <div className="flex items-center justify-between flex-wrap gap-2">
           <h3 className="font-bold text-fg text-base">Conversations and leads per day</h3>
-          <div className="flex items-center gap-4 text-[11px] text-muted">
+          <div className="flex items-center gap-4 text-[12.5px] text-muted">
             <span className="flex items-center space-x-1.5"><span className="w-2.5 h-2.5 rounded-sm bg-muted" /><span>Conversations</span></span>
             <span className="flex items-center space-x-1.5"><span className="w-2.5 h-2.5 rounded-sm bg-brand" /><span>Leads</span></span>
             <button onClick={() => setTable((x) => !x)} className="text-brand-text underline">{table ? 'Show chart' : 'Show table'}</button>
@@ -97,7 +97,7 @@ export default function Analytics() {
               <tbody>{d.series.filter((s) => s.started || s.leads).map((s) => <tr key={s.day} className="border-t border-line/60 text-fg2"><td className="py-1">{s.day}</td><td>{s.started}</td><td>{s.leads}</td></tr>)}</tbody></table>
           </div>
         )}
-        <div className="flex justify-between text-[10px] text-muted mt-1"><span>{d.series[0]?.day}</span><span>{d.series[d.series.length - 1]?.day}</span></div>
+        <div className="flex justify-between text-[12px] text-muted mt-1"><span>{d.series[0]?.day}</span><span>{d.series[d.series.length - 1]?.day}</span></div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -127,7 +127,7 @@ export default function Analytics() {
 
         <div className={card}>
           <h3 className="font-bold text-fg text-base mb-1">By campaign</h3>
-          <p className="text-[11px] text-muted mb-4">From the tag on your click-to-chat links. &ldquo;(direct)&rdquo; = no tag.</p>
+          <p className="text-[12.5px] text-muted mb-4">From the tag on your click-to-chat links. &ldquo;(direct)&rdquo; = no tag.</p>
           <div className="space-y-3">
             {d.bySource.map((s) => <Bar key={s.source} label={s.source} value={s.started} max={d.bySource[0].started} right={`${s.started} chats · ${s.leads} leads`} />)}
           </div>
@@ -136,7 +136,7 @@ export default function Analytics() {
 
       <div className={card}>
         <h3 className="font-bold text-fg text-base mb-1">Where customers give up</h3>
-        <p className="text-[11px] text-muted mb-4">Questions after which people stopped replying for over a day. Shorten or reword the top ones in Settings.</p>
+        <p className="text-[12.5px] text-muted mb-4">Questions after which people stopped replying for over a day. Shorten or reword the top ones in Settings.</p>
         {d.dropOffs.length === 0 ? (
           <p className="text-xs text-muted">No abandoned chats in this period.</p>
         ) : (

@@ -1,3 +1,4 @@
+import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
 import { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
@@ -16,9 +17,12 @@ import {
   verifyAgainstDummy,
   verifyPassword
 } from './lib/auth';
+import { ZERNIO_PLATFORMS, connectLink as zernioConnectLink, deleteAccount as zernioDelete, ensureProfile as ensureZernioProfile, listAccounts as zernioAccounts, zernioConfigured, type ZernioPlatform } from './services/zernio';
 import { createWorkspaceWithOwner } from './lib/workspaces';
 import { handleIncomingMessage } from './services/engine';
-import { captureReplies, sendTextMessage } from './services/transport';
+import { clearSimHistory } from './services/aiChat';
+import { captureReplies, sendTextMessage, sendMediaMessage } from './services/transport';
+import { fileOf, servedType, removeWorkspaceMedia } from './services/mediaStore';
 import { invalidateConfig, loadConfig, saveServices, seedDefaultWorkspace, type BotConfig } from './services/botConfig';
 import { onboardingAvailable, onboardingTurn, parseDraft, type ChatTurn, type Draft } from './services/onboarding';
 import { TEMPLATES, getTemplate } from './templates';
@@ -40,13 +44,15 @@ import { affiliateAdminOverview, getAffiliateSettings, referralOverview, referre
 import { authUrl, cancelAppointment, cleanRules, completeConnection, disconnect as disconnectCalendar, formatSlot, googleConfigured, readState } from './services/calendar';
 import { admitAiReply, getUsage } from './services/usage';
 import { suggestInstructions } from './services/gemini';
-import { checkRazorpay, createPlans as createRazorpayPlans } from './services/razorpaySetup';
-import { checkPaypal, createPaypalPlans } from './services/paypal';
+import { checkRazorpay, createPlans as createRazorpayPlans, planEnvName as razorpayPlanEnv } from './services/razorpaySetup';
+import { checkPaypal, createPaypalPlans, paypalPlanEnv } from './services/paypal';
 import { describeRuntimeConfig, newWebhookSecret, saveRuntimeConfig } from './services/runtimeConfig';
 import { resetPlan, updatePlan } from './services/planConfig';
 import { emailConfigured, emailProvider, sendEmail } from './services/mailer';
 import { currencyOf, detectRegion } from './lib/geo';
-import { cancelSubscription, handlePaypalWebhook, handleRazorpayWebhook, handleStripeWebhook, openPortal, providersAvailable, startCheckout } from './services/billing';
+import { isSocial } from './lib/channel';
+import { NONCE_COOKIE, completeMetaConnection, disconnectMeta, metaAuthUrl, metaConfigured, metaStatus, newNonce, processWebhook, readMetaState, readSignedRequest, signatureOk, verifyChallenge } from './services/meta';
+import { cancelSubscription, handlePaypalWebhook, handleRazorpayWebhook, handleStripeWebhook, openPortal, providersAvailable, razorpayLinkMode, startCheckout } from './services/billing';
 
 const SIM_PREFIX = 'SIM-';
 const WEB_DIST = path.join(__dirname, '..', 'web', 'dist');
@@ -70,7 +76,7 @@ function cookie(req: FastifyRequest, name: string): string | undefined {
 
 type SessionWithLead = Prisma.SessionGetPayload<{ include: { lead: true } }>;
 
-function toContact(s: SessionWithLead, cfg: BotConfig, owners: Map<string, string> = new Map()) {
+function toContact(s: SessionWithLead, cfg: BotConfig, owners: Map<string, string> = new Map(), unread = 0, last: { direction: string; text: string } | null = null) {
   const lead = s.lead;
   const answers = ((lead ? lead.collectedData : s.answers) ?? {}) as Record<string, string>;
   const serviceKey = lead?.serviceCategory ?? s.selectedService ?? null;
@@ -104,6 +110,8 @@ function toContact(s: SessionWithLead, cfg: BotConfig, owners: Map<string, strin
     hasLead: !!lead,
     receivedAt: (lead?.createdAt ?? s.createdAt).toISOString(),
     lastActivity: s.lastInteractionAt.toISOString(),
+    unread,
+    lastMessage: last ? { direction: last.direction, text: last.text.slice(0, 140) } : null,
     isTest: s.phoneNumber.startsWith(SIM_PREFIX)
   };
 }
@@ -203,6 +211,7 @@ const publicWorkspace = (w: Workspace) => ({
   languageStep: w.languageStep,
   languageWelcome: w.languageWelcome,
   followUpsEnabled: w.followUpsEnabled,
+  aiConversation: w.aiConversation,
   onboardingCompleted: w.onboardingCompleted,
   botEnabled: w.botEnabled
 });
@@ -313,19 +322,21 @@ export function registerAdmin(app: FastifyInstance, opts: { getQr: (workspaceId:
   // Self-service sign-up: creates a new workspace (paused until the owner goes live) and its owner
   app.post('/admin/api/signup', async (req, reply) => {
     if (!enabled || process.env.SIGNUP_ENABLED === '0') return reply.status(404).send();
-    const b = (req.body ?? {}) as { businessName?: string; email?: string; password?: string; ref?: string };
+    const b = (req.body ?? {}) as { businessName?: string; email?: string; password?: string; phone?: string; ref?: string };
     const ip = clientIp(req);
     if (throttled(signups, `ip:${ip}`, 5)) return reply.status(429).send({ error: 'Too many sign-ups from this network. Try again later.' });
     const businessName = String(b.businessName ?? '').replace(/\s+/g, ' ').trim().slice(0, 80);
     const email = normalizeEmail(b.email);
     const password = String(b.password ?? '');
+    const phone = String(b.phone ?? '').replace(/\D/g, '');
     if (!businessName) return reply.status(400).send({ error: 'Enter your business name' });
+    if (phone.length < 8 || phone.length > 15) return reply.status(400).send({ error: 'Enter your WhatsApp number with country code, e.g. 919876543210' });
     if (!isValidEmail(email)) return reply.status(400).send({ error: 'Enter a valid email address' });
     if (password.length < MIN_PASSWORD_LENGTH) return reply.status(400).send({ error: `Password must be at least ${MIN_PASSWORD_LENGTH} characters` });
     if (await prisma.adminUser.findUnique({ where: { email } })) return reply.status(409).send({ error: 'An account with this email already exists. Sign in instead.' });
     bump(signups, `ip:${ip}`, 60 * 60_000);
     const referredById = await referrerFor(b.ref);
-    const ws = await createWorkspaceWithOwner({ businessName, email, password, referredById });
+    const ws = await createWorkspaceWithOwner({ businessName, email, password, phone, referredById });
     const owner = ws.adminUsers[0];
     setSession(req, reply, owner.id);
     return { ok: true, user: await meView({ id: owner.id, email, workspaceId: ws.id, role: 'owner', isSuperAdmin: false }) };
@@ -516,21 +527,21 @@ export function registerAdmin(app: FastifyInstance, opts: { getQr: (workspaceId:
       provider: w.billingProvider,
       limits: { conversations: num(access.limits.conversations), aiReplies: num(access.limits.aiReplies), seats: num(access.limits.seats), broadcasts: num(access.limits.broadcasts) },
       usage: { ...usage, seats },
-      providers: providersAvailable(),
+      providers: { ...providersAvailable(), paypalYearly: !!process.env[paypalPlanEnv('pro', 'year')], razorpayYearly: !!process.env[razorpayPlanEnv('pro', 'year')] && !razorpayLinkMode() },
       // Which currency to lead with, from the owner's IP address (they can switch it on the page)
       currency: currencyOf(detectRegion(req.headers, req.ip).region),
-      plans: PLANS.map((p) => ({ id: p.id, name: p.name, blurb: p.blurb, price: p.price, limits: p.limits })),
+      plans: PLANS.map((p) => ({ id: p.id, name: p.name, blurb: p.blurb, price: p.price, yearlyUSD: p.yearlyUSD, yearlyINR: p.yearlyINR, limits: p.limits })),
       payments: payments.map((p) => ({ id: p.id, amount: p.amount, currency: p.currency, status: p.status, plan: p.plan, at: p.createdAt.toISOString() }))
     };
   });
 
   app.post('/admin/api/billing/checkout', { preHandler: ownerOnly }, async (req, reply) => {
-    const b = (req.body ?? {}) as { plan?: string; provider?: string };
+    const b = (req.body ?? {}) as { plan?: string; provider?: string; period?: string };
     const w = await prisma.workspace.findUniqueOrThrow({ where: { id: wsId(req) } });
     if (w.plan === 'internal') return reply.status(400).send({ error: 'This workspace is not billed' });
     if (b.provider !== 'stripe' && b.provider !== 'razorpay' && b.provider !== 'paypal') return reply.status(400).send({ error: 'Choose a payment method' });
     try {
-      return await startCheckout(w, String(b.plan), b.provider, me(req).email, publicUrl(req));
+      return await startCheckout(w, String(b.plan), b.provider, me(req).email, publicUrl(req), b.period === 'year' ? 'year' : 'month');
     } catch (err) {
       return reply.status(400).send({ error: (err as Error).message });
     }
@@ -573,6 +584,145 @@ export function registerAdmin(app: FastifyInstance, opts: { getQr: (workspaceId:
     return reply.status(r.status).send(r.body);
   });
 
+  // ---- Instagram and Facebook (Meta) ----
+  // Meta checks the address once when the webhook is added in the app dashboard...
+  app.get('/webhooks/meta', async (req, reply) => {
+    const challenge = verifyChallenge(req.query as Record<string, unknown>);
+    return challenge === null ? reply.status(403).send('forbidden') : reply.type('text/plain').send(challenge);
+  });
+  // ...then posts every message and comment here, signed with the app secret
+  app.post('/webhooks/meta', async (req, reply) => {
+    if (!signatureOk((req as any).rawBody ?? '', req.headers['x-hub-signature-256'] as string | undefined)) return reply.status(401).send({ error: 'bad signature' });
+    // answered at once: Meta wants a reply within seconds, the AI and the reply back can take longer
+    void processWebhook(req.body).catch((e) => console.error('[meta webhook]', (e as Error).message));
+    return reply.status(200).send('EVENT_RECEIVED');
+  });
+
+  // ---- Zernio: connect other social accounts (Instagram, LinkedIn, YouTube, TikTok ...) ----
+  app.get('/admin/api/zernio/status', { preHandler: guard }, async (req) => {
+    if (!zernioConfigured()) return { configured: false, platforms: [], accounts: [] };
+    const ws = await prisma.workspace.findUniqueOrThrow({ where: { id: wsId(req) }, select: { zernioProfileId: true } });
+    let accounts: { id: string; platform: string; name: string; active: boolean }[] = [];
+    if (ws.zernioProfileId) {
+      try {
+        accounts = (await zernioAccounts(ws.zernioProfileId)).accounts
+          .filter((a) => a.profileId === ws.zernioProfileId)
+          .map((a) => ({ id: a._id, platform: a.platform, name: a.displayName || a.username || a.platform, active: a.isActive !== false }));
+      } catch (e) { console.error('[zernio] list failed:', (e as Error).message); }
+    }
+    return { configured: true, platforms: ZERNIO_PLATFORMS, accounts };
+  });
+
+  app.post('/admin/api/zernio/connect', { preHandler: manager }, async (req, reply) => {
+    if (!zernioConfigured()) return reply.status(400).send({ error: 'Social account connections are not set up on this server yet.' });
+    const platform = String(((req.body ?? {}) as { platform?: string }).platform ?? '') as ZernioPlatform;
+    if (!ZERNIO_PLATFORMS.includes(platform)) return reply.status(400).send({ error: 'Unknown platform' });
+    try {
+      const ws = await prisma.workspace.findUniqueOrThrow({ where: { id: wsId(req) }, select: { businessName: true } });
+      const profileId = await ensureZernioProfile(wsId(req), ws.businessName);
+      const link = await zernioConnectLink(platform, profileId, `${publicUrl(req)}/admin/?zernio=connected`);
+      return { url: link.authUrl };
+    } catch (e) {
+      console.error('[zernio] connect failed:', (e as Error).message);
+      return reply.status(502).send({ error: 'Could not start the connection. Please try again.' });
+    }
+  });
+
+  app.post('/admin/api/zernio/disconnect', { preHandler: manager }, async (req, reply) => {
+    const id = String(((req.body ?? {}) as { accountId?: string }).accountId ?? '');
+    const ws = await prisma.workspace.findUniqueOrThrow({ where: { id: wsId(req) }, select: { zernioProfileId: true } });
+    if (!id || !ws.zernioProfileId) return reply.status(404).send({ error: 'Account not found' });
+    try {
+      // only accounts that belong to this business's own profile can be removed
+      const mine = (await zernioAccounts(ws.zernioProfileId)).accounts.some((a) => a._id === id && a.profileId === ws.zernioProfileId);
+      if (!mine) return reply.status(404).send({ error: 'Account not found' });
+      await zernioDelete(id);
+    } catch (e) {
+      console.error('[zernio] disconnect failed:', (e as Error).message);
+      return reply.status(502).send({ error: 'Could not disconnect. Please try again.' });
+    }
+    await audit(req, 'zernio.disconnect', wsId(req), id);
+    return { ok: true };
+  });
+
+  app.get('/admin/api/meta/status', { preHandler: guard }, async (req) => metaStatus(wsId(req)));
+
+  app.get('/admin/api/meta/connect', { preHandler: manager }, async (req, reply) => {
+    if (!metaConfigured()) return reply.status(400).send({ error: 'Instagram and Facebook are not set up on this server yet. Ask the platform operator to add the Meta app keys.' });
+    // the same random value goes into the state and into this browser's cookie, so only this browser can finish the connection
+    const nonce = newNonce();
+    reply.header('Set-Cookie', `${NONCE_COOKIE}=${nonce}; Max-Age=600; Path=/admin/api/meta; HttpOnly; SameSite=Lax${publicUrl(req).startsWith('https://') ? '; Secure' : ''}`);
+    return { url: metaAuthUrl(wsId(req), publicUrl(req), nonce) };
+  });
+
+  // Facebook sends the owner back here. No session cookie is needed: the signed state says which business it is.
+  app.get('/admin/api/meta/callback', async (req, reply) => {
+    const q = req.query as { code?: string; state?: string; error?: string };
+    const cookieNonce = /(?:^|;\s*)meta_nonce=([a-f0-9]{32})/.exec(String(req.headers.cookie ?? ''))?.[1] ?? '';
+    const w = readMetaState(String(q.state ?? ''), cookieNonce);
+    reply.header('Set-Cookie', `${NONCE_COOKIE}=; Max-Age=0; Path=/admin/api/meta; HttpOnly; SameSite=Lax`); // one use
+    if (!w || q.error || !q.code) return reply.redirect('/admin/?meta=denied');
+    try {
+      const r = await completeMetaConnection(w, q.code, publicUrl(req));
+      await prisma.auditLog.create({ data: { actor: 'meta', action: 'meta.connect', workspaceId: w, detail: r.connected.map((c) => c.pageName).join(', ').slice(0, 300) } }).catch(() => undefined);
+      return reply.redirect(`/admin/?meta=connected&n=${r.connected.length}${r.skipped.length ? `&skipped=${r.skipped.length}` : ''}`);
+    } catch (err) {
+      console.error('[meta] connect failed:', (err as Error).message);
+      return reply.redirect(`/admin/?meta=error&why=${encodeURIComponent((err as Error).message.slice(0, 160))}`);
+    }
+  });
+
+  app.post('/admin/api/meta/disconnect', { preHandler: manager }, async (req) => {
+    await disconnectMeta(wsId(req), String(((req.body ?? {}) as { pageId?: string }).pageId ?? '') || undefined);
+    await prisma.auditLog.create({ data: { actor: me(req).email, action: 'meta.disconnect', workspaceId: wsId(req), detail: '' } }).catch(() => undefined);
+    return { ok: true };
+  });
+
+  const commentSettings = (w: { commentRepliesEnabled: boolean; commentReplyMode: string; commentKeywords: string; commentSendDm: boolean; commentReplyTemplate: string }) => ({
+    enabled: w.commentRepliesEnabled,
+    mode: w.commentReplyMode === 'all' ? 'all' : 'keywords',
+    keywords: w.commentKeywords,
+    sendDm: w.commentSendDm,
+    template: w.commentReplyTemplate
+  });
+
+  app.get('/admin/api/meta/comments', { preHandler: guard }, async (req) => {
+    const w = await prisma.workspace.findUniqueOrThrow({ where: { id: wsId(req) } });
+    const events = await prisma.commentEvent.findMany({ where: { workspaceId: w.id }, orderBy: { createdAt: 'desc' }, take: 30 });
+    return {
+      settings: commentSettings(w),
+      events: events.map((e) => ({ id: e.id, channel: e.channel, commenter: e.commenterName, text: e.text, reply: e.replyText, dm: e.dmText, status: e.status, note: e.note, at: e.createdAt.toISOString() }))
+    };
+  });
+
+  app.put('/admin/api/meta/comments', { preHandler: manager }, async (req, reply) => {
+    const b = (req.body ?? {}) as Record<string, unknown>;
+    const data: Record<string, unknown> = {};
+    if (typeof b.enabled === 'boolean') data.commentRepliesEnabled = b.enabled;
+    if (b.mode === 'all' || b.mode === 'keywords') data.commentReplyMode = b.mode;
+    if (typeof b.keywords === 'string') data.commentKeywords = b.keywords.replace(/\r/g, '').trim().slice(0, 500);
+    if (typeof b.sendDm === 'boolean') data.commentSendDm = b.sendDm;
+    if (typeof b.template === 'string') data.commentReplyTemplate = b.template.replace(/\s+/g, ' ').trim().slice(0, 300);
+    if (data.commentReplyMode === 'keywords' && typeof data.commentKeywords === 'string' && !data.commentKeywords) return reply.status(400).send({ error: 'Add at least one keyword, or reply to all comments' });
+    const w = await prisma.workspace.update({ where: { id: wsId(req) }, data });
+    invalidateConfig(w.id);
+    return { settings: commentSettings(w) };
+  });
+
+  // Meta requires a way for people to ask for their data to be deleted. We keep no profile of a commenter beyond the chat,
+  // so the request is recorded and the page it points to explains how the business removes the chat. Meta posts it as a form,
+  // so the form parser lives in its own small scope: no other route accepts form bodies.
+  app.register(async (scope) => {
+    scope.addContentTypeParser('application/x-www-form-urlencoded', { parseAs: 'string' }, (_req, body, done) => done(null, Object.fromEntries(new URLSearchParams(String(body ?? '')))));
+    scope.post('/meta/data-deletion', async (req, reply) => {
+      const data = readSignedRequest(String(((req.body ?? {}) as { signed_request?: string }).signed_request ?? ''));
+      if (!data) return reply.status(400).send({ error: 'bad request' });
+      const code = crypto.randomBytes(8).toString('hex');
+      await prisma.auditLog.create({ data: { actor: 'meta', action: 'meta.data_deletion', workspaceId: null, detail: `user ${String(data.user_id ?? '').slice(0, 40)} · ${code}` } }).catch(() => undefined);
+      return { url: `${publicUrl(req)}/data-deletion?code=${code}`, confirmation_code: code };
+    });
+  });
+
   app.post('/webhooks/paypal', async (req, reply) => {
     const r = await handlePaypalWebhook((req as any).rawBody ?? '', req.headers).catch((e) => {
       console.error('[paypal webhook]', e);
@@ -597,7 +747,7 @@ export function registerAdmin(app: FastifyInstance, opts: { getQr: (workspaceId:
     if ('error' in picked) return reply.status(400).send({ error: picked.error });
     const b = (req.body ?? {}) as Record<string, unknown>;
     const flags: Record<string, boolean> = {};
-    for (const f of ['handoffEnabled', 'languageStep', 'followUpsEnabled']) if (typeof b[f] === 'boolean') flags[f] = b[f] as boolean;
+    for (const f of ['handoffEnabled', 'languageStep', 'followUpsEnabled', 'aiConversation']) if (typeof b[f] === 'boolean') flags[f] = b[f] as boolean;
     const w = await prisma.workspace.update({ where: { id: wsId(req) }, data: { ...picked.data, ...flags } });
     invalidateConfig(w.id);
     return { workspace: publicWorkspace(w) };
@@ -909,7 +1059,22 @@ export function registerAdmin(app: FastifyInstance, opts: { getQr: (workspaceId:
       take: 1000
     });
     const owners = await ownerMap(wsId(req));
-    return { contacts: sessions.map((s) => toContact(s, cfg, owners)) };
+    // customer messages since the team last opened each chat
+    const counts = await prisma.$queryRaw<{ phone_number: string; n: bigint }[]>`
+      SELECT s.phone_number, COUNT(l.id) AS n
+      FROM mns_sessions s
+      JOIN mns_webhook_logs l ON l.workspace_id = s.workspace_id AND l.phone_number = s.phone_number AND l.direction = 'INBOUND' AND l.created_at > s.read_at
+      WHERE s.workspace_id = ${wsId(req)}
+      GROUP BY s.phone_number`;
+    const unread = new Map(counts.map((r) => [r.phone_number, Number(r.n)]));
+    // the newest message of each chat, for the preview line under its name
+    const lasts = await prisma.$queryRaw<{ phone_number: string; direction: string; text: string | null }[]>`
+      SELECT DISTINCT ON (phone_number) phone_number, direction, payload->>'text' AS text
+      FROM mns_webhook_logs
+      WHERE workspace_id = ${wsId(req)} AND phone_number IS NOT NULL
+      ORDER BY phone_number, created_at DESC`;
+    const last = new Map(lasts.map((r) => [r.phone_number, { direction: r.direction, text: (r.text ?? '').replace(/\s+/g, ' ').trim() }]));
+    return { contacts: sessions.map((s) => toContact(s, cfg, owners, unread.get(s.phoneNumber) ?? 0, last.get(s.phoneNumber) ?? null)) };
   });
 
   app.get('/admin/api/contacts/:phone/messages', { preHandler: guard }, async (req) => {
@@ -922,8 +1087,15 @@ export function registerAdmin(app: FastifyInstance, opts: { getQr: (workspaceId:
     return {
       messages: rows
         .reverse()
-        .map((r) => ({ id: r.id, direction: r.direction, text: (r.payload as any)?.text ?? '', at: r.createdAt.toISOString() }))
+        .map((r) => ({ id: r.id, direction: r.direction, text: (r.payload as any)?.text ?? '', at: r.createdAt.toISOString(), media: (r.payload as any)?.media ?? null }))
     };
+  });
+
+  // The team opened this chat: its messages so far are read
+  app.post('/admin/api/contacts/:phone/read', { preHandler: guard }, async (req) => {
+    const { phone } = req.params as { phone: string };
+    await prisma.session.updateMany({ where: { workspaceId: wsId(req), phoneNumber: phone }, data: { readAt: new Date() } });
+    return { ok: true };
   });
 
   app.patch('/admin/api/contacts/:phone', { preHandler: guard }, async (req, reply) => {
@@ -988,9 +1160,69 @@ export function registerAdmin(app: FastifyInstance, opts: { getQr: (workspaceId:
     const session = await prisma.session.findUnique({ where: { workspaceId_phoneNumber: { workspaceId: w, phoneNumber: phone } } });
     if (!session) return reply.status(404).send({ error: 'Contact not found' });
     if (!session.isAgentPaused) return reply.status(409).send({ error: 'Pause the bot for this chat before replying manually' });
-    if (waFor(w).status !== 'ready') return reply.status(503).send({ error: 'WhatsApp is not connected' });
+    if (isSocial(phone) ? !(await metaStatus(w)).connected : waFor(w).status !== 'ready') return reply.status(503).send({ error: isSocial(phone) ? 'Instagram / Facebook is not connected' : 'WhatsApp is not connected' });
     try {
       await sendTextMessage(w, phone, text);
+    } catch (err) {
+      return reply.status(502).send({ error: `Could not send: ${(err as Error).message}` });
+    }
+    return { ok: true };
+  });
+
+  // A photo, video or document shown in a chat: only for people signed in to the workspace the chat belongs to
+  app.get('/admin/api/media/:id', { preHandler: guard }, async (req, reply) => {
+    const { id } = req.params as { id: string };
+    const w = wsId(req);
+    const file = fileOf(w, id);
+    const row = file ? await prisma.webhookLog.findFirst({ where: { workspaceId: w, payload: { path: ['media', 'id'], equals: id } }, select: { payload: true } }) : null;
+    const meta = (row?.payload as any)?.media as { mime?: string; name?: string } | undefined;
+    if (!file || !meta || !fs.existsSync(file)) return reply.status(404).send({ error: 'File not found' });
+    const { type, inline } = servedType(String(meta.mime ?? ''));
+    const size = fs.statSync(file).size;
+    const safeName = String(meta.name ?? 'file').replace(/[^\w.\- ]/g, '_');
+    reply.header('Content-Type', type).header('X-Content-Type-Options', 'nosniff').header('Content-Security-Policy', "sandbox; default-src 'none'; media-src 'self'; img-src 'self'")
+      .header('Cache-Control', 'private, max-age=86400').header('Accept-Ranges', 'bytes')
+      .header('Content-Disposition', `${inline ? 'inline' : 'attachment'}; filename="${safeName}"`);
+    const range = /^bytes=(\d*)-(\d*)$/.exec(String(req.headers.range ?? ''));
+    if (range && size > 0) {
+      const start = range[1] ? Number(range[1]) : Math.max(0, size - Number(range[2]));
+      const end = range[1] && range[2] ? Math.min(Number(range[2]), size - 1) : size - 1;
+      if (start > end || start >= size) return reply.status(416).header('Content-Range', `bytes */${size}`).send();
+      return reply.status(206).header('Content-Range', `bytes ${start}-${end}/${size}`).header('Content-Length', end - start + 1).send(fs.createReadStream(file, { start, end }));
+    }
+    return reply.header('Content-Length', size).send(fs.createReadStream(file));
+  });
+
+  // Attachment from the Live Inbox: a photo, a video or a PDF, with an optional caption. Same rules as a text reply.
+  const MAX_ATTACHMENT = 16 * 1024 * 1024;
+  const sniff = (b: Buffer): { kind: 'image' | 'video' | 'document'; mime: string } | null => {
+    if (b.length < 12) return null;
+    if (b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff) return { kind: 'image', mime: 'image/jpeg' };
+    if (b.subarray(0, 8).toString('hex') === '89504e470d0a1a0a') return { kind: 'image', mime: 'image/png' };
+    if (b.subarray(0, 4).toString() === 'RIFF' && b.subarray(8, 12).toString() === 'WEBP') return { kind: 'image', mime: 'image/webp' };
+    if (b.subarray(0, 4).toString() === '%PDF') return { kind: 'document', mime: 'application/pdf' };
+    if (b.subarray(4, 8).toString() === 'ftyp') return { kind: 'video', mime: b.subarray(8, 12).toString().startsWith('qt') ? 'video/quicktime' : 'video/mp4' };
+    return null;
+  };
+  app.post('/admin/api/contacts/:phone/send-media', { preHandler: guard, bodyLimit: 24 * 1024 * 1024 }, async (req, reply) => {
+    const { phone } = req.params as { phone: string };
+    const w = wsId(req);
+    const body = (req.body ?? {}) as { name?: string; data?: string; caption?: string };
+    const buffer = Buffer.from(String(body.data ?? ''), 'base64');
+    if (buffer.length === 0) return reply.status(400).send({ error: 'No file received' });
+    if (buffer.length > MAX_ATTACHMENT) return reply.status(413).send({ error: 'The file is larger than 16 MB' });
+    const type = sniff(buffer);
+    if (!type) return reply.status(400).send({ error: 'Only photos (JPG, PNG, WebP), videos (MP4, MOV) and PDF files can be sent' });
+    if (phone.startsWith(SIM_PREFIX)) return reply.status(400).send({ error: 'Cannot message a simulator contact' });
+    if (isSocial(phone)) return reply.status(400).send({ error: 'Attachments are not supported for Instagram / Facebook chats yet' });
+    const session = await prisma.session.findUnique({ where: { workspaceId_phoneNumber: { workspaceId: w, phoneNumber: phone } } });
+    if (!session) return reply.status(404).send({ error: 'Contact not found' });
+    if (!session.isAgentPaused) return reply.status(409).send({ error: 'Pause the bot for this chat before replying manually' });
+    if (waFor(w).status !== 'ready') return reply.status(503).send({ error: 'WhatsApp is not connected' });
+    const ext = type.mime === 'application/pdf' ? '.pdf' : type.mime === 'image/jpeg' ? '.jpg' : type.mime === 'image/png' ? '.png' : type.mime === 'image/webp' ? '.webp' : type.mime === 'video/quicktime' ? '.mov' : '.mp4';
+    const base = String(body.name ?? 'file').replace(/[\\/:*?"<>|\u0000-\u001f]/g, '').replace(/\.[A-Za-z0-9]{1,5}$/, '').trim().slice(0, 80) || 'file';
+    try {
+      await sendMediaMessage(w, phone, { kind: type.kind, buffer, mime: type.mime, fileName: base + ext, caption: String(body.caption ?? '').trim().slice(0, 1000) || undefined });
     } catch (err) {
       return reply.status(502).send({ error: `Could not send: ${(err as Error).message}` });
     }
@@ -1020,8 +1252,15 @@ export function registerAdmin(app: FastifyInstance, opts: { getQr: (workspaceId:
     };
   });
 
+  // website visitors who left their WhatsApp number to see the prices
+  app.get('/admin/api/super/pricing-leads', { preHandler: superOnly }, async () => {
+    const rows = await prisma.pricingLead.findMany({ orderBy: { lastSeenAt: 'desc' }, take: 500 });
+    return { leads: rows.map((r) => ({ id: r.id, phone: r.phone, region: r.region, source: r.source, visits: r.visits, createdAt: r.createdAt.toISOString(), lastSeenAt: r.lastSeenAt.toISOString() })) };
+  });
+
   app.post('/admin/api/simulate/reset', { preHandler: guard }, async (req) => {
     const phone = simPhone((req.body as any)?.id);
+    clearSimHistory(wsId(req), phone);
     await prisma.webhookLog.deleteMany({ where: { workspaceId: wsId(req), phoneNumber: phone } });
     await prisma.session.deleteMany({ where: { workspaceId: wsId(req), phoneNumber: phone } });
     return { ok: true };
@@ -1126,7 +1365,7 @@ export function registerAdmin(app: FastifyInstance, opts: { getQr: (workspaceId:
   app.post('/admin/api/super/razorpay/create-plan', { preHandler: superOnly }, async (req, reply) => {
     try {
       const made = await createRazorpayPlans(true);
-      await saveRuntimeConfig(Object.fromEntries(made.map((m) => [`RAZORPAY_PLAN_${m.plan.toUpperCase()}`, m.razorpayPlanId])));
+      await saveRuntimeConfig(Object.fromEntries(made.map((m) => [razorpayPlanEnv(m.plan, m.period), m.razorpayPlanId])));
       await audit(req, 'razorpay.plan', null, made.map((m) => m.razorpayPlanId).join(', '));
       return { plans: made };
     } catch (err) {
@@ -1137,7 +1376,7 @@ export function registerAdmin(app: FastifyInstance, opts: { getQr: (workspaceId:
   app.post('/admin/api/super/paypal/create-plan', { preHandler: superOnly }, async (req, reply) => {
     try {
       const made = await createPaypalPlans(true);
-      await saveRuntimeConfig(Object.fromEntries(made.map((m) => [`PAYPAL_PLAN_${m.plan.toUpperCase()}`, m.paypalPlanId])));
+      await saveRuntimeConfig(Object.fromEntries(made.map((m) => [paypalPlanEnv(m.plan, m.period), m.paypalPlanId])));
       await audit(req, 'paypal.plan', null, made.map((m) => m.paypalPlanId).join(', '));
       return { plans: made };
     } catch (err) {
@@ -1197,7 +1436,7 @@ export function registerAdmin(app: FastifyInstance, opts: { getQr: (workspaceId:
   app.get('/admin/api/super/plans', { preHandler: superOnly }, async () => {
     const counts = await prisma.workspace.groupBy({ by: ['plan'], _count: { _all: true } });
     const n = new Map(counts.map((c) => [c.plan, c._count._all]));
-    return { plans: PLANS.map((p) => ({ id: p.id, name: p.name, blurb: p.blurb, price: p.price, limits: p.limits, integrations: p.integrations, clients: n.get(p.id) ?? 0 })), internal: n.get('internal') ?? 0 };
+    return { plans: PLANS.map((p) => ({ id: p.id, name: p.name, blurb: p.blurb, price: p.price, yearlyUSD: p.yearlyUSD, yearlyINR: p.yearlyINR, limits: p.limits, integrations: p.integrations, clients: n.get(p.id) ?? 0 })), internal: n.get('internal') ?? 0 };
   });
 
   const platformSettings = async () => ({ platformSender: await getSetting<boolean>('platformSender', false), ...(await connectionSlots()), ...serverMemory() });
@@ -1248,6 +1487,7 @@ export function registerAdmin(app: FastifyInstance, opts: { getQr: (workspaceId:
         slug: w.slug,
         industry: w.industry,
         owner: w.adminUsers[0]?.email ?? null,
+        ownerPhone: w.adminUsers[0]?.phone ?? '',
         whatsapp: waFor(w.id).status,
         botEnabled: w.botEnabled,
         plan: w.plan,
@@ -1302,7 +1542,7 @@ export function registerAdmin(app: FastifyInstance, opts: { getQr: (workspaceId:
       currentPeriodEnd: w.currentPeriodEnd?.toISOString() ?? null,
       limits: { conversations: lim.conversations === Infinity ? null : lim.conversations, aiReplies: lim.aiReplies === Infinity ? null : lim.aiReplies, broadcasts: lim.broadcasts === Infinity ? null : lim.broadcasts },
       usage,
-      users: w.adminUsers.map((u) => ({ id: u.id, email: u.email, role: u.role, isSuperAdmin: u.isSuperAdmin, lastLoginAt: u.lastLoginAt?.toISOString() ?? null })),
+      users: w.adminUsers.map((u) => ({ id: u.id, email: u.email, phone: u.phone, role: u.role, isSuperAdmin: u.isSuperAdmin, lastLoginAt: u.lastLoginAt?.toISOString() ?? null })),
       payments: payments.map((p) => ({ id: p.id, amount: p.amount, currency: p.currency, status: p.status, plan: p.plan, at: p.createdAt.toISOString() })),
       audit: log.map((l) => ({ id: l.id, actor: l.actor, action: l.action, detail: l.detail, at: l.createdAt.toISOString() }))
     };
@@ -1338,6 +1578,7 @@ export function registerAdmin(app: FastifyInstance, opts: { getQr: (workspaceId:
     if (String((req.body as any)?.confirm ?? '').trim() !== w.businessName) return reply.status(400).send({ error: 'Type the exact business name to confirm' });
     await waFor(id).disconnect().catch(() => undefined);
     await prisma.workspace.delete({ where: { id } });
+    try { removeWorkspaceMedia(id); } catch (e) { console.error('[media] could not remove files of the deleted workspace:', (e as Error).message); }
     invalidateConfig(id);
     await audit(req, 'workspace.delete', null, w.businessName);
     return { ok: true };

@@ -75,7 +75,7 @@ async function cleanup() {
 
   console.log('\n[creating the Razorpay plans]');
   const made = await createPlans();
-  ok(made.length === 1 && made.every((m) => m.created && /^plan_fake\d$/.test(m.razorpayPlanId)), 'one Razorpay plan is created for each of our plans');
+  ok(made.length === 2 && made.every((m) => m.created && /^plan_fake\d$/.test(m.razorpayPlanId)), 'one Razorpay plan is created for each of our plans');
   const postedPlans = apiCalls.filter((c) => c.method === 'POST' && c.path === '/plans');
   ok(postedPlans.every((c) => c.body.period === 'monthly' && c.body.interval === 1 && c.body.item.currency === 'INR'), 'each is monthly and in rupees');
   ok(PLANS.every((p) => postedPlans.some((c) => c.body.item.amount === p.price.INR && c.body.notes.plan === p.id)), 'with exactly our prices (in paise)');
@@ -108,7 +108,7 @@ async function cleanup() {
   const opWs = await prisma.workspace.create({ data: { slug: `rzs-op-${Date.now().toString(36)}`, name: 'Ops', businessName: 'Ops', plan: 'internal', planStatus: 'active', onboardingCompleted: true } });
   await prisma.adminUser.create({ data: { email: `op${DOMAIN}`, passwordHash: await hashPassword('operator password 1'), role: 'owner', isSuperAdmin: true, workspaceId: opWs.id } });
   const hOp = cookieOf(await call(J, 'POST', '/admin/api/login', { email: `op${DOMAIN}`, password: 'operator password 1' }));
-  let r = await call(J, 'POST', '/admin/api/signup', { businessName: 'Sub Co', email: `owner${DOMAIN}`, password: 'sub owner password' });
+  let r = await call(J, 'POST', '/admin/api/signup', { phone: '919876543210', businessName: 'Sub Co', email: `owner${DOMAIN}`, password: 'sub owner password' });
   const hO = cookieOf(r);
   const wsId = r.json().user.workspace.id as string;
   await call(hO, 'POST', '/admin/api/admins', { email: `adm${DOMAIN}`, password: 'sub admin password', role: 'admin' });

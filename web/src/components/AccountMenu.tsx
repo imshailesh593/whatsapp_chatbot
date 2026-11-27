@@ -23,7 +23,7 @@ export default function AccountMenu({ user, onSignOut }: { user: AdminUser; onSi
         aria-label="Account menu"
         className="inline-flex items-center gap-2 h-9 pl-1.5 pr-2.5 rounded-full border border-line bg-card text-sm text-fg2 hover:border-line-strong transition whitespace-nowrap"
       >
-        <span className="w-6 h-6 rounded-full bg-brand text-on-brand text-[11px] font-bold flex items-center justify-center">
+        <span className="w-6 h-6 rounded-full bg-brand text-on-brand text-[12.5px] font-bold flex items-center justify-center">
           {user.email.charAt(0).toUpperCase()}
         </span>
         <ChevronDown className="w-3.5 h-3.5 text-muted" />

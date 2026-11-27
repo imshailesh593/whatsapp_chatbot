@@ -3,19 +3,20 @@ import { Clock, Download, LayoutGrid, List, Phone, Search, UserCheck, Zap } from
 import { api } from '../api';
 import type { AdminRow, Contact } from '../types';
 import { useStages } from '../stages';
-import { serviceStyle, stageBadge, ago, displayPhone, waLink } from '../config';
+import { serviceStyle, stageBadge, ago, displayPhone, isSocialChat } from '../config';
 
 interface Props {
   contacts: Contact[];
   includeTest: boolean;
   onIncludeTest: (v: boolean) => void;
   onOpen: (phone: string) => void;
+  onOpenChat: (phone: string) => void;
   onChanged: (c: Contact) => void;
   team: AdminRow[];
   meId: string;
 }
 
-export default function Crm({ contacts, includeTest, onIncludeTest, onOpen, onChanged, team, meId }: Props) {
+export default function Crm({ contacts, includeTest, onIncludeTest, onOpen, onOpenChat, onChanged, team, meId }: Props) {
   const [view, setView] = useState<'list' | 'board'>(() => (localStorage.getItem('crmView') === 'board' ? 'board' : 'list'));
   const [owner, setOwner] = useState<string>('ALL');
   const [tag, setTag] = useState<string>('ALL');
@@ -113,7 +114,7 @@ export default function Crm({ contacts, includeTest, onIncludeTest, onOpen, onCh
             <button onClick={() => { setView('list'); localStorage.setItem('crmView', 'list'); }} title="List" className={`px-2.5 inline-flex items-center ${view === 'list' ? 'bg-brand-soft text-brand-text' : 'bg-sunken text-muted'}`}><List className="w-3.5 h-3.5" /></button>
             <button onClick={() => { setView('board'); localStorage.setItem('crmView', 'board'); }} title="Board" className={`px-2.5 inline-flex items-center ${view === 'board' ? 'bg-brand-soft text-brand-text' : 'bg-sunken text-muted'}`}><LayoutGrid className="w-3.5 h-3.5" /></button>
           </div>
-          <label className="inline-flex items-center gap-1.5 h-9 whitespace-nowrap text-[11px] text-muted cursor-pointer">
+          <label className="inline-flex items-center gap-1.5 h-9 whitespace-nowrap text-[12.5px] text-muted cursor-pointer">
             <input type="checkbox" checked={includeTest} onChange={(e) => onIncludeTest(e.target.checked)} />
             <span>Show simulator data</span>
           </label>
@@ -130,7 +131,7 @@ export default function Crm({ contacts, includeTest, onIncludeTest, onOpen, onCh
       {view === 'board' && (
         <div>
           {boardError && <p className="text-xs text-danger mb-2" role="alert">{boardError}</p>}
-          <p className="text-[11px] text-muted mb-2">Drag a card to another column to change its stage. People still answering the questions are not shown here.</p>
+          <p className="text-[12.5px] text-muted mb-2">Drag a card to another column to change its stage. People still answering the questions are not shown here.</p>
           <div className="flex gap-3 overflow-x-auto pb-3">
             {stages.map((st) => {
               const cards = rows.filter((c) => c.pipeline === st.key);
@@ -141,8 +142,8 @@ export default function Crm({ contacts, includeTest, onIncludeTest, onOpen, onCh
                   onDrop={(e) => { e.preventDefault(); setOverStage(null); const p = e.dataTransfer.getData('text/plain') || dragging; if (p) moveTo(p, st.key); setDragging(null); }}
                   className={`w-64 shrink-0 rounded-xl border p-2.5 ${overStage === st.key ? 'border-brand/70 bg-brand-soft' : 'border-line bg-card/70'}`}>
                   <div className="flex items-center justify-between mb-2 px-1">
-                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold border ${stageBadge(stages, st.key).cls}`}>{st.label}</span>
-                    <span className="text-[11px] text-muted">{cards.length}</span>
+                    <span className={`px-2 py-0.5 rounded-full text-[12px] font-semibold border ${stageBadge(stages, st.key).cls}`}>{st.label}</span>
+                    <span className="text-[12.5px] text-muted">{cards.length}</span>
                   </div>
                   <div className="space-y-2 min-h-[60px]">
                     {cards.map((c) => (
@@ -150,12 +151,12 @@ export default function Crm({ contacts, includeTest, onIncludeTest, onOpen, onCh
                         onClick={() => onOpen(c.phone)}
                         className="bg-sunken border border-line hover:border-line-strong rounded-lg p-2.5 cursor-grab active:cursor-grabbing text-xs">
                         <div className="font-semibold text-fg truncate">{c.name || 'Unknown'}</div>
-                        <div className="text-[11px] text-muted mt-0.5 truncate">{c.serviceTitle ?? '—'} · {ago(c.lastActivity)}</div>
+                        <div className="text-[12.5px] text-muted mt-0.5 truncate">{c.serviceTitle ?? '—'} · {ago(c.lastActivity)}</div>
                         {(c.tags.length > 0 || c.followUpAt || c.ownerEmail) && (
                           <div className="mt-1.5 flex flex-wrap gap-1 items-center">
-                            {c.tags.map((t) => <span key={t} className="px-1.5 py-0.5 rounded bg-subtle text-fg2 text-[10px]">#{t}</span>)}
-                            {c.followUpAt && <span className={`text-[10px] flex items-center space-x-0.5 ${new Date(c.followUpAt).getTime() <= Date.now() ? 'text-warn' : 'text-muted'}`}><Clock className="w-2.5 h-2.5" /><span>{new Date(c.followUpAt).toLocaleDateString()}</span></span>}
-                            {c.ownerEmail && <span className="text-[10px] text-muted truncate">{c.ownerEmail.split('@')[0]}</span>}
+                            {c.tags.map((t) => <span key={t} className="px-1.5 py-0.5 rounded bg-subtle text-fg2 text-[12px]">#{t}</span>)}
+                            {c.followUpAt && <span className={`text-[12px] flex items-center space-x-0.5 ${new Date(c.followUpAt).getTime() <= Date.now() ? 'text-warn' : 'text-muted'}`}><Clock className="w-2.5 h-2.5" /><span>{new Date(c.followUpAt).toLocaleDateString()}</span></span>}
+                            {c.ownerEmail && <span className="text-[12px] text-muted truncate">{c.ownerEmail.split('@')[0]}</span>}
                           </div>
                         )}
                       </div>
@@ -171,7 +172,7 @@ export default function Crm({ contacts, includeTest, onIncludeTest, onOpen, onCh
       {view === 'list' && <div className="bg-card/80 border border-line rounded-xl overflow-hidden shadow-xl">
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs sm:text-sm">
-            <thead className="bg-sunken/90 border-b border-line text-muted font-semibold uppercase text-[10px] tracking-wider">
+            <thead className="bg-sunken/90 border-b border-line text-muted font-semibold uppercase text-[12px] tracking-wider">
               <tr>
                 <th className="py-3 px-4">Contact & Phone</th>
                 <th className="py-3 px-4">Service</th>
@@ -186,42 +187,42 @@ export default function Crm({ contacts, includeTest, onIncludeTest, onOpen, onCh
               {rows.map((c) => {
                 const svc = c.service ? serviceStyle(c.service, c.serviceTitle) : null;
                 return (
-                  <tr key={c.phone} className="hover:bg-sunken/50 transition cursor-pointer" onClick={() => onOpen(c.phone)}>
+                  <tr key={c.phone} className="hover:bg-sunken/50 transition cursor-pointer" onClick={() => (c.isTest ? onOpen(c.phone) : onOpenChat(c.phone))} title={c.isTest ? undefined : 'Open chat'}>
                     <td className="py-3.5 px-4">
                       <div className="font-semibold text-fg">
                         {c.name || 'Unknown'}
-                        {c.isTest && <span className="ml-2 text-[9px] px-1.5 py-0.5 rounded bg-subtle text-muted">TEST</span>}
+                        {c.isTest && <span className="ml-2 text-[11px] px-1.5 py-0.5 rounded bg-subtle text-muted">TEST</span>}
                       </div>
-                      <div className="text-[11px] text-muted mt-0.5">{displayPhone(c.phone)} · {ago(c.lastActivity)}</div>
+                      <div className="text-[12.5px] text-muted mt-0.5">{displayPhone(c.phone)} · {ago(c.lastActivity)}</div>
                       {(c.tags.length > 0 || c.ownerEmail || c.followUpAt) && (
                         <div className="mt-1 flex flex-wrap gap-1 items-center">
-                          {c.tags.map((t) => <span key={t} className="px-1.5 py-0.5 rounded bg-subtle text-fg2 text-[10px]">#{t}</span>)}
-                          {c.ownerEmail && <span className="text-[10px] text-muted">· {c.ownerEmail.split('@')[0]}</span>}
-                          {c.followUpAt && <span className={`text-[10px] ${new Date(c.followUpAt).getTime() <= Date.now() ? 'text-warn' : 'text-muted'}`}>· follow up {new Date(c.followUpAt).toLocaleDateString()}</span>}
+                          {c.tags.map((t) => <span key={t} className="px-1.5 py-0.5 rounded bg-subtle text-fg2 text-[12px]">#{t}</span>)}
+                          {c.ownerEmail && <span className="text-[12px] text-muted">· {c.ownerEmail.split('@')[0]}</span>}
+                          {c.followUpAt && <span className={`text-[12px] ${new Date(c.followUpAt).getTime() <= Date.now() ? 'text-warn' : 'text-muted'}`}>· follow up {new Date(c.followUpAt).toLocaleDateString()}</span>}
                         </div>
                       )}
                     </td>
                     <td className="py-3.5 px-4">
                       {svc ? (
-                        <span title={svc.shortTitle} className={`inline-flex max-w-[260px] items-center px-2 py-0.5 rounded-md text-[11px] font-medium border ${svc.badge}`}>
-                          <span className="mr-1.5 text-[7px] leading-none shrink-0">{svc.icon}</span>
+                        <span title={svc.shortTitle} className={`inline-flex max-w-[260px] items-center px-2 py-0.5 rounded-md text-[12.5px] font-medium border ${svc.badge}`}>
+                          <span className="mr-1.5 text-[10px] leading-none shrink-0">{svc.icon}</span>
                           <span className="truncate">{svc.shortTitle}</span>
                         </span>
                       ) : (
-                        <span className="text-muted text-[11px]">Choosing service…</span>
+                        <span className="text-muted text-[12.5px]">Choosing service…</span>
                       )}
                     </td>
                     <td className="py-3.5 px-4 text-fg2 font-medium">{c.targetCountry || '—'}</td>
                     <td className="py-3.5 px-4">
                       <div className="w-32">
-                        <div className="text-[10px] text-muted mb-1">{c.progress}% complete</div>
+                        <div className="text-[12px] text-muted mb-1">{c.progress}% complete</div>
                         <div className="w-full h-1.5 bg-subtle rounded-full overflow-hidden">
                           <div className={`h-full rounded-full ${c.progress === 100 ? 'bg-brand' : 'bg-warn'}`} style={{ width: `${c.progress}%` }} />
                         </div>
                       </div>
                     </td>
                     <td className="py-3.5 px-4">
-                      <span className={`inline-flex items-center whitespace-nowrap px-2 py-0.5 rounded-full text-[10px] font-semibold border ${stageBadge(stages, c.pipeline).cls}`}>
+                      <span className={`inline-flex items-center whitespace-nowrap px-2 py-0.5 rounded-full text-[12px] font-semibold border ${stageBadge(stages, c.pipeline).cls}`}>
                         {stageBadge(stages, c.pipeline).label}
                       </span>
                     </td>
@@ -229,7 +230,7 @@ export default function Crm({ contacts, includeTest, onIncludeTest, onOpen, onCh
                       <button
                         onClick={() => toggleBot(c)}
                         disabled={c.isTest}
-                        className={`flex items-center space-x-1.5 whitespace-nowrap text-[11px] px-2.5 py-1 rounded-lg border font-medium transition disabled:opacity-40 ${
+                        className={`flex items-center space-x-1.5 whitespace-nowrap text-[12.5px] px-2.5 py-1 rounded-lg border font-medium transition disabled:opacity-40 ${
                           c.botActive
                             ? 'bg-brand-soft border-brand/50 text-brand-text hover:bg-brand-soft'
                             : 'bg-danger-soft border-danger-line/50 text-danger hover:bg-danger-soft'
@@ -243,15 +244,14 @@ export default function Crm({ contacts, includeTest, onIncludeTest, onOpen, onCh
                     <td className="py-3.5 px-4 text-right" onClick={(e) => e.stopPropagation()}>
                       <div className="flex items-center justify-end space-x-2">
                         {!c.isTest && (
-                          <a
-                            href={waLink(c.phone)}
-                            target="_blank"
-                            rel="noreferrer"
+                          <button
+                            type="button"
+                            onClick={() => onOpenChat(c.phone)}
                             className="p-1.5 rounded-lg bg-brand-soft text-brand-text hover:bg-brand-soft border border-brand/30 transition"
-                            title="Open WhatsApp chat"
+                            title="Open chat in Inbox"
                           >
                             <Phone className="w-3.5 h-3.5" />
-                          </a>
+                          </button>
                         )}
                         <button
                           onClick={() => onOpen(c.phone)}

@@ -3,8 +3,9 @@ import path from 'path';
 import pino from 'pino';
 import qrcodeTerminal from 'qrcode-terminal';
 import { handleIncomingMessage } from './engine';
-import { logMessage, setTransport, sendTextMessage } from './transport';
+import { logMessage, setTransport, sendTextMessage, type OutgoingMedia } from './transport';
 import { MessageBurst } from '../lib/burst';
+import { saveMedia, type StoredMedia } from './mediaStore';
 import { UNSUPPORTED_MEDIA_MESSAGE } from './botConfig';
 import os from 'os';
 import { prisma } from '../lib/prisma';
@@ -17,6 +18,7 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 // Baileys 7 is ESM-only. A real dynamic import is needed because TypeScript rewrites import() to require() in CommonJS output.
 const dynamicImport = new Function('m', 'return import(m)') as (m: string) => Promise<any>;
 
+const MEDIA_LABEL: Record<string, string> = { imageMessage: '📷 Photo', videoMessage: '🎥 Video', audioMessage: '🎤 Voice message', documentMessage: '📄 Document', stickerMessage: 'Sticker', contactMessage: '👤 Contact', locationMessage: '📍 Location' };
 const MEDIA_KEYS = ['imageMessage', 'videoMessage', 'audioMessage', 'documentMessage', 'stickerMessage', 'contactMessage', 'locationMessage'];
 
 /** Unwraps ephemeral/view-once wrappers and returns the inner message object. */
@@ -101,11 +103,14 @@ export class WaConnection {
     },
     () => Number(process.env.WA_DEBOUNCE_MS ?? 2500)
   );
+  /** Ids of messages this bot sent itself, so a copy arriving as "sent from the phone" is not recorded twice */
+  private readonly ownSent = new Set<string>();
 
   constructor(readonly workspaceId: string) {
     this.authDir = path.join(authBase(), workspaceId);
     setTransport(workspaceId, {
       sendText: (to, text) => this.sendText(to, text),
+      sendMedia: (to, media) => this.sendMedia(to, media),
       ready: () => this.status === 'ready'
     });
   }
@@ -194,7 +199,12 @@ export class WaConnection {
       // cosmetic
     }
     await sleep(process.env.WA_TYPING === '0' ? 0 : Math.min(4500, 900 + text.length * 22) + Math.random() * 700);
-    await sock.sendMessage(jid, { text });
+    const sent = await sock.sendMessage(jid, { text });
+    const sid: string | undefined = sent?.key?.id;
+    if (sid) {
+      this.ownSent.add(sid);
+      if (this.ownSent.size > 2000) this.ownSent.delete(this.ownSent.values().next().value as string);
+    }
     try {
       await sock.sendPresenceUpdate('paused', jid);
     } catch {
@@ -212,8 +222,12 @@ export class WaConnection {
     // Owner takeover: typing !pause / !resume in a customer's chat from the linked phone
     if (m.key.fromMe) {
       const cmd = text.toLowerCase();
-      if (cmd !== '!pause' && cmd !== '!resume') return;
       const key = [...this.jids.entries()].find(([, j]) => j === jid)?.[0] ?? phoneKey(m.key);
+      if (cmd !== '!pause' && cmd !== '!resume') {
+        // A message typed on the linked phone itself: keep it in the chat log so the dashboard shows both sides of a takeover
+        void this.recordPhoneMessage(m, key, text);
+        return;
+      }
       const paused = cmd === '!pause';
       const r = await prisma.session.updateMany({ where: { workspaceId: wsId, phoneNumber: key }, data: paused ? { isAgentPaused: true } : { isAgentPaused: false, handoffAt: null, handoffSummary: '' } });
       console.log(`[Takeover] ${wsId}/${key} ${paused ? 'paused' : 'resumed'} (${r.count} session)`);
@@ -247,6 +261,11 @@ export class WaConnection {
       if (dup) return;
       if (!text) {
         if (isMedia) {
+          const label = MEDIA_KEYS.map((k) => (unwrap(m.message)?.[k] ? MEDIA_LABEL[k] : '')).find(Boolean);
+          if (label) {
+            const media = await this.fetchMedia(m);
+            await logMessage(wsId, key, 'INBOUND', media?.caption ? `${label}\n${media.caption}` : label, id, media ? { media } : undefined);
+          }
           const s = await prisma.session.findUnique({ where: { workspaceId_phoneNumber: { workspaceId: wsId, phoneNumber: key } } });
           if (!s?.isAgentPaused) await sendTextMessage(wsId, key, UNSUPPORTED_MEDIA_MESSAGE);
         }
@@ -256,6 +275,76 @@ export class WaConnection {
       await logMessage(wsId, key, 'INBOUND', text, id);
       this.burst.add(key, { text, id, name });
     });
+  }
+
+  private async sendMedia(to: string, media: OutgoingMedia): Promise<void> {
+    if (!this.sock || this.status !== 'ready') throw new Error('WhatsApp is not connected');
+    const jid = this.jids.get(to) ?? `${to}@s.whatsapp.net`;
+    const caption = media.caption || undefined;
+    const content =
+      media.kind === 'image' ? { image: media.buffer, caption, mimetype: media.mime }
+      : media.kind === 'video' ? { video: media.buffer, caption, mimetype: media.mime }
+      : { document: media.buffer, caption, mimetype: media.mime, fileName: media.fileName };
+    const sent = await this.sock.sendMessage(jid, content);
+    const sid: string | undefined = sent?.key?.id;
+    if (sid) {
+      this.ownSent.add(sid);
+      if (this.ownSent.size > 2000) this.ownSent.delete(this.ownSent.values().next().value as string);
+    }
+  }
+
+  /** Downloads a photo, video or document a customer sent so the Inbox can show it. Returns null if it is too big or not downloadable. */
+  private async fetchMedia(m: any): Promise<StoredMedia | null> {
+    const inner = unwrap(m.message);
+    const kind = inner?.imageMessage ? 'image' : inner?.videoMessage ? 'video' : inner?.documentMessage ? 'document' : null;
+    if (!kind) return null;
+    const part = inner[`${kind}Message`];
+    const CAP = 16 * 1024 * 1024;
+    // The size the sender declares is only a first filter: bytes are counted as they arrive and the download is cut off at the cap
+    const declared = Number(part?.fileLength?.low ?? part?.fileLength ?? 0);
+    if (!(declared > 0) || declared > CAP) return null;
+    try {
+      const baileys = await dynamicImport('@whiskeysockets/baileys');
+      const stream: NodeJS.ReadableStream & { destroy(e?: Error): void } = await baileys.downloadMediaMessage(m, 'stream', {}, { logger: pino({ level: 'silent' }), reuploadRequest: this.sock?.updateMediaMessage });
+      const chunks: Buffer[] = [];
+      let total = 0;
+      for await (const chunk of stream) {
+        total += (chunk as Buffer).length;
+        if (total > CAP) { stream.destroy(); return null; }
+        chunks.push(chunk as Buffer);
+      }
+      const buf = Buffer.concat(chunks);
+      if (!buf.length) return null;
+      const mime: string = String(part?.mimetype ?? '').split(';')[0] || (kind === 'image' ? 'image/jpeg' : kind === 'video' ? 'video/mp4' : 'application/octet-stream');
+      const name = kind === 'document' ? String(part?.fileName ?? 'document').slice(0, 120) : kind === 'image' ? 'photo' : 'video';
+      return saveMedia(this.workspaceId, buf, { kind, mime, name, caption: String(part?.caption ?? '').slice(0, 1000) || undefined });
+    } catch (err) {
+      console.error('[wa] could not download a customer attachment:', (err as Error).message);
+      return null;
+    }
+  }
+
+  private async recordPhoneMessage(m: any, key: string, text: string): Promise<void> {
+    const id: string | undefined = m.key?.id;
+    if (!id) return;
+    const ts = Number(m.messageTimestamp?.low ?? m.messageTimestamp ?? 0) * 1000;
+    if (ts && Date.now() - ts > 10 * 60_000) return; // history sync, not a live message
+    const body = text || (MEDIA_KEYS.map((k) => (unwrap(m.message)?.[k] ? MEDIA_LABEL[k] : '')).find(Boolean) ?? '');
+    if (!body) return;
+    await sleep(2500); // our own sends arrive here too; give sendText time to register its id
+    if (this.ownSent.has(id)) return;
+    const wsId = this.workspaceId;
+    try {
+      const dup = await prisma.webhookLog.findFirst({ where: { workspaceId: wsId, payload: { path: ['wamid'], equals: id } }, select: { id: true } });
+      if (dup) return;
+      const sess = await prisma.session.findUnique({ where: { workspaceId_phoneNumber: { workspaceId: wsId, phoneNumber: key } }, select: { id: true } });
+      if (!sess) return; // not one of our chats
+      const media = text ? null : await this.fetchMedia(m);
+      await logMessage(wsId, key, 'OUTBOUND', media?.caption ? `${body}\n${media.caption}` : body, id, media ? { media } : undefined);
+      await prisma.session.update({ where: { id: sess.id }, data: { readAt: new Date() } }); // replying from the phone counts as having read it
+    } catch (err) {
+      console.error('[wa] could not record a phone-sent message:', (err as Error).message);
+    }
   }
 
   private async open(): Promise<void> {
@@ -375,6 +464,9 @@ export function serverMemory() {
   const mem = process.memoryUsage();
   return { botRssMb: Math.round(mem.rss / 1048576), systemTotalMb: Math.round(os.totalmem() / 1048576), systemFreeMb: Math.round(os.freemem() / 1048576) };
 }
+
+/** Status of a workspace's connection if one exists, without creating one (unlike waFor). */
+export const connectionStatus = (workspaceId: string): WaStatus | null => connections.get(workspaceId)?.status ?? null;
 
 export const waSummary = () => ({
   total: connections.size,

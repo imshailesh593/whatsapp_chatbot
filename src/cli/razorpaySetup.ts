@@ -10,10 +10,10 @@ dotenv.config();
 (async () => {
   const plans = await createPlans();
   console.log('\nAdd these lines to the server .env, then restart the bot:\n');
-  for (const p of plans) console.log(`${planEnvName(p.plan)}=${p.razorpayPlanId}${p.created ? '' : '   # already configured, left as it was'}`);
+  for (const p of plans) console.log(`${planEnvName(p.plan, p.period)}=${p.razorpayPlanId}${p.created ? '' : '   # already configured, left as it was'}`);
   if (plans.some((p) => p.created)) console.log('\nDo not run this again once the lines are saved: Razorpay would create duplicate plans.');
   console.log('\nChecking against Razorpay...');
-  for (const p of plans) process.env[planEnvName(p.plan)] = p.razorpayPlanId;
+  for (const p of plans) process.env[planEnvName(p.plan, p.period)] = p.razorpayPlanId;
   for (const c of await checkRazorpay(true)) console.log(`${c.ok ? 'OK  ' : 'FAIL'} ${c.label}: ${c.detail}`);
 })().catch((err) => {
   console.error('Razorpay setup failed:', (err as Error).message);

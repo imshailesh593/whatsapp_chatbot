@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
-import { CreditCard, Loader2 } from 'lucide-react';
+import type { ReactNode } from 'react';
+import { CalendarDays, CreditCard, Loader2, Megaphone, MessageSquare, Phone, RefreshCw, Sparkles, Users } from 'lucide-react';
 import { api } from '../api';
 import type { AdminUser, BillingInfo } from '../types';
 
@@ -11,13 +12,46 @@ function Bar({ label, used, limit }: { label: string; used: number; limit: numbe
   const pct = limit ? Math.min(100, Math.round((used / limit) * 100)) : 0;
   return (
     <div>
-      <div className="flex justify-between text-[11px] text-muted mb-1">
+      <div className="flex justify-between text-[12.5px] text-muted mb-1">
         <span>{label}</span>
         <span className="text-fg2">{used.toLocaleString()} / {limit === null ? 'unlimited' : limit.toLocaleString()}</span>
       </div>
       <div className="h-1.5 rounded-full bg-subtle overflow-hidden">
         <div className={`h-full ${pct >= 100 ? 'bg-danger' : pct >= 80 ? 'bg-warn' : 'bg-brand'}`} style={{ width: `${limit === null ? 4 : Math.max(pct, 2)}%` }} />
       </div>
+    </div>
+  );
+}
+
+
+// A grainy gradient for the highlighted plan (the grain is an inline SVG noise)
+const GRADIENT = 'radial-gradient(95% 80% at 8% 10%, #22d3ee 0%, transparent 62%), radial-gradient(90% 85% at 96% 92%, #0a8a64 0%, transparent 66%), radial-gradient(70% 70% at 88% 8%, #34d399 0%, transparent 60%), #0a2540';
+const NOISE = "url(\"data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='180' height='180'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 .9 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>\")";
+
+/** One plan: a card with the name and price, the buttons under it, then what is included. */
+function PlanColumn(p: { title: string; sub: string; price: string; unit: string; note: string; hot?: boolean; badge?: string; rows: [typeof MessageSquare, string][]; intro: string; buttons?: ReactNode; footer?: ReactNode; className?: string }) {
+  return (
+    <div className={`snap-start px-2 sm:px-3 flex flex-col ${p.className ?? ''}`}>
+      <div className={`relative overflow-hidden isolate rounded-3xl min-h-[230px] p-5 flex flex-col justify-between ${p.hot ? 'text-white' : 'bg-sunken text-fg border border-line'}`} style={p.hot ? { background: GRADIENT } : undefined}>
+        {p.hot && <div aria-hidden className="absolute inset-0 -z-10 opacity-50 mix-blend-overlay pointer-events-none" style={{ backgroundImage: NOISE }} />}
+        <div>
+          <div className="text-2xl font-semibold tracking-tight">{p.title}</div>
+          {p.badge && <span className="inline-block mt-2 text-xs font-semibold px-3 py-0.5 rounded-full border border-white/80">{p.badge}</span>}
+          <div className="mt-2 text-xs opacity-80">{p.sub}</div>
+        </div>
+        <div>
+          <span className="text-4xl font-semibold tracking-tight">{p.price}</span><span className="text-sm opacity-75"> {p.unit}</span>
+          <div className="mt-1 text-xs opacity-85">{p.note}</div>
+        </div>
+      </div>
+      {p.buttons && <div className="mt-4 flex flex-col gap-2">{p.buttons}</div>}
+      {p.footer}
+      <div className="mt-6 text-sm text-fg2">{p.intro} <span className="text-muted">↴</span></div>
+      <ul className="mt-2 border-t border-dotted border-line-strong">
+        {p.rows.map(([Icon, text]) => (
+          <li key={text} className="flex items-center gap-3 py-3 text-sm text-fg border-b border-dotted border-line-strong"><Icon className="w-4 h-4 shrink-0 text-fg2" /><span>{text}</span></li>
+        ))}
+      </ul>
     </div>
   );
 }
@@ -29,6 +63,8 @@ export default function Billing({ me }: { me: AdminUser }) {
   const [chosen, setChosen] = useState<'INR' | 'USD' | null>(null);
   const [error, setError] = useState('');
   const owner = me.role === 'owner';
+  // "Choose Monthly" or "Choose Yearly" on the website: that card is highlighted
+  const preferred = (() => { try { const v = sessionStorage.getItem('lk_period'); return v === 'month' || v === 'year' ? v : null; } catch { return null; } })();
   const [code, setCode] = useState('');
   const [redeemed, setRedeemed] = useState('');
 
@@ -97,8 +133,8 @@ export default function Billing({ me }: { me: AdminUser }) {
           <h3 className="font-bold text-fg text-base flex items-center space-x-2"><CreditCard className="w-4 h-4 text-brand-text" /><span>Plan &amp; billing</span></h3>
           <div className="mt-2 flex items-center gap-2 flex-wrap">
             <span className="text-sm font-semibold text-fg">{b.planName}</span>
-            {!internal && <span className={`text-[11px] px-2 py-0.5 rounded-full border font-semibold ${pill}`}>{statusText}</span>}
-            {internal && <span className="text-[11px] text-muted">Not billed</span>}
+            {!internal && <span className={`text-[12.5px] px-2 py-0.5 rounded-full border font-semibold ${pill}`}>{statusText}</span>}
+            {internal && <span className="text-[12.5px] text-muted">Not billed</span>}
           </div>
         </div>
         {owner && b.provider === 'stripe' && b.status !== 'inactive' && (
@@ -123,48 +159,65 @@ export default function Billing({ me }: { me: AdminUser }) {
 
       {!internal && (
         <>
-          <div className="mt-6 grid grid-cols-1 max-w-sm gap-4">
-            {b.plans.map((p) => {
-              const current = b.plan !== 'internal' && b.status === 'active'; // there is one plan; older plan names count as it
-              return (
-                <div key={p.id} className={`rounded-xl border p-4 ${current ? 'border-brand/60 bg-brand-soft' : 'border-line bg-sunken'}`}>
-                  <div className="flex items-baseline justify-between">
-                    <div className="font-bold text-fg">{p.name}</div>
-                    {current && <span className="text-[10px] text-brand-text">Current plan</span>}
-                  </div>
-                  <div className="mt-1 text-xs text-muted">{p.blurb}</div>
-                  <div className="mt-3 text-lg font-extrabold text-fg">{money(p.price[currency], currency)}<span className="text-xs font-medium text-muted"> /month</span></div>
-                  <button type="button" onClick={() => setChosen(currency === 'INR' ? 'USD' : 'INR')} className="text-[11px] text-muted hover:text-fg2 underline">
-                    {currency === 'INR' ? `Not in India? Show ${money(p.price.USD, 'USD')}` : `Paying from India? Show ${money(p.price.INR, 'INR')}`}
-                  </button>
-                  <ul className="mt-3 space-y-1 text-xs text-fg2">
-                    <li>{p.limits.conversations.toLocaleString()} new conversations / month</li>
-                    <li>{p.limits.aiReplies.toLocaleString()} AI answers / month</li>
-                    <li>{p.limits.seats} team members</li>
-                    <li>{p.limits.broadcasts.toLocaleString()} broadcast messages / month</li>
-                    <li>1 WhatsApp number</li>
-                  </ul>
-                  {owner && (!current || linkPaid) && (
-                    <div className="mt-4 flex flex-col gap-2">
-                      {currency === 'INR' && <button disabled={!b.providers.razorpay || !!busy} onClick={() => go(`rz-${p.id}`, () => api.checkout(p.id, 'razorpay'))}
-                        className="py-2 bg-brand hover:bg-brand text-on-brand font-bold text-xs rounded-lg disabled:opacity-40 flex items-center justify-center space-x-1.5">
-                        {busy === `rz-${p.id}` && <Loader2 className="w-3.5 h-3.5 animate-spin" />}<span>{current ? 'Renew for 30 days (₹)' : 'Subscribe in ₹ (UPI AutoPay, cards)'}</span>
-                      </button>}
-                      {!current && currency === 'USD' && b.providers.paypal && <button disabled={!!busy} onClick={() => go(`pp-${p.id}`, () => api.checkout(p.id, 'paypal'))}
-                        className="py-2 bg-subtle hover:bg-subtle text-fg text-xs rounded-lg border border-line disabled:opacity-40 flex items-center justify-center space-x-1.5">
-                        {busy === `pp-${p.id}` && <Loader2 className="w-3.5 h-3.5 animate-spin" />}<span>Subscribe in $ (PayPal)</span>
-                      </button>}
-                      {!current && currency === 'USD' && (b.providers.stripe || !b.providers.paypal) && <button disabled={!b.providers.stripe || !!busy} onClick={() => go(`st-${p.id}`, () => api.checkout(p.id, 'stripe'))}
-                        className="py-2 bg-subtle hover:bg-subtle text-fg text-xs rounded-lg border border-line disabled:opacity-40 flex items-center justify-center space-x-1.5">
-                        {busy === `st-${p.id}` && <Loader2 className="w-3.5 h-3.5 animate-spin" />}<span>Subscribe in $ (card)</span>
-                      </button>}
-                    </div>
-                  )}
-                  {owner && !current && currency === 'INR' && !b.providers.razorpay && (
-                    <p className="mt-2 text-[11px] text-warn">Subscriptions in rupees are being set up. <button type="button" onClick={() => setChosen('USD')} className="underline">Subscribe in dollars instead</button></p>
-                  )}
-                </div>
-              );
+          <div className="mt-6 grid grid-flow-col auto-cols-[84%] sm:grid-flow-row sm:grid-cols-2 sm:auto-cols-auto max-w-4xl overflow-x-auto sm:overflow-visible snap-x snap-mandatory pb-2 -mx-1">
+            {b.plans.flatMap((p) => {
+              const current = b.plan !== 'internal' && b.status === 'active'; // one plan sold monthly or yearly; older plan names count as it
+              const monthMinor = p.price[currency];
+              const yearMinor = currency === 'INR' ? p.yearlyINR : p.yearlyUSD;
+              const save = Math.round(100 - (yearMinor / (monthMinor * 12)) * 100);
+              const perMonth = currency === 'USD' ? `$${(yearMinor / 1200).toFixed(2)}` : money(Math.round(yearMinor / 12), 'INR');
+              const rows: [typeof MessageSquare, string][] = [
+                [MessageSquare, `${p.limits.conversations.toLocaleString()} new conversations / month`],
+                [Sparkles, `${p.limits.aiReplies.toLocaleString()} AI answers / month`],
+                [Users, `${p.limits.seats} team members`],
+                [Megaphone, `${p.limits.broadcasts.toLocaleString()} broadcast messages / month`],
+                [Phone, '1 WhatsApp number'],
+                [CalendarDays, 'CRM, inbox, booking and hand-off']
+              ];
+              const btn = 'w-full py-3 text-sm font-semibold rounded-full disabled:opacity-40 flex items-center justify-center gap-1.5';
+              const dark = `${btn} bg-fg text-app hover:opacity-90`;
+              const wanted = (period: 'month' | 'year') => (preferred === period ? 'ring-2 ring-brand/50 rounded-3xl' : '');
+              return [
+                <PlanColumn key={`${p.id}-month`} className={wanted('month')} title="Monthly" sub={`${p.name} plan, paid month by month`} price={money(monthMinor, currency)} unit="/ month" note="Cancel any time" rows={rows} intro="Everything included"
+                  footer={
+                    <button type="button" onClick={() => setChosen(currency === 'INR' ? 'USD' : 'INR')} className="mt-3 text-[12.5px] text-muted hover:text-fg2 underline">
+                      {currency === 'INR' ? `Not in India? Show ${money(p.price.USD, 'USD')} / ${money(p.yearlyUSD, 'USD')}` : `Paying from India? Show ${money(p.price.INR, 'INR')} / ${money(p.yearlyINR, 'INR')}`}
+                    </button>
+                  }
+                  buttons={
+                    owner && (!current || linkPaid) && (
+                      <>
+                        {currency === 'INR' && <button disabled={!b.providers.razorpay || !!busy} onClick={() => go(`rz-${p.id}`, () => api.checkout(p.id, 'razorpay', 'month'))} className={dark}>
+                          {busy === `rz-${p.id}` && <Loader2 className="w-3.5 h-3.5 animate-spin" />}<span>{current ? 'Renew for 30 days' : 'Choose Monthly'}</span>
+                        </button>}
+                        {!current && currency === 'USD' && b.providers.paypal && <button disabled={!!busy} onClick={() => go(`pp-${p.id}`, () => api.checkout(p.id, 'paypal', 'month'))} className={dark}>
+                          {busy === `pp-${p.id}` && <Loader2 className="w-3.5 h-3.5 animate-spin" />}<span>Choose Monthly</span>
+                        </button>}
+                        {!current && currency === 'USD' && (b.providers.stripe || !b.providers.paypal) && <button disabled={!b.providers.stripe || !!busy} onClick={() => go(`st-${p.id}`, () => api.checkout(p.id, 'stripe'))} className={`${btn} border border-line-strong text-fg hover:bg-sunken`}>
+                          {busy === `st-${p.id}` && <Loader2 className="w-3.5 h-3.5 animate-spin" />}<span>Choose Monthly (card)</span>
+                        </button>}
+                        {!current && currency === 'INR' && !b.providers.razorpay && (
+                          <p className="text-[12.5px] text-warn">Payments in rupees are being set up. <button type="button" onClick={() => setChosen('USD')} className="underline">Pay in dollars instead</button></p>
+                        )}
+                      </>
+                    )
+                  }
+                />,
+                <PlanColumn key={`${p.id}-year`} className={wanted('year')} hot badge="Best value" title="Yearly" sub={`${p.name} plan, paid once a year`} price={money(yearMinor, currency)} unit="/ year" note={`Just ${perMonth} a month · save ${save}%`}
+                  rows={[[CreditCard, `You save ${money(monthMinor * 12 - yearMinor, currency)} a year`], [RefreshCw, 'One payment a year, no monthly bills']]} intro="Everything in Monthly, plus"
+                  buttons={
+                    owner && !current && (
+                      (currency === 'INR' ? b.providers.razorpay && b.providers.razorpayYearly : b.providers.paypal && b.providers.paypalYearly) ? (
+                        <button disabled={!!busy} onClick={() => go(`y-${p.id}`, () => api.checkout(p.id, currency === 'INR' ? 'razorpay' : 'paypal', 'year'))} className={dark}>
+                          {busy === `y-${p.id}` && <Loader2 className="w-3.5 h-3.5 animate-spin" />}<span>Choose Yearly</span>
+                        </button>
+                      ) : (
+                        <p className="text-[12.5px] text-warn">Yearly billing is not set up yet.</p>
+                      )
+                    )
+                  }
+                />
+              ];
             })}
           </div>
           {owner && (
@@ -175,9 +228,9 @@ export default function Billing({ me }: { me: AdminUser }) {
               {redeemed && <span className="text-xs text-brand-text">{redeemed}</span>}
             </div>
           )}
-          {anyProvider && owner && <p className="text-[11px] text-muted mt-3">You approve the monthly payment (UPI AutoPay, card or PayPal) on the payment provider&apos;s secure page. It is then debited automatically every month, and you can cancel any time here. After approving, come back: your plan switches on as soon as the first payment is confirmed (usually within a minute; refresh if it still shows no plan).</p>}
-          {!anyProvider && <p className="text-[11px] text-muted mt-3">Online payment is not switched on for this account yet. Contact support to activate a plan.</p>}
-          {!owner && <p className="text-[11px] text-muted mt-3">Only the account owner can change the plan.</p>}
+          {anyProvider && owner && <p className="text-[12.5px] text-muted mt-3">You approve the recurring payment (UPI AutoPay, card or PayPal) on the payment provider&apos;s secure page. It is then debited automatically every month, or every year on the yearly plan, and you can cancel any time here. After approving, come back: your plan switches on as soon as the first payment is confirmed (usually within a minute; refresh if it still shows no plan).</p>}
+          {!anyProvider && <p className="text-[12.5px] text-muted mt-3">Online payment is not switched on for this account yet. Contact support to activate a plan.</p>}
+          {!owner && <p className="text-[12.5px] text-muted mt-3">Only the account owner can change the plan.</p>}
           {owner && b.status === 'active' && !b.cancelAtPeriodEnd && b.provider && !linkPaid && (
             <button onClick={cancel} disabled={!!busy} className="mt-4 text-xs text-muted hover:text-danger underline disabled:opacity-50">Cancel subscription</button>
           )}

@@ -62,7 +62,7 @@ export default function PlatformShell({ user, onBusiness, onSignOut }: { user: A
           </button>
           <div className="flex items-center gap-2.5 px-3 pt-1">
             <span className="w-8 h-8 rounded-full bg-brand text-on-brand text-xs font-bold flex items-center justify-center">{user.email.slice(0, 2).toUpperCase()}</span>
-            <div className="min-w-0"><div className="text-xs text-fg font-semibold truncate">System admin</div><div className="text-[11px] text-muted truncate">{user.email}</div></div>
+            <div className="min-w-0"><div className="text-xs text-fg font-semibold truncate">System admin</div><div className="text-[12.5px] text-muted truncate">{user.email}</div></div>
           </div>
         </div>
       }
@@ -95,11 +95,11 @@ function Kpi({ label, value, sub, icon, delta }: { label: string; value: string 
   return (
     <div className={card + ' p-4'}>
       <div className="flex items-start justify-between">
-        <p className="text-[11px] font-semibold text-muted uppercase tracking-wider">{label}</p>
+        <p className="text-[12.5px] font-semibold text-muted uppercase tracking-wider">{label}</p>
         <span className="w-8 h-8 rounded-lg bg-brand-soft text-brand-text flex items-center justify-center">{icon}</span>
       </div>
       <p className="text-2xl font-bold text-fg mt-2">{value}</p>
-      {delta !== undefined ? <p className={`text-[11px] mt-0.5 font-medium ${delta >= 0 ? 'text-brand-text' : 'text-danger'}`}>{delta >= 0 ? '↑' : '↓'} {Math.abs(delta)}% vs previous period</p> : sub ? <p className="text-[11px] text-muted mt-0.5">{sub}</p> : <p className="text-[11px] mt-0.5">&nbsp;</p>}
+      {delta !== undefined ? <p className={`text-[12.5px] mt-0.5 font-medium ${delta >= 0 ? 'text-brand-text' : 'text-danger'}`}>{delta >= 0 ? '↑' : '↓'} {Math.abs(delta)}% vs previous period</p> : sub ? <p className="text-[12.5px] text-muted mt-0.5">{sub}</p> : <p className="text-[12.5px] mt-0.5">&nbsp;</p>}
     </div>
   );
 }
@@ -131,18 +131,18 @@ function BarChart({ data, format = (n: number) => String(n), color = GREEN, empt
   return (
     <div>
       <div className="flex">
-        <div className="flex flex-col justify-between h-44 pr-2 text-[10px] text-muted text-right w-12">{ticks.map((t, i) => <span key={i}>{format(Math.round(t))}</span>)}</div>
+        <div className="flex flex-col justify-between h-44 pr-2 text-[12px] text-muted text-right w-12">{ticks.map((t, i) => <span key={i}>{format(Math.round(t))}</span>)}</div>
         <div className="flex-1 relative h-44 border-b border-l border-line flex items-end gap-[2px] px-1" onMouseLeave={() => setHover(null)}>
           {[0.5].map((g) => <div key={g} className="absolute left-0 right-0 border-t border-dashed border-line" style={{ bottom: `${g * 100}%` }} />)}
           {data.map((d, i) => (
             <div key={d.label} className="flex-1 h-full flex items-end relative" onMouseEnter={() => setHover(i)}>
               <div className="w-full rounded-t" style={{ height: `${(d.value / max) * 100}%`, minHeight: d.value ? 3 : 0, background: color, opacity: hover === null || hover === i ? 1 : 0.55 }} />
-              {hover === i && <div className="absolute -top-8 left-1/2 -translate-x-1/2 z-10 bg-fg text-fg text-[10px] rounded px-2 py-1 whitespace-nowrap">{d.label}: {format(d.value)}</div>}
+              {hover === i && <div className="absolute -top-8 left-1/2 -translate-x-1/2 z-10 bg-fg text-fg text-[12px] rounded px-2 py-1 whitespace-nowrap">{d.label}: {format(d.value)}</div>}
             </div>
           ))}
         </div>
       </div>
-      <div className="flex pl-12 pr-1 text-[10px] text-muted mt-1">{data.map((d, i) => <span key={d.label} className="flex-1 relative h-3">{i % step === 0 && <span className="absolute left-1/2 -translate-x-1/2 whitespace-nowrap">{d.label.slice(5) || d.label}</span>}</span>)}</div>
+      <div className="flex pl-12 pr-1 text-[12px] text-muted mt-1">{data.map((d, i) => <span key={d.label} className="flex-1 relative h-3">{i % step === 0 && <span className="absolute left-1/2 -translate-x-1/2 whitespace-nowrap">{d.label.slice(5) || d.label}</span>}</span>)}</div>
     </div>
   );
 }
@@ -158,7 +158,7 @@ function LineChart({ data, format = (n: number) => String(n) }: { data: Point[];
   return (
     <div>
       <div className="flex">
-        <div className="flex flex-col justify-between h-44 pr-2 text-[10px] text-muted text-right w-14">{[max, max / 2, 0].map((t, i) => <span key={i}>{format(Math.round(t))}</span>)}</div>
+        <div className="flex flex-col justify-between h-44 pr-2 text-[12px] text-muted text-right w-14">{[max, max / 2, 0].map((t, i) => <span key={i}>{format(Math.round(t))}</span>)}</div>
         <div className="flex-1 relative">
           <svg viewBox={`0 0 ${W} ${H}`} className="w-full h-44" preserveAspectRatio="none" onMouseLeave={() => setHover(null)}>
             {[0, 0.5, 1].map((g) => <line key={g} x1={0} x2={W} y1={H - pad - g * (H - pad * 2)} y2={H - pad - g * (H - pad * 2)} stroke="#e2e8f0" strokeDasharray="3 3" />)}
@@ -166,10 +166,10 @@ function LineChart({ data, format = (n: number) => String(n) }: { data: Point[];
             {data.map((d, i) => <rect key={i} x={x(i) - (W / data.length) / 2} y={0} width={W / data.length} height={H} fill="transparent" onMouseEnter={() => setHover(i)} />)}
             {hover !== null && <circle cx={x(hover)} cy={y(data[hover].value)} r={4} fill={GREEN} stroke="white" strokeWidth={2} vectorEffect="non-scaling-stroke" />}
           </svg>
-          {hover !== null && <div className="absolute top-0 left-1/2 -translate-x-1/2 bg-fg text-fg text-[10px] rounded px-2 py-1 whitespace-nowrap">{data[hover].label}: {format(data[hover].value)}</div>}
+          {hover !== null && <div className="absolute top-0 left-1/2 -translate-x-1/2 bg-fg text-fg text-[12px] rounded px-2 py-1 whitespace-nowrap">{data[hover].label}: {format(data[hover].value)}</div>}
         </div>
       </div>
-      <div className="flex pl-14 text-[10px] text-muted mt-1 justify-between"><span>{data[0].label}</span><span>{data[data.length - 1].label}</span></div>
+      <div className="flex pl-14 text-[12px] text-muted mt-1 justify-between"><span>{data[0].label}</span><span>{data[data.length - 1].label}</span></div>
     </div>
   );
 }
@@ -236,7 +236,7 @@ function Table({ head, children, empty }: { head: string[]; children: ReactNode;
   return (
     <div className={card + ' overflow-x-auto'}>
       <table className="w-full text-left text-sm">
-        <thead className="bg-sunken text-muted text-[11px] uppercase tracking-wider"><tr>{head.map((h) => <th key={h} className="py-3 px-4 font-semibold">{h}</th>)}</tr></thead>
+        <thead className="bg-sunken text-muted text-[12.5px] uppercase tracking-wider"><tr>{head.map((h) => <th key={h} className="py-3 px-4 font-semibold">{h}</th>)}</tr></thead>
         <tbody className="divide-y divide-line">{children}</tbody>
       </table>
       {empty && <p className="p-6 text-center text-sm text-muted">{empty}</p>}

@@ -8,6 +8,10 @@ export interface PlanDef {
   name: string;
   /** Smallest unit: paise (INR) and cents (USD), per month */
   price: { INR: number; USD: number };
+  /** Dollar price for a year paid up front (cents). Everyone chooses monthly or yearly, in rupees (India) or dollars. */
+  yearlyUSD: number;
+  /** Rupee price for a year paid up front (paise). */
+  yearlyINR: number;
   limits: Limits;
   /** Webhooks and the REST API */
   integrations: boolean;
@@ -26,7 +30,7 @@ export interface Limits {
 }
 
 export const PLANS: PlanDef[] = [
-  { id: 'pro', name: 'Pro', price: { INR: 49_900, USD: 1_900 }, limits: { conversations: 1_500, aiReplies: 2_000, seats: 5, broadcasts: 1_000 }, integrations: true, blurb: 'Everything included: one WhatsApp number, AI answers, calendar booking, CRM, broadcasts and integrations.' }
+  { id: 'pro', name: 'Pro', price: { INR: 84_900, USD: 900 }, yearlyUSD: 4_900, yearlyINR: 459_900, limits: { conversations: 1_500, aiReplies: 2_000, seats: 5, broadcasts: 1_000 }, integrations: true, blurb: 'Everything included: one WhatsApp number, AI answers, calendar booking, CRM, broadcasts and integrations.' }
 ];
 
 /** The plans as shipped in code. The operator can change them in the admin panel (see services/planConfig.ts); these are what Reset restores. */

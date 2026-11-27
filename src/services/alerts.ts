@@ -1,3 +1,4 @@
+import { contactLabel } from '../lib/channel';
 import { prisma } from '../lib/prisma';
 import { loadConfig } from './botConfig';
 import { sendRaw, transportReady } from './transport';
@@ -60,7 +61,7 @@ function leadText(name: string | null, phone: string, service: string, answers: 
     .slice(0, 10)
     .map(([k, v]) => `• ${prettyKey(k)}: ${cut(String(v), 160)}`);
   const link = dashboardUrl();
-  return [`${name || 'Unknown'} · ${/^\d+$/.test(phone) ? '+' + phone : phone}`, `Service: ${service}`, ...lines, link !== '/admin/' ? `\nOpen: ${link}` : ''].filter(Boolean).join('\n');
+  return [`${name || 'Unknown'} · ${contactLabel(phone)}`, `Service: ${service}`, ...lines, link !== '/admin/' ? `\nOpen: ${link}` : ''].filter(Boolean).join('\n');
 }
 
 /** A customer finished the questionnaire. */
@@ -81,7 +82,7 @@ export async function notifyBooked(workspaceId: string, phone: string): Promise<
   try {
     const session = await prisma.session.findUnique({ where: { workspaceId_phoneNumber: { workspaceId, phoneNumber: phone } } });
     const cfg = await loadConfig(workspaceId);
-    await deliverAlert(workspaceId, `🗓 Booking confirmed by customer`, `${session?.contactName || 'A customer'} · ${/^\d+$/.test(phone) ? '+' + phone : phone} says they have booked ${cfg.ws.bookingLabel}.`);
+    await deliverAlert(workspaceId, `🗓 Booking confirmed by customer`, `${session?.contactName || 'A customer'} · ${contactLabel(phone)} says they have booked ${cfg.ws.bookingLabel}.`);
   } catch (err) {
     console.error('[alerts] booking alert failed:', (err as Error).message);
   }

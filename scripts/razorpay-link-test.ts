@@ -61,7 +61,7 @@ async function cleanup() {
   process.env.RAZORPAY_MODE = 'link';
 
   // a business with an owner and an agent
-  let r = await call(J, 'POST', '/admin/api/signup', { businessName: 'Link Co', email: `owner${DOMAIN}`, password: 'link owner password' });
+  let r = await call(J, 'POST', '/admin/api/signup', { phone: '919876543210', businessName: 'Link Co', email: `owner${DOMAIN}`, password: 'link owner password' });
   const hO = cookieOf(r);
   const wsId = r.json().user.workspace.id as string;
   r = await call(hO, 'POST', '/admin/api/admins', { email: `agent${DOMAIN}`, password: 'link agent password', role: 'admin' });
@@ -76,7 +76,7 @@ async function cleanup() {
   ok(r.statusCode === 200 && r.json().url === 'https://rzp.io/i/test1', 'the owner gets a hosted payment link');
   const created = apiCalls.at(-1)!;
   ok(created.url === 'https://api.razorpay.com/v1/payment_links' && created.auth === 'Basic ' + Buffer.from('rzp_test_key:rzp_test_secret').toString('base64'), 'it is created with the account keys');
-  ok(created.body.amount === 49_900 && created.body.currency === 'INR' && created.body.accept_partial === false, 'amount is the plan price in paise, no part payment');
+  ok(created.body.amount === PLANS[0].price.INR && created.body.currency === 'INR' && created.body.accept_partial === false, 'amount is the plan price in paise, no part payment');
   ok(created.body.notes.workspaceId === wsId && created.body.notes.plan === 'pro', 'the business and plan travel with the link');
   ok(created.body.reference_id.length <= 40 && created.body.notify.email === false && created.body.reminder_enable === false, 'reference id fits Razorpay limits and Razorpay sends nothing itself');
   ok(created.body.callback_url === 'https://bot.example/admin/?billing=success', 'the customer returns to the dashboard afterwards');
@@ -95,20 +95,20 @@ async function cleanup() {
   });
   const row = () => prisma.workspace.findUniqueOrThrow({ where: { id: wsId } });
 
-  ok((await hook('rzl_bad', 'payment_link.paid', paid('pay_x', 'pro', 49_900), 'wrong')).statusCode === 400, 'a webhook with a bad signature is rejected');
+  ok((await hook('rzl_bad', 'payment_link.paid', paid('pay_x', 'pro', PLANS[0].price.INR), 'wrong')).statusCode === 400, 'a webhook with a bad signature is rejected');
   ok((await row()).planStatus === 'inactive', '...and changes nothing');
-  ok((await hook('rzl_1', 'payment_link.paid', paid('pay_1', 'pro', 49_900))).statusCode === 200, 'a paid link is accepted');
+  ok((await hook('rzl_1', 'payment_link.paid', paid('pay_1', 'pro', PLANS[0].price.INR))).statusCode === 200, 'a paid link is accepted');
   let w = await row();
   ok(w.plan === 'pro' && w.planStatus === 'active' && w.billingProvider === 'razorpay_link' && w.providerSubscriptionId === null, 'the plan is switched on, paid by link');
   ok(Math.abs(w.currentPeriodEnd!.getTime() - (Date.now() + 30 * DAY)) < 60_000 && accessState(w).active, 'for 30 days from now');
-  ok((await prisma.payment.count({ where: { workspaceId: wsId, providerRef: 'pay_1', amount: 49_900, status: 'paid' } })) === 1, 'the payment is recorded');
+  ok((await prisma.payment.count({ where: { workspaceId: wsId, providerRef: 'pay_1', amount: PLANS[0].price.INR, status: 'paid' } })) === 1, 'the payment is recorded');
   const end1 = w.currentPeriodEnd!.getTime();
 
-  await hook('rzl_1', 'payment_link.paid', paid('pay_1', 'pro', 49_900));
-  await hook('rzl_1b', 'payment_link.paid', paid('pay_1', 'pro', 49_900));
+  await hook('rzl_1', 'payment_link.paid', paid('pay_1', 'pro', PLANS[0].price.INR));
+  await hook('rzl_1b', 'payment_link.paid', paid('pay_1', 'pro', PLANS[0].price.INR));
   ok((await row()).currentPeriodEnd!.getTime() === end1 && (await prisma.payment.count({ where: { workspaceId: wsId } })) === 1, 'Razorpay repeating an event, or the same payment, does not give extra days');
 
-  await hook('rzl_2', 'payment_link.paid', paid('pay_2', 'pro', 49_900));
+  await hook('rzl_2', 'payment_link.paid', paid('pay_2', 'pro', PLANS[0].price.INR));
   ok(Math.abs((await row()).currentPeriodEnd!.getTime() - (end1 + 30 * DAY)) < 1000, 'paying again for the same plan before it ends adds 30 more days');
 
   await hook('rzl_3', 'payment_link.paid', paid('pay_3', 'pro', 10_000));
@@ -116,10 +116,10 @@ async function cleanup() {
   ok(w.plan === 'pro' && (await prisma.payment.count({ where: { workspaceId: wsId, providerRef: 'pay_3' } })) === 1, 'an underpayment is recorded but does not switch a plan on');
 
 
-  ok((await hook('rzl_5', 'payment_link.paid', paid('pay_5', 'pro', 49_900, 'no-such-workspace'))).body === 'ignored', 'a link for an unknown business is ignored');
-  ok((await hook('rzl_6', 'payment_link.paid', paid('pay_6', 'platinum', 49_900))).body === 'ignored', 'a link for an unknown plan is ignored');
+  ok((await hook('rzl_5', 'payment_link.paid', paid('pay_5', 'pro', PLANS[0].price.INR, 'no-such-workspace'))).body === 'ignored', 'a link for an unknown business is ignored');
+  ok((await hook('rzl_6', 'payment_link.paid', paid('pay_6', 'platinum', PLANS[0].price.INR))).body === 'ignored', 'a link for an unknown plan is ignored');
   await prisma.workspace.update({ where: { id: wsId }, data: { plan: 'internal' } });
-  ok((await hook('rzl_7', 'payment_link.paid', paid('pay_7', 'pro', 49_900))).body === 'ignored' && (await row()).plan === 'internal', 'the unbilled internal business cannot be changed by a payment');
+  ok((await hook('rzl_7', 'payment_link.paid', paid('pay_7', 'pro', PLANS[0].price.INR))).body === 'ignored' && (await row()).plan === 'internal', 'the unbilled internal business cannot be changed by a payment');
   await prisma.workspace.update({ where: { id: wsId }, data: { plan: 'pro' } });
 
   console.log('\n[owner experience]');
@@ -142,18 +142,18 @@ async function cleanup() {
   const before = linkSeq;
   ok((await renewalTick()) === 1 && linkSeq === before + 1, 'three days before the end a fresh link is created and sent');
   const msg = sent.find((t) => t.includes('plan ends'))!;
-  ok(!!msg && /https:\/\/rzp\.io\/i\/test\d+/.test(msg) && msg.includes('₹499'), 'the alert carries the link and the price');
+  ok(!!msg && /https:\/\/rzp\.io\/i\/test\d+/.test(msg) && msg.includes('₹' + PLANS[0].price.INR / 100), 'the alert carries the link and the price');
   ok((await renewalTick()) === 0 && linkSeq === before + 1, 'only one reminder per period');
   const lastLink = apiCalls.at(-1)!;
-  ok(lastLink.body.notes.plan === 'pro' && lastLink.body.amount === 49_900, 'the reminder link is for the plan they are on');
+  ok(lastLink.body.notes.plan === 'pro' && lastLink.body.amount === PLANS[0].price.INR, 'the reminder link is for the plan they are on');
 
   console.log('\n[referral commission on link payments]');
   await setSetting('affiliate', { enabled: true, percent: 20, months: 12, bonusDays: 0 });
   const referrer = (await prisma.workspace.findUniqueOrThrow({ where: { id: wsId } }));
-  r = await call(J, 'POST', '/admin/api/signup', { businessName: 'Referred Link Co', email: `ref${DOMAIN}`, password: 'referred link password', ref: (await call(hO, 'GET', '/admin/api/referral')).json().code });
+  r = await call(J, 'POST', '/admin/api/signup', { phone: '919876543210', businessName: 'Referred Link Co', email: `ref${DOMAIN}`, password: 'referred link password', ref: (await call(hO, 'GET', '/admin/api/referral')).json().code });
   const refId = r.json().user.workspace.id as string;
   ok((await prisma.workspace.findUniqueOrThrow({ where: { id: refId } })).referredById === referrer.id, 'a referred business signs up');
-  await hook('rzl_8', 'payment_link.paid', paid('pay_8', 'pro', 49_900, refId));
+  await hook('rzl_8', 'payment_link.paid', paid('pay_8', 'pro', PLANS[0].price.INR, refId));
   const c = await prisma.affiliateCommission.findFirst({ where: { affiliateId: wsId } });
   ok(!!c && c.amount === 9_980 && c.status === 'pending', 'the referrer earns their share when the referred business pays by link');
   await setSetting('affiliate', {});

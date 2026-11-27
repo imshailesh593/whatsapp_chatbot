@@ -71,7 +71,7 @@ async function cleanup() {
   const opWs = await prisma.workspace.create({ data: { slug: `set-op-${Date.now().toString(36)}`, name: 'Ops', businessName: 'Ops', plan: 'internal', planStatus: 'active', onboardingCompleted: true } });
   await prisma.adminUser.create({ data: { email: `op${DOMAIN}`, passwordHash: await hashPassword('operator password 1'), role: 'owner', isSuperAdmin: true, workspaceId: opWs.id } });
   const hOp = cookieOf(await call(J, 'POST', '/admin/api/login', { email: `op${DOMAIN}`, password: 'operator password 1' }));
-  let r = await call(J, 'POST', '/admin/api/signup', { businessName: 'Biz Co', email: EMAIL_OWNER, password: 'biz owner password' });
+  let r = await call(J, 'POST', '/admin/api/signup', { phone: '919876543210', businessName: 'Biz Co', email: EMAIL_OWNER, password: 'biz owner password' });
   const hBiz = cookieOf(r);
   const bizId = r.json().user.workspace.id as string;
 
@@ -130,15 +130,18 @@ async function cleanup() {
   ok(r.statusCode === 200 && PLANS[0].name === 'Pro Plus' && PLANS[0].price.INR === 79_900 && PLANS[0].price.USD === 2_900 && PLANS[0].limits.conversations === 2500 && PLANS[0].limits.seats === 8 && PLANS[0].limits.aiReplies === PLAN_DEFAULTS[0].limits.aiReplies, 'name, prices and limits change, and what was not sent stays as it was');
   r = await call(hOp, 'GET', '/admin/api/super/plans');
   ok(r.json().plans[0].price.INR === 79_900 && r.json().plans[0].blurb.includes('more room'), 'the plans list shows the change');
-  const page = (await app.inject({ method: 'GET', url: '/?region=in' })).body;
+  // prices are shown to visitors who left their WhatsApp number
+  const unlock = await app.inject({ method: 'POST', url: '/pricing/unlock', headers: { 'content-type': 'application/x-www-form-urlencoded' }, payload: 'phone=919876543210&next=/' });
+  const priceCookie = String(unlock.headers['set-cookie']).split(';')[0];
+  const page = (await app.inject({ method: 'GET', url: '/?region=in', headers: { cookie: priceCookie } })).body;
   ok(page.includes('₹799') && page.includes('Pro Plus') && !page.includes('₹499'), 'the website shows the new price and name straight away');
-  ok((await app.inject({ method: 'GET', url: '/?region=world' })).body.includes('$29'), '...and the new dollar price');
+  ok((await app.inject({ method: 'GET', url: '/?region=world', headers: { cookie: priceCookie } })).body.includes('$29'), '...and the new dollar price');
   PLANS[0].price.INR = 49_900;
   PLANS[0].name = 'x';
   await loadPlanOverrides();
   ok(PLANS[0].name === 'Pro Plus' && PLANS[0].price.INR === 79_900, 'after a restart the saved plan is loaded again');
   r = await call(hOp, 'POST', '/admin/api/super/razorpay/create-plan');
-  ok(rzCalls.filter((c) => c.method === 'POST' && c.path === '/plans').pop()!.body.item.amount === 79_900 && process.env.RAZORPAY_PLAN_PRO === 'plan_new2', 'creating the Razorpay plan again uses the new price and switches new subscribers to it');
+  ok(rzCalls.filter((c) => c.method === 'POST' && c.path === '/plans' && c.body.period === 'monthly').pop()!.body.item.amount === 79_900 && process.env.RAZORPAY_PLAN_PRO === 'plan_new3', 'creating the Razorpay plan again uses the new price and switches new subscribers to it');
   r = await call(hOp, 'POST', '/admin/api/super/plans/pro/reset');
   ok(r.statusCode === 200 && PLANS[0].name === PLAN_DEFAULTS[0].name && PLANS[0].price.INR === priceBefore, 'reset puts the plan back as shipped');
 

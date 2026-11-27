@@ -1,8 +1,10 @@
 import type { ReactNode } from 'react';
-import { Bell, CalendarDays, CreditCard, Gift, GitBranch, MessageCircle, Plug, QrCode, Users } from 'lucide-react';
+import { Bell, CalendarDays, CreditCard, Gift, GitBranch, Instagram, MessageCircle, Plug, QrCode, Users } from 'lucide-react';
 import type { AdminUser, Overview } from '../types';
 import Admins from './Admins';
 import WhatsAppLink from './WhatsAppLink';
+import MetaLink from './MetaLink';
+import ZernioLink from './ZernioLink';
 import BusinessProfile from './BusinessProfile';
 import BotBuilder from './BotBuilder';
 import Billing from './Billing';
@@ -15,6 +17,7 @@ const ic = 'w-4 h-4';
 
 const SECTIONS: { id: string; label: string; hint: string; icon: ReactNode }[] = [
   { id: 'whatsapp', label: 'WhatsApp', hint: 'Link your number', icon: <QrCode className={ic} /> },
+  { id: 'social', label: 'Instagram & Facebook', hint: 'DMs and comments', icon: <Instagram className={ic} /> },
   { id: 'business', label: 'Business & bot', hint: 'Greeting, facts, answers', icon: <Bell className={ic} /> },
   { id: 'menu', label: 'Menu & questions', hint: 'What the bot asks', icon: <MessageCircle className={ic} /> },
   { id: 'booking', label: 'Appointments', hint: 'Dates and times', icon: <CalendarDays className={ic} /> },
@@ -44,7 +47,7 @@ export default function Settings({ overview, me, onChanged, section, onSection }
               <span className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 ${on ? 'bg-brand-soft text-brand-text' : 'bg-subtle text-muted'}`}>{s.icon}</span>
               <span className="min-w-0">
                 <span className="block text-sm font-medium whitespace-nowrap">{s.label}</span>
-                <span className="hidden lg:block text-[11px] text-muted truncate">{s.hint}</span>
+                <span className="hidden lg:block text-[12.5px] text-muted truncate">{s.hint}</span>
               </span>
             </button>
           );
@@ -53,6 +56,7 @@ export default function Settings({ overview, me, onChanged, section, onSection }
 
       <div className="min-w-0">
         {current.id === 'whatsapp' && <WhatsAppLink onChanged={onChanged} />}
+        {current.id === 'social' && <div className="space-y-5"><MetaLink onChanged={onChanged} /><ZernioLink /></div>}
         {current.id === 'business' && <BusinessProfile workspace={overview.workspace} onSaved={onChanged} />}
         {current.id === 'menu' && <BotBuilder overview={overview} onSaved={onChanged} />}
         {current.id === 'booking' && <Appointments me={me} />}

@@ -16,6 +16,8 @@ export function PlanEditor({ plan, onChanged }: { plan: Plan; onChanged: () => v
     blurb: p.blurb,
     priceInr: String(p.price.INR / 100),
     priceUsd: String(p.price.USD / 100),
+    yearlyInr: String(p.yearlyINR / 100),
+    yearlyUsd: String(p.yearlyUSD / 100),
     conversations: String(p.limits.conversations),
     aiReplies: String(p.limits.aiReplies),
     seats: String(p.limits.seats),
@@ -27,7 +29,7 @@ export function PlanEditor({ plan, onChanged }: { plan: Plan; onChanged: () => v
   const [msg, setMsg] = useState('');
   const [error, setError] = useState('');
   useEffect(() => setF(make(plan)), [plan]); // eslint-disable-line react-hooks/exhaustive-deps
-  const priceChanged = Math.round(Number(f.priceInr) * 100) !== plan.price.INR || Math.round(Number(f.priceUsd) * 100) !== plan.price.USD;
+  const priceChanged = Math.round(Number(f.priceInr) * 100) !== plan.price.INR || Math.round(Number(f.priceUsd) * 100) !== plan.price.USD || Math.round(Number(f.yearlyInr) * 100) !== plan.yearlyINR || Math.round(Number(f.yearlyUsd) * 100) !== plan.yearlyUSD;
 
   async function run(fn: () => Promise<unknown>, done: string) {
     setBusy(true);
@@ -51,6 +53,8 @@ export function PlanEditor({ plan, onChanged }: { plan: Plan; onChanged: () => v
           blurb: f.blurb,
           priceInr: Number(f.priceInr),
           priceUsd: Number(f.priceUsd),
+          yearlyInr: Number(f.yearlyInr),
+          yearlyUsd: Number(f.yearlyUsd),
           integrations: f.integrations,
           limits: { conversations: Number(f.conversations), aiReplies: Number(f.aiReplies), seats: Number(f.seats), broadcasts: Number(f.broadcasts) }
         }),
@@ -66,6 +70,8 @@ export function PlanEditor({ plan, onChanged }: { plan: Plan; onChanged: () => v
         <label className={lab}>Price in India (₹ per month)<input className={input} type="number" min={1} step="0.01" value={f.priceInr} onChange={(e) => setF({ ...f, priceInr: e.target.value })} /></label>
         <label className={lab + ' sm:col-span-2'}>Description<input className={input} value={f.blurb} onChange={(e) => setF({ ...f, blurb: e.target.value })} /></label>
         <label className={lab}>Price elsewhere ($ per month)<input className={input} type="number" min={1} step="0.01" value={f.priceUsd} onChange={(e) => setF({ ...f, priceUsd: e.target.value })} /></label>
+        <label className={lab}>Yearly price in India (₹ per year)<input className={input} type="number" min={1} step="0.01" value={f.yearlyInr} onChange={(e) => setF({ ...f, yearlyInr: e.target.value })} /></label>
+        <label className={lab}>Yearly price elsewhere ($ per year)<input className={input} type="number" min={1} step="0.01" value={f.yearlyUsd} onChange={(e) => setF({ ...f, yearlyUsd: e.target.value })} /></label>
         <label className="text-xs text-fg2 flex items-end gap-2 pb-2"><input type="checkbox" checked={f.integrations} onChange={(e) => setF({ ...f, integrations: e.target.checked })} />Includes webhooks and the REST API</label>
         <label className={lab}>New chats per month<input className={input} type="number" min={1} value={f.conversations} onChange={(e) => setF({ ...f, conversations: e.target.value })} /></label>
         <label className={lab}>AI answers per month<input className={input} type="number" min={0} value={f.aiReplies} onChange={(e) => setF({ ...f, aiReplies: e.target.value })} /></label>
@@ -91,9 +97,14 @@ const GROUPS: { title: string; hint: string; keys: string[] }[] = [
   {
     title: 'Razorpay (₹ subscriptions)',
     hint: 'From the Razorpay dashboard: Account & Settings, API keys. The webhook secret is the one you set when you add the webhook below.',
-    keys: ['RAZORPAY_KEY_ID', 'RAZORPAY_KEY_SECRET', 'RAZORPAY_WEBHOOK_SECRET', 'RAZORPAY_PLAN_PRO']
+    keys: ['RAZORPAY_KEY_ID', 'RAZORPAY_KEY_SECRET', 'RAZORPAY_WEBHOOK_SECRET', 'RAZORPAY_PLAN_PRO', 'RAZORPAY_PLAN_PRO_YEARLY']
   },
-  { title: 'PayPal plan ($)', hint: 'The PayPal keys stay in the server settings. The plan id is filled in for you by the button below.', keys: ['PAYPAL_PLAN_PRO'] },
+  { title: 'PayPal plan ($)', hint: 'The PayPal keys stay in the server settings. The plan id is filled in for you by the button below.', keys: ['PAYPAL_PLAN_PRO', 'PAYPAL_PLAN_PRO_YEARLY'] },
+  {
+    title: 'Instagram & Facebook (Meta app)',
+    hint: 'From your Meta app (developers.facebook.com): App settings > Basic gives the app id and secret. Choose any long random text as the verify token and enter the same text when you add the webhook in the Meta dashboard. Webhook address: https://<your domain>/webhooks/meta. Login redirect address: https://<your domain>/admin/api/meta/callback.',
+    keys: ['META_APP_ID', 'META_APP_SECRET', 'META_VERIFY_TOKEN']
+  },
   {
     title: 'Email (Resend)',
     hint: 'Used for lead alerts and for payment receipts and reminders to your customers. Verify your sending domain in Resend first.',

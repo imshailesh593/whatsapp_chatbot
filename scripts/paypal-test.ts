@@ -145,7 +145,7 @@ async function cleanup() {
   const opWs = await prisma.workspace.create({ data: { slug: `pp-op-${Date.now().toString(36)}`, name: 'Ops', businessName: 'Ops', plan: 'internal', planStatus: 'active', onboardingCompleted: true } });
   await prisma.adminUser.create({ data: { email: `op${DOMAIN}`, passwordHash: await hashPassword('operator password 1'), role: 'owner', isSuperAdmin: true, workspaceId: opWs.id } });
   const hOp = cookieOf(await call(J, 'POST', '/admin/api/login', { email: `op${DOMAIN}`, password: 'operator password 1' }));
-  let r = await call(J, 'POST', '/admin/api/signup', { businessName: 'Pay Co', email: `owner${DOMAIN}`, password: 'pay owner password' });
+  let r = await call(J, 'POST', '/admin/api/signup', { phone: '919876543210', businessName: 'Pay Co', email: `owner${DOMAIN}`, password: 'pay owner password' });
   const hO = cookieOf(r);
   const wsId = r.json().user.workspace.id as string;
   await call(hO, 'POST', '/admin/api/admins', { email: `adm${DOMAIN}`, password: 'pay admin password', role: 'admin' });
@@ -195,10 +195,10 @@ async function cleanup() {
   const end2 = new Date(end1.getTime() + 30 * DAY);
   subs.get(subId).billing_info = { next_billing_time: end2.toISOString() };
   subs.get(subId).custom_id = `${wsId}:pro`;
-  const sale = (id: string) => ({ id, billing_agreement_id: subId, state: 'completed', amount: { total: '19.00', currency: 'USD' } });
+  const sale = (id: string) => ({ id, billing_agreement_id: subId, state: 'completed', amount: { total: (PLANS[0].price.USD / 100).toFixed(2), currency: 'USD' } });
   ok((await hook('ppt_2', 'PAYMENT.SALE.COMPLETED', sale('SALE-1'))).statusCode === 200, 'PAYMENT.SALE.COMPLETED is accepted');
   ok(Math.abs((await row()).currentPeriodEnd!.getTime() - end2.getTime()) < 1000, 'a monthly charge moves the period end to the next billing date');
-  ok((await prisma.payment.count({ where: { workspaceId: wsId, providerRef: 'SALE-1', amount: 1900, currency: 'USD', provider: 'paypal', status: 'paid' } })) === 1, 'the charge is recorded as a payment of $19.00');
+  ok((await prisma.payment.count({ where: { workspaceId: wsId, providerRef: 'SALE-1', amount: PLANS[0].price.USD, currency: 'USD', provider: 'paypal', status: 'paid' } })) === 1, 'the charge is recorded as a payment of $19.00');
   ok((await prisma.affiliateCommission.count({ where: { affiliateId: referrer.id } })) === 1, 'and earns the referrer a commission');
   await hook('ppt_2', 'PAYMENT.SALE.COMPLETED', sale('SALE-1'));
   await hook('ppt_2b', 'PAYMENT.SALE.COMPLETED', sale('SALE-1'));
@@ -237,7 +237,7 @@ async function cleanup() {
   ok(!accessState(await row()).active, 'and access stops once that date has passed');
 
   console.log('\n[an abandoned checkout leaves an unpaid business unpaid]');
-  r = await call(J, 'POST', '/admin/api/signup', { businessName: 'Unpaid Co', email: `unpaid${DOMAIN}`, password: 'unpaid owner password' });
+  r = await call(J, 'POST', '/admin/api/signup', { phone: '919876543210', businessName: 'Unpaid Co', email: `unpaid${DOMAIN}`, password: 'unpaid owner password' });
   const hT = cookieOf(r);
   const tId = r.json().user.workspace.id as string;
   await call(hT, 'POST', '/admin/api/billing/checkout', { plan: 'pro', provider: 'paypal' });

@@ -115,16 +115,16 @@ export default function BotBuilder({ overview, onSaved }: { overview: Overview; 
               <button className={iconBtn} disabled={i === services.length - 1} onClick={() => setServices(move(services, i, 1))} title="Move down"><ArrowDown className="w-3.5 h-3.5" /></button>
               <button className={`${iconBtn} hover:text-danger`} disabled={services.length === 1} onClick={() => setServices(services.filter((_, k) => k !== i))} title="Remove service"><Trash2 className="w-3.5 h-3.5" /></button>
             </div>
-            <label className="text-[11px] text-muted block mt-3 mb-1">Keywords that also select this service (comma separated)</label>
+            <label className="text-[12.5px] text-muted block mt-3 mb-1">Keywords that also select this service (comma separated)</label>
             <input value={s.keywords.join(', ')} onChange={(e) => patchService(i, { keywords: e.target.value.split(',').map((k) => k.trim()).filter(Boolean) })} placeholder="e.g. price, quote, buy" className={input} />
 
-            <label className="text-[11px] text-muted block mt-3 mb-1">Message sent when the customer finishes the questions (optional: add the right link or next step; empty uses the general thank-you). The customer gets it as ONE message, so keep it short and friendly, like something you would type yourself</label>
+            <label className="text-[12.5px] text-muted block mt-3 mb-1">Message sent when the customer finishes the questions (optional: add the right link or next step; empty uses the general thank-you). The customer gets it as ONE message, so keep it short and friendly, like something you would type yourself</label>
             <textarea value={s.closingMessage ?? ''} rows={6} maxLength={3000} onChange={(e) => patchService(i, { closingMessage: e.target.value })} placeholder="Thank you! Our team will contact you shortly. Book a call: https://..." className={`${input} resize-y`} />
 
             <div className="mt-3 space-y-2">
               {s.questions.map((q, j) => (
                 <div key={j} className="flex items-start gap-2">
-                  <span className="text-[10px] text-muted font-mono w-5 pt-2.5 text-right shrink-0">Q{j + 1}</span>
+                  <span className="text-[12px] text-muted font-mono w-5 pt-2.5 text-right shrink-0">Q{j + 1}</span>
                   <textarea value={q.prompt} rows={2} maxLength={500} onChange={(e) => patchQuestion(i, j, e.target.value)} placeholder="What the bot asks" className={`${input} resize-y`} />
                   <div className="flex flex-col">
                     <button className={iconBtn} disabled={j === 0} onClick={() => patchService(i, { questions: move(s.questions, j, -1) })} title="Move up"><ArrowUp className="w-3 h-3" /></button>

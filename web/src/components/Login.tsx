@@ -31,6 +31,8 @@ export default function Login({ onDone }: { onDone: (user: AdminUser) => void })
       const q = new URLSearchParams(window.location.search);
       const want = q.has('plan') || q.get('signup') === '1';
       if (want) sessionStorage.setItem('lk_checkout', '1');
+      const period = q.get('period');
+      if (period === 'month' || period === 'year') sessionStorage.setItem('lk_period', period);
       return want;
     } catch {
       return false;
@@ -40,6 +42,7 @@ export default function Login({ onDone }: { onDone: (user: AdminUser) => void })
   const [businessName, setBusinessName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [phone, setPhone] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const signup = mode === 'signup' && (product.signupEnabled || !!ref);
@@ -49,7 +52,7 @@ export default function Login({ onDone }: { onDone: (user: AdminUser) => void })
     setBusy(true);
     setError('');
     try {
-      const res = signup ? await api.signup(businessName, email, password, ref || undefined) : await api.login(email, password);
+      const res = signup ? await api.signup(businessName, email, password, phone, ref || undefined) : await api.login(email, password);
       onDone(res.user);
     } catch (err) {
       setError((err as Error).message);
@@ -63,16 +66,16 @@ export default function Login({ onDone }: { onDone: (user: AdminUser) => void })
 
   return (
     <div className="min-h-screen grid lg:grid-cols-[1.05fr_1fr] bg-app">
-      <aside className="hidden lg:flex relative overflow-hidden flex-col justify-between p-12 text-white bg-gradient-to-br from-emerald-700 via-emerald-800 to-slate-900">
-        <div className="absolute -top-24 -right-24 w-96 h-96 rounded-full bg-emerald-400/20 blur-3xl" />
-        <div className="absolute -bottom-32 -left-16 w-96 h-96 rounded-full bg-teal-300/10 blur-3xl" />
+      <aside className="hidden lg:flex relative overflow-hidden flex-col justify-between p-12 text-white bg-gradient-to-br from-emerald-700 via-emerald-800 to-slate-900 dark:from-amber-900 dark:via-stone-950 dark:to-black">
+        <div className="absolute -top-24 -right-24 w-96 h-96 rounded-full bg-emerald-400/20 dark:bg-amber-400/20 blur-3xl" />
+        <div className="absolute -bottom-32 -left-16 w-96 h-96 rounded-full bg-teal-300/10 dark:bg-amber-300/10 blur-3xl" />
         <div className="relative flex items-center gap-3">
           <Logo size={40} className="ring-2 ring-white/20" />
           <span className="text-xl font-semibold tracking-tight">{product.productName}</span>
         </div>
         <div className="relative max-w-md">
           <h2 className="text-4xl font-semibold tracking-tight leading-tight">Turn WhatsApp chats into customers.</h2>
-          <p className="mt-4 text-emerald-100/90 leading-relaxed">Capture leads, answer questions, book appointments and follow up, all from one calm dashboard.</p>
+          <p className="mt-4 text-emerald-100/90 dark:text-amber-100/90 leading-relaxed">Capture leads, answer questions, book appointments and follow up, all from one calm dashboard.</p>
           <ul className="mt-8 space-y-3.5">
             {POINTS.map((p) => (
               <li key={p.text} className="flex items-start gap-3 text-sm text-emerald-50">
@@ -82,7 +85,7 @@ export default function Login({ onDone }: { onDone: (user: AdminUser) => void })
             ))}
           </ul>
         </div>
-        <p className="relative text-xs text-emerald-100/70 flex items-center gap-1.5"><CheckCircle2 className="w-3.5 h-3.5" /> Your customers&apos; data stays yours. See our <a className="underline" href="/privacy">privacy policy</a>.</p>
+        <p className="relative text-xs text-emerald-100/70 dark:text-amber-100/70 flex items-center gap-1.5"><CheckCircle2 className="w-3.5 h-3.5" /> Your customers&apos; data stays yours. See our <a className="underline" href="/privacy">privacy policy</a>.</p>
       </aside>
 
       <main className="relative flex items-center justify-center p-6 sm:p-10">
@@ -99,6 +102,14 @@ export default function Login({ onDone }: { onDone: (user: AdminUser) => void })
             </div>
           )}
 
+          {signup && (
+            <div className="mb-4">
+              <label className={label} htmlFor="wa">Your WhatsApp number</label>
+              <input id="wa" type="tel" inputMode="tel" autoComplete="tel" required value={phone} onChange={(e) => setPhone(e.target.value)} className={input} placeholder="+91 98765 43210" />
+              <p className="text-xs text-muted mt-1">Include the country code. We use it to reach you about your account.</p>
+            </div>
+          )}
+
           <div className="mb-4">
             <label className={label} htmlFor="email">Email</label>
             <input id="email" type="email" autoComplete="username" autoFocus={!signup} required value={email} onChange={(e) => setEmail(e.target.value)} className={input} placeholder="you@example.com" />
@@ -111,7 +122,7 @@ export default function Login({ onDone }: { onDone: (user: AdminUser) => void })
 
           {error && <p className="text-sm text-danger bg-danger-soft border border-danger-line rounded-lg px-3 py-2 mt-4" role="alert">{error}</p>}
           <button
-            disabled={busy || !email || !password || (signup && !businessName.trim())}
+            disabled={busy || !email || !password || (signup && (!businessName.trim() || phone.replace(/\D/g, '').length < 8))}
             className="w-full mt-6 py-3 bg-brand hover:bg-brand-strong text-on-brand font-semibold text-sm rounded-lg shadow-card transition disabled:opacity-50"
           >
             {busy ? (signup ? 'Creating…' : 'Signing in…') : signup ? 'Create account' : 'Sign in'}

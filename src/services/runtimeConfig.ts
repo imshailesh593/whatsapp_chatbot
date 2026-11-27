@@ -22,9 +22,14 @@ export const MANAGED_KEYS: KeyDef[] = [
   { key: 'RAZORPAY_KEY_SECRET', label: 'Razorpay key secret', secret: true, check: (v) => (v.length >= 10 ? null : 'That secret looks too short') },
   { key: 'RAZORPAY_WEBHOOK_SECRET', label: 'Razorpay webhook secret', secret: true, check: (v) => (v.length >= 8 ? null : 'The webhook secret must be at least 8 characters') },
   { key: 'RAZORPAY_PLAN_PRO', label: 'Razorpay plan id', secret: false, check: prefix('plan_', 'The plan id') },
+  { key: 'RAZORPAY_PLAN_PRO_YEARLY', label: 'Razorpay yearly plan id', secret: false, check: prefix('plan_', 'The plan id') },
   { key: 'RAZORPAY_MODE', label: 'Razorpay mode', secret: false, check: (v) => (['subscription', 'link'].includes(v) ? null : 'Mode must be subscription or link') },
   { key: 'PAYPAL_PLAN_PRO', label: 'PayPal plan id', secret: false, check: prefix('P-', 'The plan id') },
+  { key: 'PAYPAL_PLAN_PRO_YEARLY', label: 'PayPal yearly plan id', secret: false, check: prefix('P-', 'The plan id') },
   { key: 'RESEND_API_KEY', label: 'Resend API key', secret: true, check: prefix('re_', 'The API key') },
+  { key: 'META_APP_ID', label: 'Meta app id', secret: false, check: (v) => (/^\d{8,20}$/.test(v) ? null : 'The app id is a number of 8 to 20 digits') },
+  { key: 'META_APP_SECRET', label: 'Meta app secret', secret: true, check: (v) => (/^[a-f0-9]{32}$/i.test(v) ? null : 'The app secret is 32 letters and digits (a-f, 0-9)') },
+  { key: 'META_VERIFY_TOKEN', label: 'Meta webhook verify token', secret: true, check: (v) => (v.length >= 12 && v.length <= 100 && !/\s/.test(v) ? null : 'Use 12 to 100 characters with no spaces') },
   { key: 'MAIL_FROM', label: 'Email sender', secret: false, check: (v) => (/@/.test(v) && v.length <= 200 ? null : 'Use an address like: Wappo <hello@wappoai.com>') }
 ];
 

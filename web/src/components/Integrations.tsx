@@ -90,17 +90,17 @@ function Webhooks({ info, reload }: { info: IntegrationsInfo; reload: () => void
                 <button onClick={async () => { if (window.confirm('Delete this webhook?')) { await api.deleteWebhook(h.id); reload(); } }} className="p-1.5 text-muted hover:text-danger"><Trash2 className="w-3.5 h-3.5" /></button>
               </div>
             </div>
-            <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-muted">
+            <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-[12.5px] text-muted">
               <span>Events: {h.events.join(', ')}</span>
               <span className="flex items-center space-x-1">Secret: <code className="ml-1 text-fg2">{h.secret.slice(0, 12)}…</code>
                 <button onClick={() => copy(h.secret)} className="text-brand-text hover:text-brand-text flex items-center space-x-0.5"><Copy className="w-3 h-3" /><span>copy</span></button></span>
               {h.last && <span className={h.last.status === 'ok' ? 'text-brand-text' : h.last.status === 'failed' ? 'text-danger' : 'text-warn'}>Last: {h.last.status}{h.last.error ? ` (${h.last.error})` : ''}</span>}
             </div>
-            {result[h.id] && <div className="mt-2 text-[11px] text-fg2">{result[h.id]}</div>}
+            {result[h.id] && <div className="mt-2 text-[12.5px] text-fg2">{result[h.id]}</div>}
             {log?.id === h.id && (
               <div className="mt-2 border-t border-line pt-2 space-y-1">
                 {log.rows.length === 0 && <div className="text-muted">No deliveries yet.</div>}
-                {log.rows.map((d) => <div key={d.id} className="flex justify-between text-[11px]"><span className="text-fg2">{d.event} · {new Date(d.at).toLocaleString()}</span><span className={d.status === 'ok' ? 'text-brand-text' : d.status === 'failed' ? 'text-danger' : 'text-warn'}>{d.status} · {d.attempts} tr{d.attempts === 1 ? 'y' : 'ies'}{d.error ? ` · ${d.error}` : ''}</span></div>)}
+                {log.rows.map((d) => <div key={d.id} className="flex justify-between text-[12.5px]"><span className="text-fg2">{d.event} · {new Date(d.at).toLocaleString()}</span><span className={d.status === 'ok' ? 'text-brand-text' : d.status === 'failed' ? 'text-danger' : 'text-warn'}>{d.status} · {d.attempts} tr{d.attempts === 1 ? 'y' : 'ies'}{d.error ? ` · ${d.error}` : ''}</span></div>)}
               </div>
             )}
           </div>
@@ -109,7 +109,7 @@ function Webhooks({ info, reload }: { info: IntegrationsInfo; reload: () => void
 
       <form onSubmit={add} className="mt-4 flex flex-col sm:flex-row gap-2">
         <input required value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://hooks.zapier.com/hooks/catch/…" className={input} />
-        <div className="flex items-center gap-3 text-[11px] text-fg2">
+        <div className="flex items-center gap-3 text-[12.5px] text-fg2">
           {info.events.map((ev) => <label key={ev} className="flex items-center space-x-1 whitespace-nowrap"><input type="checkbox" checked={events.includes(ev)} onChange={() => setEvents((x) => (x.includes(ev) ? x.filter((y) => y !== ev) : [...x, ev]))} /><span>{ev}</span></label>)}
         </div>
         <button disabled={busy || events.length === 0} className="px-4 py-2 bg-brand hover:bg-brand text-on-brand font-bold text-xs rounded-lg disabled:opacity-40 whitespace-nowrap">Add webhook</button>
@@ -122,7 +122,7 @@ function Webhooks({ info, reload }: { info: IntegrationsInfo; reload: () => void
           <ol className="list-decimal list-inside space-y-1 text-muted">
             <li>Open your Google Sheet → Extensions → Apps Script, and paste this code:</li>
           </ol>
-          <pre className="bg-sunken border border-line rounded-lg p-3 overflow-x-auto text-[11px]">{SHEETS_SCRIPT}</pre>
+          <pre className="bg-sunken border border-line rounded-lg p-3 overflow-x-auto text-[12.5px]">{SHEETS_SCRIPT}</pre>
           <button onClick={() => copy(SHEETS_SCRIPT)} className="text-brand-text flex items-center space-x-1"><Copy className="w-3 h-3" /><span>Copy code</span></button>
           <ol start={2} className="list-decimal list-inside space-y-1 text-muted">
             <li>Deploy → New deployment → type &ldquo;Web app&rdquo; → who has access: &ldquo;Anyone&rdquo; → Deploy.</li>
@@ -167,7 +167,7 @@ function Keys({ info, reload }: { info: IntegrationsInfo; reload: () => void }) 
         {info.apiKeys.map((k) => (
           <div key={k.id} className="flex items-center justify-between px-3.5 py-2.5 text-xs bg-sunken/50">
             <div><span className="text-fg font-medium">{k.name}</span> <code className="text-muted ml-2">{k.prefix}…</code>
-              <div className="text-[11px] text-muted">Last used: {k.lastUsedAt ? new Date(k.lastUsedAt).toLocaleString() : 'never'}</div></div>
+              <div className="text-[12.5px] text-muted">Last used: {k.lastUsedAt ? new Date(k.lastUsedAt).toLocaleString() : 'never'}</div></div>
             <button onClick={async () => { if (window.confirm('Revoke this key? Anything using it stops working.')) { await api.deleteApiKey(k.id); reload(); } }} className="p-1.5 text-muted hover:text-danger"><Trash2 className="w-3.5 h-3.5" /></button>
           </div>
         ))}
@@ -177,7 +177,7 @@ function Keys({ info, reload }: { info: IntegrationsInfo; reload: () => void }) 
         <button className="px-4 py-2 bg-brand hover:bg-brand text-on-brand font-bold text-xs rounded-lg whitespace-nowrap">Create key</button>
       </form>
       {error && <p className="text-xs text-danger mt-2" role="alert">{error}</p>}
-      <pre className="mt-4 bg-sunken border border-line rounded-lg p-3 overflow-x-auto text-[11px] text-fg2">{`curl -H "Authorization: Bearer lk_…" \\
+      <pre className="mt-4 bg-sunken border border-line rounded-lg p-3 overflow-x-auto text-[12.5px] text-fg2">{`curl -H "Authorization: Bearer lk_…" \\
   "${location.origin}/api/v1/leads?stage=new&limit=20"
 
 curl -X PATCH -H "Authorization: Bearer lk_…" -H "Content-Type: application/json" \\
@@ -207,9 +207,9 @@ function ChatLink({ phone }: { phone: string | null }) {
       ) : (
         <div className="mt-4 grid grid-cols-1 md:grid-cols-[1fr_auto] gap-5">
           <div className="space-y-3">
-            <div><label className="text-[11px] text-muted block mb-1">Message the customer starts with</label><input value={text} maxLength={200} onChange={(e) => setText(e.target.value)} className={input} /></div>
-            <div><label className="text-[11px] text-muted block mb-1">Campaign tag (optional, letters, numbers, - and _)</label><input value={tag} maxLength={30} onChange={(e) => setTag(e.target.value)} placeholder="instagram-bio" className={input} /></div>
-            <div className="bg-sunken border border-line rounded-lg p-2.5 text-[11px] break-all text-fg2">{link}</div>
+            <div><label className="text-[12.5px] text-muted block mb-1">Message the customer starts with</label><input value={text} maxLength={200} onChange={(e) => setText(e.target.value)} className={input} /></div>
+            <div><label className="text-[12.5px] text-muted block mb-1">Campaign tag (optional, letters, numbers, - and _)</label><input value={tag} maxLength={30} onChange={(e) => setTag(e.target.value)} placeholder="instagram-bio" className={input} /></div>
+            <div className="bg-sunken border border-line rounded-lg p-2.5 text-[12.5px] break-all text-fg2">{link}</div>
             <div className="flex gap-2">
               <button onClick={() => copy(link)} className="px-3 py-1.5 bg-subtle hover:bg-subtle text-fg text-xs rounded-lg border border-line flex items-center space-x-1"><Copy className="w-3 h-3" /><span>Copy link</span></button>
               <button onClick={() => copy(`<a href="${link}" target="_blank" rel="noopener">Chat with us on WhatsApp</a>`)} className="px-3 py-1.5 bg-subtle hover:bg-subtle text-fg text-xs rounded-lg border border-line flex items-center space-x-1"><Copy className="w-3 h-3" /><span>Copy website button HTML</span></button>

@@ -52,6 +52,7 @@ async function followUpWorkspace(cfg: BotConfig, now: number): Promise<number> {
     where: {
       workspaceId: id,
       ...outsideLinkQuiet(now),
+      NOT: [{ phoneNumber: { startsWith: 'ig:' } }, { phoneNumber: { startsWith: 'fb:' } }], // Meta only allows replies within 24 hours of the customer's message
       optedOut: false,
       isAgentPaused: false,
       handoffAt: null,
