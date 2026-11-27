@@ -85,6 +85,9 @@ async function outageAlreadySent(workspaceId: string, phone: string, capturing: 
 /** A message that ends with the owner's own sign-off ("Anything else?") is complete: nothing is added under it. */
 export const isSignedOff = (text: string) => /anything else\s*\?[\s*_]*$/i.test(text.trim());
 
+/** Is the reply waiting for the customer: a question (an emoji may follow it), or asking for the time that suits them? */
+export const asksCustomer = (text: string) => /\?[^\p{L}\p{N}]*$/u.test(text.trim()) || /convenient time/i.test(text);
+
 export interface AiTurnArgs {
   cfg: BotConfig;
   workspaceId: string;
@@ -235,7 +238,7 @@ export async function handleAiTurn(a: AiTurnArgs): Promise<boolean> {
     if (fresh && (await handleBookingMessage(cfg, fresh, 'book an appointment', capturing))) return true;
   }
   // a reply that asks something (such as the time that suits them) or signs off is left as it is
-  const addLink = hasBooking && !reply.includes(cfg.ws.bookingUrl.trim()) && !isSignedOff(reply) && !(turn.action === 'book' && /\?\s*$/.test(reply));
+  const addLink = hasBooking && !reply.includes(cfg.ws.bookingUrl.trim()) && !isSignedOff(reply) && !asksCustomer(reply);
   if ((turn.action === 'share_booking_link' || turn.action === 'book') && addLink) {
     await out(await fixed(bookingReminderMessage(cfg)));
   } else if (turn.action === 'booked' && hasBooking && applied.completed) {
