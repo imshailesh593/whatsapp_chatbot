@@ -267,7 +267,7 @@ function Console({ user, onSignedOut, onPlatform }: { user: AdminUser; onSignedO
             <Crm contacts={contacts} includeTest={includeTest} onIncludeTest={setIncludeTest} onOpen={setSelected} onOpenChat={(phone) => { setInboxPhone(phone); setTab('inbox'); }} onChanged={replaceContact} team={team} meId={user.id} />
           )}
           {tab === 'inbox' && <Inbox contacts={contacts} waReady={waReady} onChanged={replaceContact} initialPhone={inboxPhone} />}
-          {tab === 'simulator' && <Simulator onActivity={refresh} services={overview?.services ?? []} />}
+          {tab === 'simulator' && <Simulator onActivity={refresh} services={overview?.services ?? []} canEdit={!isAgent} />}
           {tab === 'analytics' && !isAgent && <Analytics />}
           {tab === 'broadcasts' && !isAgent && overview && <Broadcasts overview={overview} waReady={waReady} />}
           {tab === 'config' && !isAgent && overview && <Settings overview={overview} me={user} onChanged={refresh} section={section} onSection={setSection} />}

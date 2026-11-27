@@ -219,6 +219,15 @@ To stop, press **Disconnect**. Existing events stay in your calendar.
 
 All under **Settings**. Changes apply to new messages straight away. Test every change in the **Bot Simulator**.
 
+### Editing a message with Gemini (in the Bot Simulator)
+Owners and admins can open **Bot Simulator → Edit messages with Gemini**, or press **Edit** under a bot reply.
+1. Choose a saved message: a question, a closing message, or a general text such as the hand-over line.
+2. Tell Gemini what to change ("make it shorter", "split into two messages"), or edit the text yourself.
+3. Check the draft. A split message arrives as up to three separate WhatsApp messages, about a second apart.
+4. Press **Save**. If a link, number or price changed, you are asked to confirm first. **Undo last save** puts the earlier wording back.
+
+Saved wording goes to real customers. Replies that Gemini writes live have no saved text: change them with the AI answering instructions. While AI conversation is on, Gemini usually asks your questions in its own words, so splitting a question matters mainly in the menu flow. The menu and other built-in lines cannot be edited this way yet.
+
 ### Business & bot
 - **Business name, tagline, description.** Shown in greetings and used by the AI.
 - **Greeting line.** Shown under "Welcome to ...".

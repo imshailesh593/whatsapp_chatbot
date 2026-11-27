@@ -2,6 +2,19 @@ import type { CommentEvent, CommentSettings, MetaStatus, PricingLeadRow, ZernioS
 
 export class UnauthorizedError extends Error {}
 
+/** A saved customer-facing message that can be edited from the simulator */
+export interface EditableMessage {
+  id: string;
+  group: string;
+  label: string;
+  text: string;
+  max: number;
+  splittable: boolean;
+  multiline: boolean;
+  aiNote: string;
+  canUndo: boolean;
+}
+
 async function request<T>(url: string, init?: RequestInit): Promise<T> {
   const res = await fetch(url, {
     credentials: 'same-origin',
@@ -126,9 +139,15 @@ export const api = {
   sendMedia: (phone: string, name: string, data: string, caption: string) => post<{ ok: true }>(`/admin/api/contacts/${encodeURIComponent(phone)}/send-media`, { name, data, caption }),
   send: (phone: string, text: string) => post<{ ok: true }>(`/admin/api/contacts/${encodeURIComponent(phone)}/send`, { text }),
   simulate: (id: string, name: string, text: string) =>
-    post<{ replies: string[]; state: { stage: string; service: string | null; step: number; totalSteps: number } }>(
+    post<{ replies: string[]; sources?: string[][]; state: { stage: string; service: string | null; step: number; totalSteps: number } }>(
       '/admin/api/simulate',
       { id, name, text }
     ),
-  simulateReset: (id: string) => post<{ ok: true }>('/admin/api/simulate/reset', { id })
+  simulateReset: (id: string) => post<{ ok: true }>('/admin/api/simulate/reset', { id }),
+  editableMessages: () => request<{ messages: EditableMessage[] }>('/admin/api/messages').then((r) => r.messages),
+  suggestMessage: (id: string, draft: string, ask: string, earlier: string[]) =>
+    post<{ text: string; note: string; errors: string[]; warnings: string[] }>('/admin/api/messages/suggest', { id, draft, request: ask, earlier }),
+  saveMessage: (id: string, base: string, text: string, confirm: boolean) =>
+    request<{ saved: boolean; warnings: string[]; messages: EditableMessage[] }>('/admin/api/messages', { method: 'PUT', body: JSON.stringify({ id, base, text, confirm }) }),
+  undoMessage: (id: string) => post<{ messages: EditableMessage[] }>('/admin/api/messages/undo', { id })
 };

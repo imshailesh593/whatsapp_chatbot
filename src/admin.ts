@@ -44,6 +44,7 @@ import { affiliateAdminOverview, getAffiliateSettings, referralOverview, referre
 import { authUrl, cancelAppointment, cleanRules, completeConnection, disconnect as disconnectCalendar, formatSlot, googleConfigured, readState } from './services/calendar';
 import { admitAiReply, getUsage } from './services/usage';
 import { suggestInstructions } from './services/gemini';
+import { EditError, checkEdit, listMessages, matchSources, messagesForEditor, saveMessage, suggestMessage, undoMessage } from './services/messageEditor';
 import { checkRazorpay, createPlans as createRazorpayPlans, planEnvName as razorpayPlanEnv } from './services/razorpaySetup';
 import { checkPaypal, createPaypalPlans, paypalPlanEnv } from './services/paypal';
 import { describeRuntimeConfig, newWebhookSecret, saveRuntimeConfig } from './services/runtimeConfig';
@@ -833,6 +834,63 @@ export function registerAdmin(app: FastifyInstance, opts: { getQr: (workspaceId:
     return out;
   });
 
+  // ---- message editor (in the simulator): one saved message at a time, with Gemini's help ----
+  const editFailed = (reply: FastifyReply, err: unknown) => {
+    if (err instanceof EditError) return reply.status(err.status).send({ error: err.message });
+    throw err;
+  };
+
+  app.get('/admin/api/messages', { preHandler: manager }, async (req) => ({ messages: await messagesForEditor(wsId(req)) }));
+
+  // Only proposes: nothing is stored until the owner saves
+  app.post('/admin/api/messages/suggest', { preHandler: manager }, async (req, reply) => {
+    const b = (req.body ?? {}) as { id?: unknown; draft?: unknown; request?: unknown; earlier?: unknown };
+    const request = String(b.request ?? '').trim().slice(0, 600);
+    if (request.length < 3) return reply.status(400).send({ error: 'Tell Gemini what to change, for example: make this shorter.' });
+    if (!onboardingAvailable()) return reply.status(503).send({ error: 'Gemini is not available right now. You can still edit the message by hand.' });
+    if (throttled(attempts, `msg:${wsId(req)}`, 80)) return reply.status(429).send({ error: 'Too many requests, please wait a few minutes' });
+    bump(attempts, `msg:${wsId(req)}`, 60 * 60_000);
+    const cfg = await loadConfig(wsId(req));
+    const message = listMessages(cfg).find((m) => m.id === String(b.id ?? ''));
+    if (!message) return reply.status(404).send({ error: 'That message no longer exists. Reload the page.' });
+    if (!(await admitAiReply(cfg.ws))) return reply.status(429).send({ error: "This month's AI allowance is used up." });
+    const draft = String(b.draft ?? '').slice(0, message.max + 200);
+    const earlier = (Array.isArray(b.earlier) ? b.earlier : []).slice(-6).map((x) => String(x).slice(0, 600));
+    try {
+      const out = await suggestMessage(cfg, message, draft, request, earlier);
+      return { ...out, ...checkEdit(message, out.text) };
+    } catch (err) {
+      if (err instanceof EditError) return reply.status(err.status).send({ error: err.message });
+      console.error('[message editor] Gemini failed:', (err as Error).message.slice(0, 200));
+      return reply.status(502).send({ error: 'Gemini could not answer just now. You can try again or edit the message by hand.' });
+    }
+  });
+
+  app.put('/admin/api/messages', { preHandler: manager }, async (req, reply) => {
+    const b = (req.body ?? {}) as { id?: unknown; base?: unknown; text?: unknown; confirm?: unknown };
+    try {
+      const out = await saveMessage(wsId(req), {
+        id: String(b.id ?? ''),
+        base: String(b.base ?? ''),
+        text: String(b.text ?? '').slice(0, 6000),
+        confirm: b.confirm === true,
+        by: me(req).email
+      });
+      return { ...out, messages: await messagesForEditor(wsId(req)) };
+    } catch (err) {
+      return editFailed(reply, err);
+    }
+  });
+
+  app.post('/admin/api/messages/undo', { preHandler: manager }, async (req, reply) => {
+    try {
+      await undoMessage(wsId(req), String((req.body as { id?: unknown } | null)?.id ?? ''));
+      return { messages: await messagesForEditor(wsId(req)) };
+    } catch (err) {
+      return editFailed(reply, err);
+    }
+  });
+
   app.post('/admin/api/onboarding/apply', { preHandler: manager }, async (req, reply) => {
     const b = (req.body ?? {}) as { draft?: unknown; extras?: Record<string, unknown> };
     const draft: Draft | null = parseDraft(b.draft);
@@ -1241,8 +1299,17 @@ export function registerAdmin(app: FastifyInstance, opts: { getQr: (workspaceId:
     const replies = await captureReplies(() => handleIncomingMessage(w, phone, b.name?.slice(0, 80) || 'Simulator User', text));
     const s = await prisma.session.findUnique({ where: { workspaceId_phoneNumber: { workspaceId: w, phoneNumber: phone } } });
     const cfg = await loadConfig(w);
+    const editable = listMessages(cfg);
+    // services often share a question word for word: the one this chat is in is the one meant
+    const sourcesOf = (text: string) => {
+      const found = matchSources(text, editable);
+      const own = found.filter((id) => !id.startsWith('ws.') && id.split('.')[1] === s?.selectedService);
+      return own.length ? found.filter((id) => id.startsWith('ws.') || own.includes(id)) : found;
+    };
     return {
       replies,
+      // for each reply, the saved messages it contains word for word (none: Gemini wrote it live, or translated it)
+      sources: replies.map(sourcesOf),
       state: {
         stage: s?.stage ?? SessionStage.WELCOME,
         service: s?.selectedService ?? null,

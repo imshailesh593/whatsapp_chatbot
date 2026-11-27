@@ -1,5 +1,6 @@
 import { DEFAULT_LANGUAGE_WELCOME, type BotConfig } from './botConfig';
 import { translateText } from './gemini';
+import { joinParts, splitMessage } from '../lib/split';
 import { admitAiReply } from './usage';
 
 // Languages a customer can ask for, by the names people actually type (English names and their own script).
@@ -116,6 +117,12 @@ const CACHE_MAX = 800;
  */
 export async function localize(cfg: BotConfig, body: string, language: string | null | undefined, capturing: boolean): Promise<string> {
   if (!cfg.ws.languageStep || !language || /^english$/i.test(language)) return body;
+  // each part of a split message is translated on its own, so the translator never sees (or loses) the marker
+  if (/\[split\]/i.test(body)) {
+    const parts: string[] = [];
+    for (const p of splitMessage(body)) parts.push(await localize(cfg, p, language, capturing));
+    return joinParts(parts);
+  }
   const key = `${language}\u0000${body}`;
   const hit = cache.get(key);
   if (hit) return hit;

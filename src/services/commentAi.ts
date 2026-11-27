@@ -2,6 +2,7 @@ import { Type } from '@google/genai';
 import type { BotConfig } from './botConfig';
 import { callModel, guardReply, teamPhone } from './agent';
 import { offeredLanguages } from './language';
+import { stripSplit } from '../lib/split';
 
 /**
  * Auto comment replies: someone comments on a business's Facebook or Instagram post, and the bot answers in public and (if
@@ -88,7 +89,7 @@ export function buildCommentPrompt(cfg: BotConfig, c: Pick<CommentInput, 'channe
           '- A friendly opener written like a person texting, under 60 words: greet them by first name if you know it, refer to what they commented about, answer a simple question briefly from the facts, then ask exactly ONE question: if it is clear which service they want, the first question of that service from the list below (in your own words); if not, what they are looking for.',
           '- No more than one emoji. Do not paste a link; the team shares links when needed.',
           'Services and their first questions:',
-          ...services.map((s) => `- ${s.title}${s.keywords.length ? ` (also called: ${s.keywords.join(', ')})` : ''}: ${s.questions[0]?.prompt ?? ''}`)
+          ...services.map((s) => `- ${s.title}${s.keywords.length ? ` (also called: ${s.keywords.join(', ')})` : ''}: ${stripSplit(s.questions[0]?.prompt ?? '')}`)
         ]
       : []),
     '',

@@ -1,6 +1,7 @@
 import { AsyncLocalStorage } from 'async_hooks';
 import { prisma } from '../lib/prisma';
 import { isSocial } from '../lib/channel';
+import { splitMessage } from '../lib/split';
 import { saveMedia } from './mediaStore';
 
 /** Thin seam between the conversation engine and whatever actually delivers messages (a WhatsApp link per workspace, or a fake in tests). */
@@ -91,7 +92,19 @@ interface Batch {
 }
 const batches = new AsyncLocalStorage<Batch>();
 
+/** Pause between the parts of a split message, so they arrive in order and read like a person typing. */
+const SPLIT_PAUSE_MS = 1200;
+
+/** Delivers one reply, as several messages only where the owner's saved text asks for it with "[split]". */
 async function deliver(workspaceId: string, to: string, text: string): Promise<void> {
+  const parts = /\[split\]/i.test(text) ? splitMessage(text) : [text];
+  for (let i = 0; i < parts.length; i++) {
+    if (i > 0 && !isCapturing()) await new Promise((r) => setTimeout(r, SPLIT_PAUSE_MS));
+    await deliverOne(workspaceId, to, parts[i]);
+  }
+}
+
+async function deliverOne(workspaceId: string, to: string, text: string): Promise<void> {
   const buf = capture.getStore();
   if (buf) {
     buf.push(text);
@@ -111,7 +124,8 @@ async function deliver(workspaceId: string, to: string, text: string): Promise<v
 
 /**
  * Runs the handling of one incoming message. Every reply to that customer made meanwhile is merged, in order, into ONE
- * message (separated by a blank line) and delivered when the handling ends. Messages to anybody else go out at once.
+ * message (separated by a blank line) and delivered when the handling ends. The only exception is a saved text the owner
+ * split with "[split]" (see lib/split.ts). Messages to anybody else go out at once.
  */
 export async function batchReplies<T>(workspaceId: string, to: string, fn: () => Promise<T>): Promise<T> {
   const batch: Batch = { to, parts: [], open: true };

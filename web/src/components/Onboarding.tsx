@@ -233,7 +233,7 @@ export default function Onboarding({ user, onDone, onSignOut }: { user: AdminUse
           <BrandContext.Provider value={brand}>
             <div className="space-y-4">
               <p className="text-sm text-fg2">Chat with your bot below exactly like a customer would. Nothing is sent to WhatsApp from this screen.</p>
-              <Simulator onActivity={() => undefined} services={(draft?.services ?? []).map((s, i) => ({ id: String(i), title: s.title }))} />
+              <Simulator canEdit={false} onActivity={() => undefined} services={(draft?.services ?? []).map((s, i) => ({ id: String(i), title: s.title }))} />
               {error && <p className="text-xs text-danger" role="alert">{error}</p>}
               <div className="flex flex-wrap gap-2">
                 <button onClick={() => setStep(2)} className="px-4 py-2 bg-subtle text-fg text-xs rounded-lg border border-line">Back</button>

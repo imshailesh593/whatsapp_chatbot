@@ -77,6 +77,7 @@ model Workspace {
   sessions          Session[]
   leads             Lead[]
   logs              WebhookLog[]
+  messageRevisions  MessageRevision[]
   adminUsers        AdminUser[]
   usage             Usage[]
   stages            Stage[]
@@ -131,6 +132,21 @@ model Question {
 
   @@index([serviceId, position])
   @@map("saas_questions")
+}
+
+/// One save made with the message editor (before and after), so it can be undone
+model MessageRevision {
+  id          String    @id @default(uuid())
+  workspaceId String    @map("workspace_id")
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  messageId   String    @map("message_id")
+  before      String
+  after       String
+  createdBy   String    @default("") @map("created_by")
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  @@index([workspaceId, messageId, createdAt])
+  @@map("saas_message_revisions")
 }
 
 model Session {

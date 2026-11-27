@@ -8,6 +8,7 @@ import { startHandoff } from './handoff';
 import { localize } from './language';
 import { calendarConnected, handleBookingMessage, markLeadBooked } from './calendar';
 import { channelOf } from '../lib/channel';
+import { stripSplit } from '../lib/split';
 import { bookingReminderMessage, completionMessage, type BotConfig } from './botConfig';
 import {
   AgentError,
@@ -74,7 +75,7 @@ export const outageMessage = (cfg: BotConfig) =>
 const OUTAGE_QUIET_MS = 12 * 60 * 60 * 1000;
 
 async function outageAlreadySent(workspaceId: string, phone: string, capturing: boolean, text: string): Promise<boolean> {
-  if (capturing) return (simHistory.get(historyKey(workspaceId, phone)) ?? []).some((t) => t.who === 'You' && t.text === text);
+  if (capturing) return (simHistory.get(historyKey(workspaceId, phone)) ?? []).some((t) => t.who === 'You' && t.text === stripSplit(text));
   const rows = await prisma.webhookLog.findMany({
     where: { workspaceId, phoneNumber: phone, direction: 'OUTBOUND', createdAt: { gte: new Date(Date.now() - OUTAGE_QUIET_MS) } },
     select: { payload: true }
@@ -137,7 +138,7 @@ export async function handleAiTurn(a: AiTurnArgs): Promise<boolean> {
   const out = async (body: string) => {
     if (!body.trim()) return;
     await a.send(phone, body);
-    if (capturing) remember(workspaceId, phone, 'You', body);
+    if (capturing) remember(workspaceId, phone, 'You', stripSplit(body));
   };
 
   let turn;

@@ -1,6 +1,7 @@
 import { Type } from '@google/genai';
 import type { Workspace } from '@prisma/client';
 import { getClient, geminiModel } from './gemini';
+import { stripSplit } from '../lib/split';
 import { offeredLanguages } from './language';
 import { renderClosing, type BotConfig, type BotService } from './botConfig';
 
@@ -78,7 +79,9 @@ export function factsText(cfg: BotConfig): string {
     ws.formUrl,
     teamPhone(ws),
     ...services.flatMap((s) => [s.title, s.closingMessage, ...s.questions.map((q) => q.prompt)])
-  ].join('\n');
+  ]
+    .join('\n')
+    .replace(/\[split\]/gi, ' ');
 }
 
 // ---------- fixed wording the system attaches ----------
@@ -105,7 +108,7 @@ export function contactFooter(cfg: BotConfig, opts: { skipLink?: boolean } = {})
       parts.push(`If you need priority assistance, you can book a ${what}${via} using the link above.`);
     } else {
       parts.push(`If you need priority assistance, you can book a ${what}${via}:\n👉 ${url}`);
-      if (ws.bookingNote.trim()) parts.push(`*Note: ${ws.bookingNote.trim()}*`);
+      if (ws.bookingNote.trim()) parts.push(`*Note: ${stripSplit(ws.bookingNote)}*`);
     }
   }
   return parts.join('\n\n');
@@ -178,7 +181,7 @@ export function buildSystemPrompt(c: AgentContext): string {
       'Services you can help with (put the key in "service" as soon as the customer\'s need is clear):',
       ...services.flatMap((s) => [
         `- key "${s.key}": ${s.title}${s.keywords.length ? ` (also called: ${s.keywords.join(', ')})` : ''}`,
-        ...s.questions.map((q, i) => `    ${i + 1}. key "${q.key}": ${q.prompt}`)
+        ...s.questions.map((q, i) => `    ${i + 1}. key "${q.key}": ${stripSplit(q.prompt)}`)
       ]),
       'Your goal now: find out which service they need. If their message already makes it clear, set "service" and, in the same reply, ask that service\'s FIRST unanswered question from the list above (skip any the message already answers, and return those answers under their own keys). If it is not clear, ask one friendly open question about what they are looking for; if it could be several services, ask which matters most to start with. If their first message already answers every question of that service, write a short warm thank-you and ask NOTHING more: the system sends the team\'s summary and next steps right after your message. Never ask a question that is not on the list. Do not make up services.'
     );
@@ -187,7 +190,7 @@ export function buildSystemPrompt(c: AgentContext): string {
     L.push(`The customer is enquiring about: ${service.title} (key "${service.key}"). The team wants these details, in this order. The wording is the owner's: keep each question's meaning and any choices it offers, but say it naturally, in your own words and in the customer's language.`);
     service.questions.forEach((q, i) => {
       const got = answers[q.key];
-      L.push(`${i + 1}. key "${q.key}": ${q.prompt}${got ? `  ✔ ANSWERED: ${clip(oneLine(got), 120)}` : ''}`);
+      L.push(`${i + 1}. key "${q.key}": ${stripSplit(q.prompt)}${got ? `  ✔ ANSWERED: ${clip(oneLine(got), 120)}` : ''}`);
     });
     if (pending.length) {
       L.push(
@@ -204,7 +207,7 @@ export function buildSystemPrompt(c: AgentContext): string {
       );
     }
     if (service.closingMessage.trim()) {
-      L.push('', `FACTS THE TEAM WROTE FOR ${service.title.toUpperCase()} (this is the message the system sends after the questions; use it as a source of facts only, never paste it):`, clip(renderClosing(service.closingMessage, answers), 2500));
+      L.push('', `FACTS THE TEAM WROTE FOR ${service.title.toUpperCase()} (this is the message the system sends after the questions; use it as a source of facts only, never paste it):`, clip(stripSplit(renderClosing(service.closingMessage, answers)), 2500));
     }
     L.push('If the customer clearly wants a different service instead, set "service" to its key and "change_service" to true; otherwise leave "change_service" false.');
   }
@@ -215,7 +218,7 @@ export function buildSystemPrompt(c: AgentContext): string {
     'REACHING THE TEAM',
     phone ? `- The team can be reached on WhatsApp or by phone on ${phone}.` : '- No phone number is set; never invent one.',
     url
-      ? `- Priority help: the customer can book a one-to-one ${ws.bookingLabel || 'meeting'} through the booking link${ws.bookingNote ? ` (${ws.bookingNote})` : ''}. ${c.calendarOn ? 'You can also book it right here in the chat.' : ''} When they ask for more information, a detailed or personal discussion, a consultation, or to book, set "action" to ${c.calendarOn ? '"book"' : '"share_booking_link"'}${c.calendarOn ? ' (the system then offers real dates and times)' : ' (the system then sends the link)'}. If they say they already booked, set "action" to "booked".`
+      ? `- Priority help: the customer can book a one-to-one ${ws.bookingLabel || 'meeting'} through the booking link${ws.bookingNote ? ` (${stripSplit(ws.bookingNote)})` : ''}. ${c.calendarOn ? 'You can also book it right here in the chat.' : ''} When they ask for more information, a detailed or personal discussion, a consultation, or to book, set "action" to ${c.calendarOn ? '"book"' : '"share_booking_link"'}${c.calendarOn ? ' (the system then offers real dates and times)' : ' (the system then sends the link)'}. If they say they already booked, set "action" to "booked".`
       : '- There is no booking link; for a personal evaluation, prices you do not have, or next steps, say the team will get in touch.',
     ws.handoffEnabled
       ? '- If they ask for a real person, or are upset, have a complaint, a payment problem, or a legal or medical matter, set "action" to "handoff" and say nothing else: the system hands the chat to the team.'
@@ -277,7 +280,7 @@ export const setAgentModelForTests = (fn: typeof modelOverride) => {
 export const agentAvailable = () => !!modelOverride || !!getClient();
 
 /** One JSON answer from the model (the DM conversation, and the comment replies, each pass their own shape). */
-export async function callModel(system: string, contents: string, schema: object = SCHEMA, temperature = 0.55): Promise<string> {
+export async function callModel(system: string, contents: string, schema: object = SCHEMA, temperature = 0.55, maxOutputTokens = 1000): Promise<string> {
   if (modelOverride) return modelOverride({ system, contents });
   const ai = getClient();
   if (!ai) throw new AgentError('unavailable', 'Gemini is not configured');
@@ -289,7 +292,7 @@ export async function callModel(system: string, contents: string, schema: object
         config: {
           systemInstruction: system,
           temperature,
-          maxOutputTokens: 1000,
+          maxOutputTokens,
           responseMimeType: 'application/json',
           responseSchema: schema,
           // no hidden reasoning budget: it would eat the output tokens and truncate the JSON
@@ -391,6 +394,8 @@ export function guardReply(reply: string, cfg: BotConfig, customerText = ''): Gu
   // markdown the model sometimes adds: WhatsApp has *bold* and _italic_ only
   let t = reply
     .replace(/\r/g, '')
+    // only the owner's saved texts may be split into several messages, never the model's own reply
+    .replace(/[ \t]*\[split\][ \t]*/gi, ' ')
     .replace(/```[\s\S]*?```/g, ' ')
     .replace(/`/g, '')
     .replace(/\*\*(.+?)\*\*/g, '*$1*')

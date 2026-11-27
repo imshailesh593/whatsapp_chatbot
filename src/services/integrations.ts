@@ -5,6 +5,7 @@ import { Prisma } from '@prisma/client';
 import { prisma } from '../lib/prisma';
 import { loadConfig } from './botConfig';
 import { getStages } from './pipeline';
+import { stripSplit } from '../lib/split';
 
 export const EVENTS = ['lead.created', 'lead.stage_changed'] as const;
 export type EventName = (typeof EVENTS)[number];
@@ -66,7 +67,7 @@ export async function leadSnapshot(workspaceId: string, sessionId: string) {
     phone: s.phoneNumber,
     name: s.contactName,
     service: service?.title ?? s.lead.serviceCategory,
-    answers: Object.fromEntries(Object.entries(answers).map(([k, v]) => [service?.questions.find((q) => q.key === k)?.prompt ?? k, v])),
+    answers: Object.fromEntries(Object.entries(answers).map(([k, v]) => [stripSplit(service?.questions.find((q) => q.key === k)?.prompt ?? k), v])),
     answersByKey: answers,
     stage: s.lead.stageKey,
     stageLabel: stages.find((x) => x.key === s.lead!.stageKey)?.label ?? s.lead.stageKey,

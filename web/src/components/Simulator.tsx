@@ -1,12 +1,15 @@
 import { useEffect, useRef, useState } from 'react';
-import { CheckCheck, MoreVertical, Phone, RotateCcw, Send } from 'lucide-react';
-import { api } from '../api';
+import { CheckCheck, MoreVertical, Pencil, Phone, RotateCcw, Send } from 'lucide-react';
+import { api, type EditableMessage } from '../api';
+import MessageEditor from './MessageEditor';
 
 interface Msg {
   id: number;
   sender: 'bot' | 'user';
   text: string;
   time: string;
+  /** Ids of the saved messages this bot reply contains word for word */
+  sources?: string[];
 }
 interface SimState {
   stage: string;
@@ -29,8 +32,28 @@ const TINTS = [
 ];
 
 import { useBrand } from '../brand';
-export default function Simulator({ onActivity, services }: { onActivity: () => void; services: { id: string; title: string }[] }) {
+export default function Simulator({ onActivity, services, canEdit }: { onActivity: () => void; services: { id: string; title: string }[]; canEdit: boolean }) {
   const brand = useBrand();
+  const [panel, setPanel] = useState<'test' | 'edit'>('test');
+  const [editable, setEditable] = useState<EditableMessage[]>([]);
+  const [editing, setEditing] = useState('');
+  const [editorError, setEditorError] = useState('');
+  const editorTop = useRef<HTMLDivElement>(null);
+
+  const loadEditable = () =>
+    api.editableMessages().then(
+      (list) => { setEditable(list); setEditorError(''); },
+      (err) => setEditorError((err as Error).message)
+    );
+  const openEditor = (id?: string) => {
+    setPanel('edit');
+    if (id) {
+      setEditing(id);
+      // on a phone the editor sits above the chat: bring it into view
+      requestAnimationFrame(() => editorTop.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }));
+    }
+    loadEditable();
+  };
   const [messages, setMessages] = useState<Msg[]>([]);
   const [state, setState] = useState<SimState>({ stage: 'WELCOME', service: null, step: 0, totalSteps: 0 });
   const [name, setName] = useState('Test Customer');
@@ -54,7 +77,7 @@ export default function Simulator({ onActivity, services }: { onActivity: () => 
     try {
       const res = await api.simulate(SIM_ID, name, value);
       await new Promise((r) => setTimeout(r, 350));
-      setMessages((m) => [...m, ...res.replies.map((t) => ({ id: ++seq, sender: 'bot' as const, text: t, time: now() }))]);
+      setMessages((m) => [...m, ...res.replies.map((t, i) => ({ id: ++seq, sender: 'bot' as const, text: t, time: now(), sources: res.sources?.[i] }))]);
       setState(res.state);
       onActivity();
     } catch (err) {
@@ -78,6 +101,7 @@ export default function Simulator({ onActivity, services }: { onActivity: () => 
 
   useEffect(() => {
     restart();
+    if (canEdit) loadEditable();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -85,8 +109,28 @@ export default function Simulator({ onActivity, services }: { onActivity: () => 
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-      <div className="lg:col-span-5 space-y-4">
-        <div className="bg-card border border-line rounded-2xl p-5 shadow-lg">
+      <div className="lg:col-span-5 space-y-4" ref={editorTop}>
+        {canEdit && (
+          <div className="flex gap-1 p-1 bg-sunken border border-line rounded-xl" role="tablist">
+            {([['test', 'Test the bot'], ['edit', 'Edit messages with Gemini']] as const).map(([id, label]) => (
+              <button key={id} role="tab" aria-selected={panel === id} onClick={() => (id === 'edit' ? openEditor() : setPanel('test'))}
+                className={`flex-1 px-3 py-1.5 rounded-lg text-xs font-semibold transition ${panel === id ? 'bg-card text-fg shadow' : 'text-muted'}`}>
+                {label}
+              </button>
+            ))}
+          </div>
+        )}
+        {canEdit && (
+          // kept mounted so an unsaved draft survives a look at the test controls
+          <div className={`bg-card border border-line rounded-2xl p-5 shadow-lg ${panel === 'edit' ? '' : 'hidden'}`}>
+            <h3 className="font-bold text-fg text-base">Edit messages</h3>
+            <p className="text-xs text-muted mb-4">Shorten, reword or split what the bot sends. Nothing changes until you press Save.</p>
+            {editorError && <p className="text-xs text-danger mb-3" role="alert">{editorError}</p>}
+            <MessageEditor messages={editable} selectedId={editing} onSelect={setEditing}
+              onChanged={(list) => { setEditable(list); onActivity(); }} onTest={restart} />
+          </div>
+        )}
+        <div className={`${panel === 'edit' ? 'hidden ' : ''}bg-card border border-line rounded-2xl p-5 shadow-lg`}>
           <div className="flex items-center justify-between pb-4 border-b border-line">
             <div>
               <h3 className="font-bold text-fg text-base">Bot Testing Controls</h3>
@@ -158,6 +202,22 @@ export default function Simulator({ onActivity, services }: { onActivity: () => 
                     {m.sender === 'user' && <CheckCheck className="w-3.5 h-3.5 text-info inline" />}
                   </div>
                 </div>
+                {canEdit && m.sources && m.sources.length > 0 && (
+                  <div className="flex flex-wrap gap-1 mt-1 max-w-[85%]">
+                    {m.sources.map((id) => {
+                      const source = editable.find((x) => x.id === id);
+                      if (!source) return null;
+                      // two buttons with the same name need the service to tell them apart
+                      const twin = m.sources!.some((other) => other !== id && editable.find((x) => x.id === other)?.label === source.label);
+                      return (
+                        <button key={id} onClick={() => openEditor(id)}
+                          className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-[#202c33] border border-white/15 text-[11px] text-slate-300 hover:text-white">
+                          <Pencil className="w-3 h-3" /> Edit {source.label.toLowerCase()}{twin ? ` (${source.group})` : ''}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             ))}
             {busy && (

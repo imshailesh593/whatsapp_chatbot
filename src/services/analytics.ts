@@ -1,6 +1,7 @@
 import { prisma } from '../lib/prisma';
 import { loadConfig } from './botConfig';
 import { getStages } from './pipeline';
+import { stripSplit } from '../lib/split';
 
 const dayKey = (d: Date) => d.toISOString().slice(0, 10);
 
@@ -66,7 +67,7 @@ export async function analytics(workspaceId: string, days: number) {
     const q = svc?.questions[s.currentStep];
     if (!svc || !q) continue;
     const k = `${svc.key}:${s.currentStep}`;
-    const row = drops.get(k) ?? { service: svc.title, question: `Q${s.currentStep + 1}: ${q.prompt}`, count: 0 };
+    const row = drops.get(k) ?? { service: svc.title, question: `Q${s.currentStep + 1}: ${stripSplit(q.prompt)}`, count: 0 };
     row.count++;
     drops.set(k, row);
   }
