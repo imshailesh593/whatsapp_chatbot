@@ -1,7 +1,7 @@
 import { SessionStage } from '@prisma/client';
 import { prisma } from '../lib/prisma';
 import { admitAiReply } from './usage';
-import { notifyBooked, notifyNewLead } from './alerts';
+import { notifyAiDown, notifyBooked, notifyNewLead } from './alerts';
 import { dispatchEvent } from './integrations';
 import { logLeadEvent } from './crm';
 import { startHandoff } from './handoff';
@@ -61,6 +61,27 @@ const stringAnswers = (raw: unknown): Record<string, string> =>
 
 export const HICCUP_MESSAGE = 'Sorry, I had a small hiccup there. Could you send that once more?';
 
+/**
+ * What a customer gets while the AI cannot answer (no credit, outage, timeout). The old menu flow must not take over an AI
+ * conversation: it reads the chat's stage as its own and answers with canned lines. So: one useful message with the way to
+ * go ahead (the booking link when there is one), nothing about a callback, not repeated, and the team is told.
+ */
+export const outageMessage = (cfg: BotConfig) =>
+  cfg.ws.bookingUrl.trim()
+    ? `Thanks for your message! ${bookingReminderMessage(cfg)}`
+    : "Thanks for your message! I can't answer this properly right now, but our team can see it here.";
+
+const OUTAGE_QUIET_MS = 12 * 60 * 60 * 1000;
+
+async function outageAlreadySent(workspaceId: string, phone: string, capturing: boolean, text: string): Promise<boolean> {
+  if (capturing) return (simHistory.get(historyKey(workspaceId, phone)) ?? []).some((t) => t.who === 'You' && t.text === text);
+  const rows = await prisma.webhookLog.findMany({
+    where: { workspaceId, phoneNumber: phone, direction: 'OUTBOUND', createdAt: { gte: new Date(Date.now() - OUTAGE_QUIET_MS) } },
+    select: { payload: true }
+  });
+  return rows.some((r) => (r.payload as { text?: string } | null)?.text === text);
+}
+
 export interface AiTurnArgs {
   cfg: BotConfig;
   workspaceId: string;
@@ -75,7 +96,7 @@ export interface AiTurnArgs {
 
 /**
  * Returns true when the message was dealt with (answered, or deliberately left to a later message of the same burst),
- * false when the AI is not available for it (no key, plan allowance used) so the fixed menu flow should answer instead.
+ * false when the plan's AI allowance is used up, so the fixed menu flow should answer instead.
  */
 export async function handleAiTurn(a: AiTurnArgs): Promise<boolean> {
   const { cfg, workspaceId, phone, capturing } = a;
@@ -123,8 +144,13 @@ export async function handleAiTurn(a: AiTurnArgs): Promise<boolean> {
   } catch (err) {
     const e = err as AgentError;
     console.error(`[ai ${workspaceId.slice(0, 8)}] turn failed (${e.kind}):`, e.message.slice(0, 200));
-    // The AI could not answer (no credit, outage, timeout): the fixed menu flow answers, so the customer is never left without a reply
-    if (e.kind !== 'bad_output') return false;
+    // The AI could not answer (no credit, outage, timeout). The chat's stage and answers stay as they are, so the AI picks up where it left off
+    if (e.kind !== 'bad_output') {
+      const fallback = outageMessage(cfg);
+      if (!(await outageAlreadySent(workspaceId, phone, capturing, fallback))) await out(fallback);
+      if (!capturing) void notifyAiDown(workspaceId, phone, a.text, e.message);
+      return true;
+    }
     // The AI answered with something unusable twice: say so once instead of going quiet, but never repeat the apology back to back
     if (before[before.length - 1]?.text !== HICCUP_MESSAGE) await out(HICCUP_MESSAGE);
     return true;

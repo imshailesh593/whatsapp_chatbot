@@ -217,7 +217,7 @@ export function bookingReminderMessage(cfg: BotConfig): string {
   return parts.join('\n\n');
 }
 
-export const postCompletionMessage = () => 'Thanks! Our team has your details and will be in touch soon. If you need anything else just ask, or type MENU to start over.';
+export const postCompletionMessage = () => 'Thanks for your message. What else can I help you with? Type MENU to see the options.';
 
 export const bookedConfirmationMessage = () => "Great, thanks for letting us know. Our team will be in touch about your booking.";
 

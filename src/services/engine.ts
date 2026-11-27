@@ -321,6 +321,15 @@ async function processIncoming(
         await speak(bookingReminderMessage(cfg));
       } else if (looksLikeQuestion(text) && (await tryAnswer(text))) {
         // answered a genuine question
+      } else if (/^(h+i+|he+y+|hello+w?|hlo+|hy|namaste|good (morning|afternoon|evening))[\s!.,]*$/i.test(lower)) {
+        // A fresh hello starts afresh
+        await prisma.session.update({ where: key, data: { stage: SessionStage.AWAITING_SERVICE_SELECTION, selectedService: null, currentStep: 0, answers: {} } });
+        await entry();
+      } else if (resolveService(cfg, text)) {
+        // They are asking for something on the menu: take them into it
+        const serviceKey = resolveService(cfg, text)!;
+        await prisma.session.update({ where: key, data: { stage: SessionStage.IN_QUESTIONNAIRE, selectedService: serviceKey, currentStep: 0, answers: {} } });
+        await speak(cfg.services.find((s) => s.key === serviceKey)!.questions[0].prompt);
       } else {
         const ack = await localize(cfg, postCompletionMessage(), session.language, isCapturing());
         if (!(await lastReplyWas(workspaceId, phoneNumber, ack))) await send(phoneNumber, ack);

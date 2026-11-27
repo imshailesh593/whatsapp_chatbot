@@ -77,6 +77,25 @@ export async function notifyNewLead(workspaceId: string, sessionId: string): Pro
   }
 }
 
+const AI_DOWN_EVERY_MS = 60 * 60 * 1000;
+const aiDownAlerted = new Map<string, number>();
+
+/** AI replies are failing, so customers are waiting for a person. At most one alert an hour per business; the operator hears too. */
+export async function notifyAiDown(workspaceId: string, phone: string, text: string, reason: string): Promise<void> {
+  if (Date.now() - (aiDownAlerted.get(workspaceId) ?? 0) < AI_DOWN_EVERY_MS) return;
+  aiDownAlerted.set(workspaceId, Date.now());
+  try {
+    const cfg = await loadConfig(workspaceId);
+    const why = /spending cap/i.test(reason) ? 'The Gemini monthly spending cap is used up. Raise it at https://ai.studio/spend' : cut(reason, 200);
+    const body = [`AI replies are failing for ${cfg.ws.businessName}.`, why, `Latest customer waiting: ${contactLabel(phone)}: "${cut(text, 160)}"`, `Reply to waiting chats from the inbox: ${dashboardUrl()}`].join('\n');
+    const subject = '⚠️ The AI is not replying';
+    console.error('[alerts] AI down:', JSON.stringify(await deliverAlert(workspaceId, subject, body)));
+    if (workspaceId !== DEFAULT_WORKSPACE_ID) await deliverAlert(DEFAULT_WORKSPACE_ID, subject, body);
+  } catch (err) {
+    console.error('[alerts] AI outage alert failed:', (err as Error).message);
+  }
+}
+
 /** A customer says they have booked. */
 export async function notifyBooked(workspaceId: string, phone: string): Promise<void> {
   try {

@@ -269,14 +269,14 @@ test('runAgentTurn treats the customer\'s message as data inside the prompt, not
   setAgentModelForTests(null);
 });
 
-test('credit, quota and key problems are "unavailable" so the menu flow takes over; a timeout is just an error', () => {
+test('credit, quota and key problems are "unavailable" and are told apart from a timeout is just an error', () => {
   assert.equal(modelErrorKind('{"error":{"code":402,"message":"Your prepayment credits are depleted.","status":"RESOURCE_EXHAUSTED"}}'), 'unavailable');
   assert.equal(modelErrorKind('429 quota exceeded'), 'unavailable');
   assert.equal(modelErrorKind('API key not valid'), 'unavailable');
   assert.equal(modelErrorKind('timed out after 25s'), 'error');
 });
 
-test('runAgentTurn reports an unavailable AI so the menu flow can take over', async () => {
+test('runAgentTurn reports an unavailable AI', async () => {
   setAgentModelForTests(null);
   const had = process.env.GEMINI_API_KEY;
   delete process.env.GEMINI_API_KEY;
