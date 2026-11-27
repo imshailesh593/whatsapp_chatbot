@@ -387,7 +387,11 @@ export function readMetaState(state: string, cookieNonce: string): string | null
 }
 
 export function metaAuthUrl(workspaceId: string, publicUrl: string, nonce: string): string {
-  const q = new URLSearchParams({ client_id: env('META_APP_ID'), redirect_uri: redirectUri(publicUrl), state: makeMetaState(workspaceId, nonce), response_type: 'code', scope: SCOPES.join(',') });
+  const q = new URLSearchParams({ client_id: env('META_APP_ID'), redirect_uri: redirectUri(publicUrl), state: makeMetaState(workspaceId, nonce), response_type: 'code' });
+  // Business-type apps use Facebook Login for Business: a saved configuration holds the permissions, so no scope list is sent
+  const configId = env('META_LOGIN_CONFIG_ID');
+  if (configId) q.set('config_id', configId);
+  else q.set('scope', SCOPES.join(','));
   return `https://www.facebook.com/${env('META_GRAPH_VERSION') || 'v24.0'}/dialog/oauth?${q}`;
 }
 

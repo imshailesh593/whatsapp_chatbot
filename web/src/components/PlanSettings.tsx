@@ -102,8 +102,8 @@ const GROUPS: { title: string; hint: string; keys: string[] }[] = [
   { title: 'PayPal plan ($)', hint: 'The PayPal keys stay in the server settings. The plan id is filled in for you by the button below.', keys: ['PAYPAL_PLAN_PRO', 'PAYPAL_PLAN_PRO_YEARLY'] },
   {
     title: 'Instagram & Facebook (Meta app)',
-    hint: 'From your Meta app (developers.facebook.com): App settings > Basic gives the app id and secret. Choose any long random text as the verify token and enter the same text when you add the webhook in the Meta dashboard. Webhook address: https://<your domain>/webhooks/meta. Login redirect address: https://<your domain>/admin/api/meta/callback.',
-    keys: ['META_APP_ID', 'META_APP_SECRET', 'META_VERIFY_TOKEN']
+    hint: 'From your Meta app (developers.facebook.com): App settings > Basic gives the app id and secret, and Facebook Login for Business > Configurations gives the configuration id. Choose any long random text as the verify token and enter the same text when you add the webhook in the Meta dashboard. Webhook address: https://<your domain>/webhooks/meta. Login redirect address: https://<your domain>/admin/api/meta/callback.',
+    keys: ['META_APP_ID', 'META_APP_SECRET', 'META_VERIFY_TOKEN', 'META_LOGIN_CONFIG_ID']
   },
   {
     title: 'Email (Resend)',

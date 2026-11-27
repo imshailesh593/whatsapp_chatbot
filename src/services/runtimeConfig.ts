@@ -30,6 +30,7 @@ export const MANAGED_KEYS: KeyDef[] = [
   { key: 'META_APP_ID', label: 'Meta app id', secret: false, check: (v) => (/^\d{8,20}$/.test(v) ? null : 'The app id is a number of 8 to 20 digits') },
   { key: 'META_APP_SECRET', label: 'Meta app secret', secret: true, check: (v) => (/^[a-f0-9]{32}$/i.test(v) ? null : 'The app secret is 32 letters and digits (a-f, 0-9)') },
   { key: 'META_VERIFY_TOKEN', label: 'Meta webhook verify token', secret: true, check: (v) => (v.length >= 12 && v.length <= 100 && !/\s/.test(v) ? null : 'Use 12 to 100 characters with no spaces') },
+  { key: 'META_LOGIN_CONFIG_ID', label: 'Meta login configuration id', secret: false, check: (v) => (/^\d{8,20}$/.test(v) ? null : 'The configuration id is a number of 8 to 20 digits') },
   { key: 'MAIL_FROM', label: 'Email sender', secret: false, check: (v) => (/@/.test(v) && v.length <= 200 ? null : 'Use an address like: Wappo <hello@wappoai.com>') }
 ];
 
