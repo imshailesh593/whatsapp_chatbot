@@ -1,13 +1,13 @@
 import { SessionStage } from '@prisma/client';
 import { prisma } from '../lib/prisma';
-import { sendTextMessage, logMessage, isCapturing } from './transport';
+import { batchReplies, sendTextMessage, logMessage, isCapturing } from './transport';
 import { answerFreeform } from './gemini';
 import { accessState } from '../plans';
 import { admitAiReply, admitConversation } from './usage';
 import { notifyBooked, notifyNewLead } from './alerts';
 import { dispatchEvent } from './integrations';
 import { logLeadEvent } from './crm';
-import { startHandoff, wantsHuman } from './handoff';
+import { askedIfBot, botIdentityReply, startHandoff, wantsHuman } from './handoff';
 import { languageFallbackMessage, languageHintMessage, languagePrompt, localize, offeredLanguages, parseLanguage } from './language';
 import { calendarConnected, handleBookingMessage, markLeadBooked } from './calendar';
 import {
@@ -47,16 +47,46 @@ async function lastReplyWas(workspaceId: string, phone: string, text: string): P
   return (last?.payload as { text?: string } | null)?.text === text;
 }
 
-export async function handleIncomingMessage(
+/** The last few messages of this chat (oldest first), without the one being answered, so the AI keeps the thread of the conversation. */
+async function recentChat(workspaceId: string, phone: string, current: string): Promise<{ role: 'user' | 'model'; text: string }[]> {
+  if (isCapturing()) return [];
+  const rows = await prisma.webhookLog.findMany({ where: { workspaceId, phoneNumber: phone }, orderBy: { createdAt: 'desc' }, take: 8 });
+  const turns = rows
+    .reverse()
+    .map((r) => ({ role: (r.direction === 'INBOUND' ? 'user' : 'model') as 'user' | 'model', text: String((r.payload as { text?: string } | null)?.text ?? '').trim() }))
+    .filter((t) => t.text);
+  if (turns.length && turns[turns.length - 1].role === 'user' && turns[turns.length - 1].text === current) turns.pop();
+  while (turns.length && turns[0].role !== 'user') turns.shift();
+  return turns;
+}
+
+/**
+ * One incoming message, one reply: whatever the conversation says in answer (a side answer and the next question, say) is
+ * merged into a single WhatsApp message, never two or three in a row.
+ * `inboundLogged` is set when the caller already stored the customer's message(s) in the chat log.
+ */
+export function handleIncomingMessage(
   workspaceId: string,
   phoneNumber: string,
   contactName: string | undefined,
   incomingText: string,
-  messageId?: string
+  messageId?: string,
+  inboundLogged = false
+): Promise<void> {
+  return batchReplies(workspaceId, phoneNumber, () => processIncoming(workspaceId, phoneNumber, contactName, incomingText, messageId, inboundLogged));
+}
+
+async function processIncoming(
+  workspaceId: string,
+  phoneNumber: string,
+  contactName: string | undefined,
+  incomingText: string,
+  messageId: string | undefined,
+  inboundLogged: boolean
 ): Promise<void> {
   const text = incomingText.trim();
   if (!text) return;
-  if (!isCapturing()) await logMessage(workspaceId, phoneNumber, 'INBOUND', text, messageId);
+  if (!isCapturing() && !inboundLogged) await logMessage(workspaceId, phoneNumber, 'INBOUND', text, messageId);
   const lower = text.toLowerCase();
 
   const cfg: BotConfig = await loadConfig(workspaceId);
@@ -72,7 +102,7 @@ export async function handleIncomingMessage(
   const tryAnswer = async (question: string): Promise<boolean> => {
     // Over the plan's AI allowance the bot keeps to its fixed replies
     if (!isCapturing() && !(await admitAiReply(cfg.ws))) return false;
-    const answer = await answerFreeform(cfg, question, cfg.ws.languageStep ? session?.language : null);
+    const answer = await answerFreeform(cfg, question, cfg.ws.languageStep ? session?.language : null, await recentChat(workspaceId, phoneNumber, question));
     if (!answer) return false;
     await send(phoneNumber, answer);
     return true;
@@ -98,7 +128,9 @@ export async function handleIncomingMessage(
 
   /** Bot copy in the language the customer chose (businesses that ask for it); plain English otherwise */
   const speak = async (body: string) => {
-    for (const part of body.split(/\n\s*-{3,}\s*\n/)) if (part.trim()) await send(phoneNumber, await localize(cfg, part.trim(), session!.language, isCapturing()));
+    // A line of --- in a message written by the owner is now just a paragraph break: the customer gets one message
+    const one = body.replace(/\n\s*-{3,}\s*\n/g, '\n\n').trim();
+    if (one) await send(phoneNumber, await localize(cfg, one, session!.language, isCapturing()));
   };
   /** The first thing a customer sees: the language question (when the business asks it and they have not answered yet), else the menu */
   const entry = async () => {
@@ -122,7 +154,13 @@ export async function handleIncomingMessage(
   // Customers can leave broadcast lists at any time; they can come back with START / MENU
   if (OPT_OUT_COMMANDS.includes(lower)) {
     await prisma.session.update({ where: key, data: { optedOut: true } });
-    if (!session.isAgentPaused) await send(phoneNumber, "You have been unsubscribed from our updates. Reply START any time if you want to chat with us again.");
+    if (!session.isAgentPaused) await send(phoneNumber, "Done, you're unsubscribed. Just message START whenever you'd like to chat again.");
+    return;
+  }
+
+  // "Are you a bot?" / "is this a real person?": answered honestly and warmly, and a person is offered. It is not a hand-off request.
+  if (askedIfBot(text)) {
+    await speak(botIdentityReply(cfg));
     return;
   }
 
@@ -251,10 +289,7 @@ export async function handleIncomingMessage(
           })
         ]);
         if (!isCapturing()) void logLeadEvent(newLead.id, workspaceId, 'created', service.title, 'bot');
-        // A long closing message can be split into separate WhatsApp messages with a line of --- (easier to read than one huge block)
-        for (const part of completionMessage(cfg, service.key, updatedAnswers).split(/\n\s*-{3,}\s*\n/)) {
-          if (part.trim()) await speak(part.trim());
-        }
+        await speak(completionMessage(cfg, service.key, updatedAnswers));
         if (!isCapturing()) {
           void notifyNewLead(workspaceId, session.id);
           void dispatchEvent(workspaceId, 'lead.created', session.id);

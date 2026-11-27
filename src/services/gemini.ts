@@ -20,6 +20,8 @@ function systemPrompt(cfg: BotConfig, language?: string | null): string {
     `You are the WhatsApp assistant of ${ws.businessName}${ws.description ? `, ${ws.description}` : ''}.`,
     services.length ? `Services offered: ${services.map((s) => s.title).join('; ')}.` : '',
     'Rules:',
+    "- Write the way a friendly person types on WhatsApp: natural, warm and brief, usually one to three short sentences. Plain text only: no markdown, no headings, no bold, and no bullet lists unless the customer asks for a list. Do not open with 'Certainly' or 'Great question', do not repeat the question back, do not end every answer by offering more help, and use at most one emoji, only if the customer used one. Match the customer's tone and language.",
+    "- You are the business's virtual assistant. Do not announce that you are an AI or a bot. But if the customer asks whether they are talking to a bot, an AI or a real person, answer honestly that you are the business's virtual assistant (not a person) and offer to bring in someone from the team. Never claim to be human, never invent a personal name for yourself, and never describe yourself as 'an AI language model'.",
     `- ${language && !/^english$/i.test(language) ? `Reply in ${describeLanguage(language)} (the customer chose it).` : /\bonly\b/i.test(ws.languages) ? `Always reply in ${ws.languages.replace(/\s*\bonly\b\s*/i, '').trim() || 'English'}, even if the customer writes in another language. If they need another language, say politely that you can help in ${ws.languages.replace(/\s*\bonly\b\s*/i, '').trim() || 'English'} only.` : `Reply in the same language as the user${ws.languages ? ` (the business usually works in: ${ws.languages})` : ''}.`} Tone: ${ws.tone || 'friendly'}. Keep it under 80 words, plain text, at most one emoji, no markdown headings or tables.`,
     '- Give general, helpful orientation only. Never quote prices or fees unless they appear in the business notes below, never promise outcomes, and never state exact timelines or legal/eligibility conclusions as certain.',
     ws.bookingUrl
@@ -75,13 +77,17 @@ export async function suggestInstructions(cfg: BotConfig, current: string, reque
 }
 
 /** Returns an answer to a free-form question, or null if Gemini is unavailable (callers fall back to static copy). */
-export async function answerFreeform(cfg: BotConfig, question: string, language?: string | null): Promise<string | null> {
+export async function answerFreeform(cfg: BotConfig, question: string, language?: string | null, history: { role: 'user' | 'model'; text: string }[] = []): Promise<string | null> {
   const ai = getClient();
   if (!ai) return null;
   try {
     const res = await ai.models.generateContent({
       model: MODEL,
-      contents: question.slice(0, 1000),
+      // The last few messages of the chat, so a follow-up like "and for nurses?" is understood the way a person would
+      contents: [
+        ...history.slice(-6).map((h) => ({ role: h.role, parts: [{ text: h.text.slice(0, 500) }] })),
+        { role: 'user', parts: [{ text: question.slice(0, 1000) }] }
+      ],
       // thinkingBudget 0: the model otherwise spends the output budget on hidden reasoning and truncates the reply
       config: {
         systemInstruction: systemPrompt(cfg, language),

@@ -140,51 +140,48 @@ export async function seedDefaultWorkspace(): Promise<void> {
 
 // ---------- customer-facing message copy, built from the workspace config ----------
 
-const NUM = ['0️⃣', '1️⃣', '2️⃣', '3️⃣', '4️⃣', '5️⃣', '6️⃣', '7️⃣', '8️⃣', '9️⃣'];
-const menuLines = (cfg: BotConfig) => cfg.services.map((s, i) => `${NUM[i + 1] ?? `${i + 1}.`} ${s.title}`).join('\n');
+// Plain "1." numbering reads like a person typing; emoji keycaps look like a machine
+const menuLines = (cfg: BotConfig) => cfg.services.map((s, i) => `${i + 1}. ${s.title}`).join('\n');
 
 const bold = (t: string) => `*${t}*`;
 
+const formLine = (url: string) => `Could you fill in this quick form so we know a little about you? ${url}`;
+
 export function welcomeMessage(cfg: BotConfig): string {
   const { ws } = cfg;
-  const parts = [`Hello 👋 Welcome to ${ws.businessName}! 🌍`];
+  const parts = [`Hi, welcome to ${ws.businessName.split('|')[0].trim()}!`];
   if (ws.welcomeIntro.trim()) parts.push(ws.welcomeIntro.trim());
-  if (ws.formUrl.trim()) {
-    parts.push(`📝 Please fill out this short form so our team can understand your profile:\n👉 ${ws.formUrl.trim()}`);
-    parts.push('Then, to assist you better, please select the service you are looking for:');
-  } else {
-    parts.push('To assist you better, please select the service you are looking for:');
-  }
-  parts.push(menuLines(cfg));
-  parts.push(`Please reply with the option number (1-${cfg.services.length}). 😊`);
+  if (ws.formUrl.trim()) parts.push(formLine(ws.formUrl.trim()));
+  parts.push(`What are you looking for?\n${menuLines(cfg)}`);
+  parts.push(`Just reply with the number (1-${cfg.services.length}).`);
   return parts.join('\n\n');
 }
 
-/** The menu on its own (the language question has already been asked and answered). */
+/** The menu on its own (the language question has already been asked and answered): one message, form link included. */
 export function menuOnlyMessage(cfg: BotConfig): string {
   const form = cfg.ws.formUrl.trim();
-  const lead = form
-    ? [`📝 Please fill this short form first:\n👉 ${form}\n---\nWhich service do you need?`]
-    : ['To assist you better, please select the service you are looking for:'];
-  return [...lead, menuLines(cfg), `Reply with a number (1-${cfg.services.length}). To change language, type *LANGUAGE*.`].join('\n\n');
+  return [
+    ...(form ? [formLine(form)] : []),
+    `What do you need help with?\n${menuLines(cfg)}`,
+    `Reply with the number (1-${cfg.services.length}). You can type LANGUAGE any time to change the language.`
+  ].join('\n\n');
 }
 
-export const DEFAULT_LANGUAGE_WELCOME =
-  'Hello! Welcome, and thank you for contacting us. I am here to help you find the right solution for your needs. Which language would you prefer for our conversation?';
+export const DEFAULT_LANGUAGE_WELCOME = 'Hi, thanks for reaching out! Which language would you like to chat in?';
 
 /** The first message of a workspace that asks the customer's language before showing the menu. */
 export const languagePromptMessage = (cfg: BotConfig) => cfg.ws.languageWelcome.trim() || DEFAULT_LANGUAGE_WELCOME;
 
-export const menuPrompt = (cfg: BotConfig) => `To get started, please reply with the option number (1-${cfg.services.length}) for the service you need. 😊`;
+export const menuPrompt = (cfg: BotConfig) => `Which of these can I help you with? Just reply with the number (1-${cfg.services.length}).`;
 
 export function invalidSelectionMessage(cfg: BotConfig): string {
-  return `Please reply with a valid number between 1 and ${cfg.services.length} to choose your service. 😊\n\n${menuLines(cfg)}`;
+  return `Sorry, I didn't quite catch that. Which of these can I help you with?\n${menuLines(cfg)}\n\nJust reply with the number (1-${cfg.services.length}).`;
 }
 
 function bookingBlock(cfg: BotConfig, lead: string): string[] {
   const { ws } = cfg;
   if (!ws.bookingUrl.trim()) return [];
-  const out = [`${lead} ${ws.bookingLabel} here:\n👉 ${ws.bookingUrl.trim()}`];
+  const out = [`${lead} ${ws.bookingLabel} here: ${ws.bookingUrl.trim()}`];
   return out;
 }
 
@@ -206,31 +203,25 @@ export function completionMessage(cfg: BotConfig, serviceKey?: string | null, an
   const { ws } = cfg;
   const own = cfg.services.find((s) => s.key === serviceKey)?.closingMessage.trim();
   if (own) return renderClosing(own, answers);
-  const parts = [
-    'Thank you for sharing your details! 🙌',
-    'Our team will review your requirements and guide you regarding the relevant process and next steps.'
-  ];
-  parts.push(...bookingBlock(cfg, 'You can also schedule a'));
-  if (ws.bookingUrl.trim()) parts.push('If you have already booked, please let us know here.');
+  const parts = ["Thanks, that's everything I needed. Our team will go through your details and get back to you soon."];
+  parts.push(...bookingBlock(cfg, 'If you like, you can also book a'));
+  if (ws.bookingUrl.trim()) parts.push('If you have already booked, just let me know.');
   if (ws.bookingNote.trim()) parts.push(bold(ws.bookingNote.trim()));
-  parts.push(`${ws.businessName}${ws.tagline.trim() ? ` | ${ws.tagline.trim()}` : ''} 🌍`);
   return parts.join('\n\n');
 }
 
 export function bookingReminderMessage(cfg: BotConfig): string {
   const { ws } = cfg;
-  const parts = [`You can schedule your ${ws.bookingLabel} using this link:\n👉 ${ws.bookingUrl.trim()}`];
+  const parts = [`You can book a ${ws.bookingLabel} here: ${ws.bookingUrl.trim()}`];
   if (ws.bookingNote.trim()) parts.push(bold(`Note: ${ws.bookingNote.trim()}`));
   return parts.join('\n\n');
 }
 
-export const postCompletionMessage = () =>
-  'Thank you for your message! Our team has received your details and will reach out shortly.\n\nTo restart the service menu, type *MENU*.';
+export const postCompletionMessage = () => 'Thanks! Our team has your details and will be in touch soon. If you need anything else just ask, or type MENU to start over.';
 
-export const bookedConfirmationMessage = () =>
-  'Thank you for confirming! 🙌 Our team will connect with you shortly regarding your booking.';
+export const bookedConfirmationMessage = () => "Great, thanks for letting us know. Our team will be in touch about your booking.";
 
-export const UNSUPPORTED_MEDIA_MESSAGE = 'Sorry, I can only read text messages right now. Please type your reply. 🙏';
+export const UNSUPPORTED_MEDIA_MESSAGE = "Sorry, I can only read text messages at the moment. Could you type that out for me?";
 
 /** "3", "option 3", "3️⃣" or a service keyword/title word → service key. */
 export function resolveService(cfg: BotConfig, text: string): string | undefined {

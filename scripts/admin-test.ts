@@ -101,11 +101,11 @@ async function cleanup() {
   const sim = async (h: any, text: string) => (await call(h, 'POST', '/admin/api/simulate', { id: 'tst', name: 'Sim <b>', text })).json();
   await call(hA, 'POST', '/admin/api/simulate/reset', { id: 'tst' });
   let o = await sim(hA, 'hi');
-  ok(o.replies[0].includes('Welcome to Acme Dental') && o.replies[0].includes('1️⃣ Check-up') && o.replies[0].includes('2️⃣ Braces'), 'simulator: welcome + menu from this workspace');
+  ok(o.replies[0].includes('welcome to Acme Dental') && o.replies[0].includes('1. Check-up') && o.replies[0].includes('2. Braces'), 'simulator: welcome + menu from this workspace');
   o = await sim(hA, 'braces please');
   ok(o.replies[0] === 'Age?' && o.state.totalSteps === 1, 'simulator: keyword picks the service');
   o = await sim(hA, '34');
-  ok(o.replies[0].includes('https://cal.example/acme') && o.replies[0].includes('Acme Dental | Healthy teeth'), 'simulator: completion with booking link + sign-off');
+  ok(o.replies.length === 1 && o.replies[0].includes('https://cal.example/acme'), 'simulator: the completion is one message with the booking link');
   ok(sent.length === 0, 'simulator delivered nothing to WhatsApp');
 
   // ---- isolation between tenants ----
@@ -115,7 +115,7 @@ async function cleanup() {
   ok((await call(hB, 'GET', '/admin/api/contacts/SIM-tst/messages')).json().messages.length === 0, "tenant B cannot read tenant A's messages");
   await call(hB, 'POST', '/admin/api/templates/apply', { id: 'generic' });
   o = await sim(hB, 'hi');
-  ok(o.replies[0].includes('Welcome to Bravo Test'), 'tenant B has its own bot');
+  ok(o.replies[0].includes('welcome to Bravo Test'), 'tenant B has its own bot');
   ok((await call(hA, 'GET', '/admin/api/admins')).json().admins.length === 1, 'team list is per workspace');
   ok((await call(hA, 'GET', '/admin/api/super/workspaces')).statusCode === 403, 'tenants cannot use platform admin endpoints');
 

@@ -23,7 +23,37 @@ export function wantsHuman(text: string): boolean {
   return PATTERNS.some((re) => re.test(t));
 }
 
-export const defaultHandoffMessage = () => 'Of course. I have asked our team to take over, and a person will reply here shortly. Thank you for your patience.';
+export const defaultHandoffMessage = () => "Sure, I'll pass this to our team. Someone will reply here shortly.";
+
+// "are you a bot?", "is this a real person?", "am I talking to a human?" (English and common Hinglish). A sincere question about what
+// the customer is talking to, not a request for a person: it gets an honest answer.
+const BOT_QUESTIONS = [
+  /\b(are|r)\s+(you|u)\b[^.?!]{0,25}\b(bot|robot|chat\s*bot|ai|artificial|machine|automated|automatic|human|person|real\s+(person|human|one)|actual\s+(person|human)|live\s+(person|human|agent))\b/i,
+  /\b(are|r)\s+(you|u)\s+real\s*[?!.]*$/i,
+  /^\W*((hi|hello|hey)\W+)?(is|was)\s+(this|that|it)\s+(a\s+|an\s+|being\s+)?(bot|robot|chat\s*bot|ai|automated|automatic|machine|human|real\s+person|person)\s*(too|or\s+\w+(\s+\w+)?)?\s*[?!.]*$/i,
+  /\b(am\s+i|i\s+am)\s+(talking|chatting|speaking|texting)\s+(to|with)\s+(a\s+|an\s+)?(bot|robot|human|real|machine|person|ai|someone\s+real)/i,
+  /\b(you|u)\s+(a|an)\s+(bot|robot|human|real\s+person)\b/i,
+  /\bchat\s*gpt\b/i,
+  /\b(bot|robot|ai|machine)\s+(ho|hai|hain)\b/i,
+  /\b(aap|ap|tum)\b[^.?!]{0,12}\b(bot|robot|insaan|human|real)\b/i
+];
+
+/** True when the customer is asking whether they are talking to a bot or a person. */
+export function askedIfBot(text: string): boolean {
+  const t = text.trim();
+  if (t.length < 4 || t.length > 90) return false;
+  return BOT_QUESTIONS.some((re) => re.test(t));
+}
+
+/**
+ * The honest answer: this is the business's virtual assistant. The bot never claims to be a person, and offers one. It does not
+ * announce what it is unprompted; it only answers when asked.
+ */
+export function botIdentityReply(cfg: BotConfig): string {
+  const name = cfg.ws.businessName.split('|')[0].trim() || 'our team';
+  const offer = cfg.ws.handoffEnabled ? " If you'd rather talk to someone from the team, just tell me and I'll pass you over." : '';
+  return `I'm the virtual assistant for ${name}, so I'm not a person. I can help with most questions right here.${offer}`;
+}
 
 interface Turn {
   who: 'Customer' | 'Bot';

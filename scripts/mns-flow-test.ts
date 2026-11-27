@@ -31,7 +31,13 @@ setTranslatorForTests(async (text, language) => { translations++; return `[${lan
     if (!(await prisma.calendarConfig.findUnique({ where: { workspaceId: W.id } }))) throw new Error('FAIL: the own-business setup should switch booking on');
     await prisma.calendarConfig.delete({ where: { workspaceId: W.id } });
     const cfg = await loadConfig(W.id);
-    const say = async (phone: string, text: string) => handleIncomingMessage(W.id, phone, 'Test', text);
+    // One customer message, one reply: any message that gets two or more fails the whole test
+    const say = async (phone: string, text: string) => {
+      const before = to(phone).length;
+      await handleIncomingMessage(W.id, phone, 'Test', text);
+      const got = to(phone).length - before;
+      if (got > 1) throw new Error(`FAIL: "${text}" got ${got} replies, expected at most one`);
+    };
 
     console.log('[the setup itself]');
     ok(cfg.services.length === 9 && cfg.services.every((s) => s.questions.length >= 2 && s.questions.length <= 12), 'nine menu options, each with its own questions');
@@ -53,20 +59,21 @@ setTranslatorForTests(async (text, language) => { translations++; return `[${lan
     ok(closingOf('JOBS').includes('https://www.mnsinstitutejobs.com') && closingOf('WAPPO').includes('https://www.wappoai.com') && closingOf('ZEXY_AI').includes('https://zexyai.com'), 'each service closes with its own link');
     const TOPMATE = 'https://topmate.io/mnsinstitute/';
     ok(cfg.services.every((s) => !s.closingMessage.includes('topmate')), 'no closing message sends the Topmate link on its own: it is only sent when the customer asks for more');
-    ok(cfg.services.every((s) => s.closingMessage.includes('*BOOK*') && s.closingMessage.length < 3000), 'each one tells the customer to reply BOOK for a consultation, and fits a WhatsApp message');
+    ok(cfg.services.every((s) => s.closingMessage.includes('BOOK') && s.closingMessage.length < 1100), 'each closing is one message that tells the customer to say BOOK, and it is short enough to read at a glance');
     const all = (key: string, answers: Record<string, string> = {}) => renderClosing(closingOf(key), answers);
     const has = (key: string, words: string[], answers: Record<string, string> = {}) => words.every((w) => all(key, answers).includes(w));
     ok(has('COACHING', ['₹14,500', '₹12,000', 'DHA', '2 months']), 'coaching: both prices and the DHA rule');
     ok(has('PROMETRIC_MATERIAL', ['₹8,000', '50 test series', '50 mock tests', '30+ practice resources'], { profession: 'Pharmacist' }), 'study material: the price and what it includes');
-    ok(all('PROMETRIC_MATERIAL', { profession: 'Staff nurse' }).includes('Recorded lectures') && all('PROMETRIC_MATERIAL', { profession: 'GNM nursing' }).includes('Recorded lectures'), 'recorded lectures are mentioned to nursing candidates');
+    ok(all('PROMETRIC_MATERIAL', { profession: 'Staff nurse' }).includes('recorded lectures') && all('PROMETRIC_MATERIAL', { profession: 'GNM nursing' }).includes('recorded lectures'), 'recorded lectures are mentioned to nursing candidates');
     ok(['Pharmacist', 'Lab technologist', 'Radiologist', 'Doctor', ''].every((p) => !/lecture/i.test(all('PROMETRIC_MATERIAL', { profession: p }))), 'and never to anyone else');
-    ok(has('LICENSING', ['₹1,75,000', 'BAMS', '₹2,000-4,000', '₹40,000', 'positive result', 'DataFlow', 'Letter of Qualification']), 'licensing: the packages, BAMS range and the post-result fee');
-    ok(has('JOBS', ['₹50,000', '₹6,500', '₹43,500', 'CV preparation', 'candidate portal', 'Gmail', 'https://www.mnsinstitutejobs.com', '3+ weeks']), 'jobs: the full fee split, inclusions, timeline and the website');
-    ok(has('GERMAN', ['₹70,000', '4 months', 'One-to-one', '6 days a week']), 'German: price, duration and schedule');
+    ok(has('LICENSING', ['₹1,75,000', 'BAMS', '₹2,000-4,000', '₹40,000', 'positive result']), 'licensing: the packages, BAMS range and the post-result fee, in one message');
+    ok(has('JOBS', ['₹50,000', '₹6,500', '₹43,500', 'CV preparation', 'candidate portal', 'Gmail', 'https://www.mnsinstitutejobs.com', '3+ weeks']), 'jobs: the full fee split, inclusions, timeline and the website, in one message');
+    ok(has('GERMAN', ['₹70,000', '4 months', 'one-to-one', '6 days a week']), 'German: price, duration and schedule');
     ok(has('VISA_PR', ['no fixed fee']) && !/₹/.test(all('VISA_PR')), 'study abroad and visa: no invented price, and it says why');
-    ok(has('WAPPO', ['₹499 per month', 'Unlimited messages', 'no per-message charge', 'CRM portal', 'https://www.wappoai.com']), 'WAPPO: price, inclusions and its website');
+    ok(has('WAPPO', ['₹499 a month', 'unlimited messages', 'no per-message charge', 'CRM portal', 'https://www.wappoai.com']), 'WAPPO: price, inclusions and its website');
     ok(has('ZEXY_AI', ['₹499', '₹14,500', '2 months', 'AI avatar', 'https://zexyai.com']), 'ZEXY AI: both prices, inclusions and its website');
     ok(!/₹|Rs/.test(all('GENERAL')), 'something else: no price');
+    ok(cfg.services.every((s) => !s.closingMessage.includes('---') && !/[✅🙌📝👉]|⃣/u.test(s.closingMessage + s.title)), 'the copy reads like typing, not like a machine: no split markers, no emoji numbering');
 
     console.log('\n[service words]');
     for (const [input, want] of [
@@ -75,18 +82,17 @@ setTranslatorForTests(async (text, language) => { translations++; return `[${lan
     ] as const) ok(resolveService(cfg, input) === want, `"${input}" selects ${want}`);
 
     console.log('\n[as shipped: the very first message asks for a language]');
-    const FIVE = ['English', 'Hindi', 'Hinglish', 'Tamil', 'Malayalam'];
     const first = `9190${run}9`;
     await say(first, 'Hello');
     const ask = to(first)[0];
-    ok(ask.startsWith(OWN_PROFILE.languageWelcome) && !/₹|Rs/.test(ask), 'the first reply asks which language the customer prefers, with no prices');
-    ok(['1️⃣ English', '2️⃣ हिन्दी (Hindi)', '3️⃣ Hinglish', '4️⃣ தமிழ் (Tamil)', '5️⃣ മലയാളം (Malayalam)'].every((l) => ask.includes(l)) && !/6️⃣/.test(ask), 'it lists exactly English, Hindi, Hinglish, Tamil and Malayalam, numbered');
-    ok(!ask.includes('tally.so') && !ask.includes('1️⃣ Coaching'), 'the menu and the form come after the language is chosen, not before');
+    ok(to(first).length === 1 && ask.startsWith(OWN_PROFILE.languageWelcome) && !/₹|Rs/.test(ask), 'one reply to the first message: it asks which language the customer prefers, with no prices');
+    ok(['1. English', '2. हिन्दी (Hindi)', '3. Hinglish', '4. தமிழ் (Tamil)', '5. മലയാളം (Malayalam)'].every((l) => ask.includes(l)) && !/6\. /.test(ask), 'it lists exactly English, Hindi, Hinglish, Tamil and Malayalam, numbered');
+    ok(!ask.includes('tally.so') && !ask.includes('1. Coaching'), 'the menu and the form come after the language is chosen, not before');
     ok((await prisma.session.findFirst({ where: { workspaceId: W.id, phoneNumber: first } }))!.stage === 'AWAITING_LANGUAGE', 'the chat waits for the answer');
     await say(first, 'Telugu');
-    ok(to(first)[1].startsWith('Sorry, I did not catch that') && to(first)[1].includes('Malayalam') && !to(first)[1].includes('Telugu'), 'a language that is not offered gets the choice list again');
+    ok(to(first)[1].startsWith("Sorry, I didn't catch that") && to(first)[1].includes('Malayalam') && !to(first)[1].includes('Telugu'), 'a language that is not offered gets the choice list again');
     await say(first, '5');
-    ok((await prisma.session.findFirst({ where: { workspaceId: W.id, phoneNumber: first } }))!.language === 'Malayalam' && to(first)[2].startsWith('[Malayalam] 📝'), '5 means Malayalam, and the form and menu arrive in Malayalam');
+    ok(to(first).length === 3 && (await prisma.session.findFirst({ where: { workspaceId: W.id, phoneNumber: first } }))!.language === 'Malayalam' && to(first)[2].startsWith('[Malayalam] Could you fill in'), '5 means Malayalam, and the form link and the menu arrive together as ONE message in Malayalam');
     for (const [reply, want] of [['1', 'English'], ['2', 'Hindi'], ['3', 'Hinglish'], ['4', 'Tamil'], ['hindi', 'Hindi'], ['Hinglish', 'Hinglish'], ['தமிழ்', 'Tamil'], ['മലയാളം', 'Malayalam'], ['english', 'English']] as const) {
       const p = `9190${run}${want.slice(0, 2)}${reply.length}${reply.charCodeAt(0) % 97}`;
       await say(p, 'hi');
@@ -96,13 +102,13 @@ setTranslatorForTests(async (text, language) => { translations++; return `[${lan
     const hinglishChat = `9190${run}Hl`;
     await say(hinglishChat, 'hi');
     await say(hinglishChat, '3');
-    ok(to(hinglishChat).at(-2)!.startsWith('[Hinglish] 📝') && to(hinglishChat).at(-1)!.startsWith('[Hinglish] Which service do you need?'), 'Hinglish is passed to the translator as its own language, and the form and the menu are two messages');
+    ok(to(hinglishChat).length === 2 && to(hinglishChat).at(-1)!.startsWith('[Hinglish] Could you fill in') && to(hinglishChat).at(-1)!.includes('1. Coaching'), 'Hinglish is passed to the translator as its own language, and the form and the menu are one message');
     const stuck = `9190${run}8`;
     await prisma.workspace.update({ where: { id: W.id }, data: { languageStep: false } });
     invalidateConfig(W.id);
     await prisma.session.create({ data: { workspaceId: W.id, phoneNumber: stuck, stage: 'AWAITING_LANGUAGE', language: 'Hy' } });
     await say(stuck, 'hello');
-    ok(to(stuck)[0].includes('Welcome to') && (await prisma.session.findFirst({ where: { workspaceId: W.id, phoneNumber: stuck } }))!.stage === 'AWAITING_SERVICE_SELECTION', 'if a business stops asking, a chat left on the language question carries on with the menu');
+    ok(to(stuck)[0].toLowerCase().includes('welcome to') && (await prisma.session.findFirst({ where: { workspaceId: W.id, phoneNumber: stuck } }))!.stage === 'AWAITING_SERVICE_SELECTION', 'if a business stops asking, a chat left on the language question carries on with the menu');
     await prisma.workspace.update({ where: { id: W.id }, data: { languageStep: true } });
     invalidateConfig(W.id);
 
@@ -131,61 +137,60 @@ setTranslatorForTests(async (text, language) => { translations++; return `[${lan
     ok(to(hi)[0].startsWith(OWN_PROFILE.languageWelcome) && !/₹|Rs/.test(to(hi)[0]), 'the first reply is the welcome that asks for the language, with no prices');
     ok((await prisma.session.findFirst({ where: { workspaceId: W.id, phoneNumber: hi } }))!.stage === 'AWAITING_LANGUAGE', 'the chat waits for the language');
     await say(hi, 'what is the price?');
-    ok(to(hi).length === 2 && to(hi)[1].startsWith('Sorry, I did not catch that') && to(hi)[1].includes('Malayalam'), 'a question instead of a language gets the choice list again');
+    ok(to(hi).length === 2 && to(hi)[1].startsWith("Sorry, I didn't catch that") && to(hi)[1].includes('Malayalam'), 'a question instead of a language gets the choice list again');
     await say(hi, 'Hindi');
     ok((await prisma.session.findFirst({ where: { workspaceId: W.id, phoneNumber: hi } }))!.language === 'Hindi', 'the language is remembered');
-    const form = to(hi)[2];
-    const menu = to(hi)[3];
-    ok(form.startsWith('[Hindi] 📝 Please fill this short form') && form.includes('https://tally.so/r/7Rrl70') && menu.startsWith('[Hindi] Which service do you need?') && (menu.match(/\n/g) ?? []).length >= 10 && /9️⃣/.test(menu) && !/Welcome to/.test(menu), 'the form link and the nine-option menu come next as two shorter messages, translated');
+    const menu = to(hi)[2];
+    ok(to(hi).length === 3 && menu.startsWith('[Hindi] Could you fill in this quick form') && menu.includes('https://tally.so/r/7Rrl70') && (menu.match(/\n/g) ?? []).length >= 10 && menu.includes('9. Something else') && !/welcome to/i.test(menu), 'the form link and the nine-option menu come next as ONE translated message');
     await say(hi, '3');
-    ok(to(hi)[4] === '[Hindi] What is your current profession?', 'the first licensing question is translated');
+    ok(to(hi)[3] === '[Hindi] What is your current profession?', 'the first licensing question is translated');
     const answers = ['Staff nurse', 'B.Sc Nursing, 2018', '5 years', 'No gap', 'India, wants to work in the UAE', 'No', 'Not yet'];
     for (const a of answers) await say(hi, a);
-    const [licMsg1, licMsg2] = to(hi).slice(-2);
-    ok(licMsg1.startsWith('[Hindi] Thanks for sharing your details') && licMsg1.includes('₹1,75,000') && licMsg2.startsWith('[Hindi] *After you pass DHA') && licMsg2.includes('₹40,000') && licMsg2.includes('*BOOK*') && !(licMsg1 + licMsg2).includes('topmate'), 'the licensing closing arrives as two translated messages (packages, then the post-result fee), with the fees and no link');
-    ok(licMsg1.length < 500 && licMsg2.length < 600 && !licMsg1.includes('---') && !licMsg2.includes('---'), '...each short enough to read at a glance, and the split marker never reaches the customer');
+    const closed = to(hi).at(-1)!;
+    ok(to(hi).length === 4 + answers.length && closed.startsWith('[Hindi] Thanks for the details!') && closed.includes('₹1,75,000') && closed.includes('₹40,000') && closed.includes('BOOK') && !closed.includes('topmate'), 'the licensing closing is ONE translated message with all the fees and no link');
+    ok(closed.length < 700 && !closed.includes('---'), '...short enough to read at a glance');
     await say(hi, 'DHA fees');
     ok(!to(hi).at(-1)!.includes('topmate'), 'asking about fees afterwards does not send the consultation link');
     await say(hi, 'I need more information');
-    ok(to(hi).at(-1)!.startsWith('[Hindi]') && to(hi).at(-1)!.includes(TOPMATE), 'asking for more information sends the consultation link, in the customer\'s language');
+    ok(to(hi).at(-1)!.startsWith('[Hindi]') && to(hi).at(-1)!.includes(TOPMATE), "asking for more information sends the consultation link, in the customer's language");
     ok(!!(await prisma.session.findFirst({ where: { workspaceId: W.id, phoneNumber: hi } }))!.consultLinkSentAt, 'sending the link is remembered on the chat');
     const lead = await prisma.lead.findFirst({ where: { workspaceId: W.id, phoneNumber: hi } });
     ok(lead?.serviceCategory === 'LICENSING' && Object.keys(lead.collectedData as object).sort().join() === 'profession,qualification,experience,gap,location,existing_license,exam_status'.split(',').sort().join(), 'the lead is saved with all seven answers');
     await say(hi, 'menu');
-    ok(to(hi).at(-2)!.startsWith('[Hindi] 📝') && to(hi).at(-1)!.startsWith('[Hindi] Which service do you need?'), 'MENU shows the menu again without asking the language again');
+    ok(to(hi).at(-1)!.startsWith('[Hindi] Could you fill in this quick form') && to(hi).at(-1)!.includes('9. Something else'), 'MENU shows the menu again, in one message, without asking the language again');
 
     console.log('\n[a customer who types a greeting as the language]');
     const hy = `9190${run}7`;
     await say(hy, 'Hi');
     await say(hy, 'Hy');
-    ok(to(hy)[1].startsWith('Sorry, I did not catch that'), '"Hy" is not taken as Armenian: the customer gets a hint');
+    ok(to(hy)[1].startsWith("Sorry, I didn't catch that"), '"Hy" is not taken as Armenian: the customer gets a hint');
     ok((await prisma.session.findFirst({ where: { workspaceId: W.id, phoneNumber: hy } }))!.language === null, '...and no language is stored');
     await say(hy, 'hello');
-    ok(to(hy)[2] === 'No problem, we will continue in English. Type *LANGUAGE* at any time to change it.' && to(hy)[3].includes('short form') && to(hy)[4].startsWith('Which service do you need?') && !to(hy)[3].startsWith('['), 'a second miss carries on in English, with the menu');
+    ok(to(hy).length === 3 && to(hy)[2].startsWith("No worries, we'll continue in English.") && to(hy)[2].includes('quick form') && to(hy)[2].includes('1. Coaching') && !to(hy)[2].startsWith('['), 'a second miss carries on in English, with the menu, in ONE message');
     ok((await prisma.session.findFirst({ where: { workspaceId: W.id, phoneNumber: hy } }))!.language === 'English', '...and English is stored');
     await say(hy, 'language');
-    ok(to(hy).at(-1)!.startsWith(OWN_PROFILE.languageWelcome) && to(hy).at(-1)!.includes('5️⃣'), 'LANGUAGE asks the language question again');
+    ok(to(hy).at(-1)!.startsWith(OWN_PROFILE.languageWelcome) && to(hy).at(-1)!.includes('5. '), 'LANGUAGE asks the language question again');
     await say(hy, 'Tamil');
     ok((await prisma.session.findFirst({ where: { workspaceId: W.id, phoneNumber: hy } }))!.language === 'Tamil' && to(hy).at(-1)!.startsWith('[Tamil]'), 'a language on the list works when asked for by name');
-    ok(to(hy).at(-1)!.includes('type *LANGUAGE*'), 'the menu tells customers how to change the language');
+    ok(to(hy).at(-1)!.includes('LANGUAGE'), 'the menu tells customers how to change the language');
 
     console.log('\n[an English-speaking customer, WAPPO and jobs]');
     const en = `9190${run}2`;
     const before = translations;
     await say(en, 'hello');
     await say(en, '1');
-    ok(to(en)[1].startsWith('📝 Please fill this short form') && to(en)[1].includes('https://tally.so/r/7Rrl70') && !to(en)[1].startsWith('[') && to(en)[2].startsWith('Which service do you need?'), 'English customers get the form link and the menu as written');
+    ok(to(en).length === 2 && to(en)[1].startsWith('Could you fill in this quick form') && to(en)[1].includes('https://tally.so/r/7Rrl70') && !to(en)[1].startsWith('[') && to(en)[1].includes('1. Coaching'), 'English customers get the form link and the menu as written, in one message');
     await say(en, 'wappo');
-    ok(to(en)[3].startsWith('What type of business'), 'WAPPO asks about the business, not healthcare questions');
+    ok(to(en)[2].startsWith('What type of business'), 'WAPPO asks about the business, not healthcare questions');
     for (const a of ['A dental clinic', 'Answer enquiries', 'CRM', 'Need help preparing']) await say(en, a);
-    ok(to(en).at(-1)!.includes('https://www.wappoai.com'), 'WAPPO closes with wappoai.com');
+    ok(to(en).at(-1)!.includes('https://www.wappoai.com') && to(en).length === 7, 'WAPPO closes with wappoai.com, in one message');
     ok(translations === before, 'nothing is sent to the translator for English');
     const en2 = `9190${run}3`;
     await say(en2, 'hi'); await say(en2, 'english'); await say(en2, '4');
     ok(to(en2).at(-1) === 'What is your current profession?', 'jobs starts with the profile questions');
     for (const a of ['Nurse', 'GNM 2015', '8 years', 'None', 'India', 'Canada', 'No']) await say(en2, a);
-    const jobsMsgs = to(en2).slice(-2);
-    ok(jobsMsgs[0].includes('₹50,000') && jobsMsgs[0].includes('₹43,500') && jobsMsgs[1].includes('https://www.mnsinstitutejobs.com') && jobsMsgs[1].includes('*BOOK*') && !jobsMsgs.join(' ').includes('topmate'), 'jobs closes as two messages: the fees and inclusions, then the timeline and the website, with no consultation link');
+    const jobsMsg = to(en2).at(-1)!;
+    ok(to(en2).length === 10 && jobsMsg.includes('₹50,000') && jobsMsg.includes('₹43,500') && jobsMsg.includes('https://www.mnsinstitutejobs.com') && jobsMsg.includes('BOOK') && !jobsMsg.includes('topmate'), 'jobs closes with ONE message: the fees, inclusions, timeline and the website, with no consultation link');
     for (const [ask, wantsLink] of [['MORE INFO', true], ['more', true], ['Can I book a consultation?', true], ['tell me more', true], ['I want to discuss my profile', true], ['what is the fee?', false], ['ok thanks', false]] as const) {
       await say(en2, ask);
       ok(to(en2).at(-1)!.includes(TOPMATE) === wantsLink, `"${ask}" ${wantsLink ? 'sends' : 'does not send'} the consultation link`);
@@ -250,11 +255,11 @@ setTranslatorForTests(async (text, language) => { translations++; return `[${lan
     await say(bk, '10:00');
     ok(to(bk).at(-1)!.includes('BOOK') && !to(bk).at(-1)!.includes('topmate'), 'the closing message offers BOOK, not the link');
     await say(bk, 'BOOK');
-    ok(to(bk).at(-1)!.startsWith('[Hindi] 📅 *Choose a date*'), "BOOK offers dates, in the customer's language");
+    ok(to(bk).at(-1)!.startsWith('[Hindi] Sure, here are the days we have open'), "BOOK offers dates, in the customer's language");
     await say(bk, '1');
-    ok(to(bk).at(-1)!.startsWith('[Hindi] 🕒'), 'a date leads to its times');
+    ok(to(bk).at(-1)!.startsWith('[Hindi] Here are the times on'), 'a date leads to its times');
     await say(bk, '1');
-    ok(to(bk).at(-1)!.startsWith('[Hindi] ✅ *Booked!*'), "a time books it and confirms in the customer's language");
+    ok(to(bk).at(-1)!.startsWith("[Hindi] You're all set"), "a time books it and confirms in the customer's language");
     ok(to('918700825077').some((t) => t.includes('New appointment') && t.includes('+' + bk)), 'the team number is alerted on WhatsApp');
     ok(!to(bk).some((t) => t.includes('topmate')), 'the Topmate link is not needed once booking is in the chat');
     await new Promise((r) => setTimeout(r, 600)); // let the background lead-event write finish before the workspace is removed

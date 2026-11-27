@@ -52,7 +52,15 @@ export async function sendRaw(workspaceId: string, to: string, text: string): Pr
   await t.sendText(to, text);
 }
 
-export async function sendTextMessage(workspaceId: string, to: string, text: string): Promise<void> {
+/** One customer message gets one reply: everything the engine says while handling it is held here and sent as a single message. */
+interface Batch {
+  to: string;
+  parts: string[];
+  open: boolean;
+}
+const batches = new AsyncLocalStorage<Batch>();
+
+async function deliver(workspaceId: string, to: string, text: string): Promise<void> {
   const buf = capture.getStore();
   if (buf) {
     buf.push(text);
@@ -62,4 +70,28 @@ export async function sendTextMessage(workspaceId: string, to: string, text: str
   if (!t) throw new Error('WhatsApp is not connected for this workspace');
   await t.sendText(to, text);
   await logMessage(workspaceId, to, 'OUTBOUND', text);
+}
+
+/**
+ * Runs the handling of one incoming message. Every reply to that customer made meanwhile is merged, in order, into ONE
+ * message (separated by a blank line) and delivered when the handling ends. Messages to anybody else go out at once.
+ */
+export async function batchReplies<T>(workspaceId: string, to: string, fn: () => Promise<T>): Promise<T> {
+  const batch: Batch = { to, parts: [], open: true };
+  try {
+    return await batches.run(batch, fn);
+  } finally {
+    batch.open = false;
+    if (batch.parts.length) await deliver(workspaceId, to, batch.parts.join('\n\n'));
+  }
+}
+
+export async function sendTextMessage(workspaceId: string, to: string, text: string): Promise<void> {
+  const batch = batches.getStore();
+  // A background task that outlives the handler (the batch is closed) sends on its own
+  if (batch && batch.open && batch.to === to) {
+    if (text.trim() && batch.parts[batch.parts.length - 1] !== text) batch.parts.push(text);
+    return;
+  }
+  await deliver(workspaceId, to, text);
 }

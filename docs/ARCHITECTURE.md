@@ -228,6 +228,13 @@ Owner picks recipients and writes a message (with name personalisation). The wor
 
 Events (new lead, stage change...) are stored and delivered to each configured webhook URL as signed JSON, retried with backoff. Webhook targets must be public addresses (private ranges are refused). The REST API (`/api/v1`) lets customer systems read leads and move them between stages with a secret key.
 
+### Replies that read like a person (one reply per message)
+- **One customer message, one reply.** `handleIncomingMessage` runs inside `batchReplies` (`services/transport.ts`): everything the conversation says while handling a message (a side answer and the next question, a fallback note and the menu) is merged into a single WhatsApp message, in order, with accidental repeats dropped. A background task that finishes later sends on its own. The dashboard simulator shows the same single reply.
+- **Bursts are answered once.** In `services/whatsapp.ts` each incoming message is logged at once (so redeliveries are recognised) and held by `MessageBurst` (`lib/burst.ts`) for `WA_DEBOUNCE_MS` (default 2500 ms, never more than 8 s in all). "hi", "hello", "anyone there?" sent one after another reach the engine as one message. `WA_DEBOUNCE_MS=0` answers each message straight away.
+- **Typing like a person.** Messages are marked read, then "typing…" is shown for about 22 ms a character (1 to 5 seconds) before the reply is sent. `WA_TYPING=0` switches the pause off.
+- **Tone.** Bot copy (greeting, menu, questions, closings, hand-off, reminders) is short, plain text with "1." numbering and no decorative emoji. The AI is told to write like a friendly person texting (one to three short sentences, no markdown), and it sees the last few messages of the chat so follow-ups make sense. Owners' closing messages are sent as one message; a `---` line is only a paragraph break.
+- **Honesty about being a bot.** The bot never announces that it is automated, but it never claims to be a person either. When a customer asks ("are you a bot?", "is this a real person?", "bot ho kya?"), `askedIfBot` answers: it is the business's virtual assistant, not a person, and it offers to bring in someone from the team (if hand-off is on). That question is not treated as a hand-off request; "I want to talk to a real person" still is.
+
 ### 5.9 Language question, closing messages and follow-ups
 
 Three optional per-business features (Dashboard → Settings), all off unless the business turns them on:

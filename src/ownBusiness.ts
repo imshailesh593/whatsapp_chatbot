@@ -13,9 +13,9 @@ const FORM = 'https://tally.so/r/7Rrl70';
 const TEAM_PHONE = '+91 8700825077';
 const ZEXY = 'https://zexyai.com';
 
-/** Every closing message tells the customer what to type for more. The consultation link itself is only sent when they ask. */
-const MORE = 'Reply *BOOK* to pick a date and time for a one-to-one consultation, or *MENU* for the menu. You can also ask me anything here.';
-const closing = ([first, ...rest]: string[]) => [`Thanks for sharing your details! 🙌\n\n${first}`, ...rest, MORE].join('\n\n');
+/** Every closing message is ONE message and ends with the same friendly nudge. The consultation link itself is only sent when they ask. */
+const MORE = "Want to talk it through with the team? Just say BOOK and I'll show you the free times. You can also ask me anything here.";
+const closing = (lines: string[]) => [...lines, MORE].join('\n\n');
 
 const profile = (...extra: { key: string; prompt: string }[]) => [
   { key: 'profession', prompt: 'What is your current profession?' },
@@ -38,10 +38,11 @@ export const OWN_SERVICES: TemplateService[] = [
       { key: 'timeline', prompt: 'When do you plan to take the exam?' }
     ],
     closingMessage: closing([
-      `*Coaching fees*
-• IELTS, OET, PTE, NORCET: ₹14,500 for 2 months, or ₹12,000 for a 1-month crash course
-• DHA: ₹14,500 for 2 months only`,
-      `Our team will guide you on the right course. Results cannot be guaranteed.`
+      `Thanks for those details! Coaching fees:
+• IELTS, OET, PTE and NORCET: ₹14,500 for 2 months, or ₹12,000 for a 1-month crash course
+• DHA: ₹14,500 for 2 months only
+
+Our team will guide you to the right course. We can't guarantee scores or results.`
     ])
   },
   {
@@ -55,13 +56,7 @@ export const OWN_SERVICES: TemplateService[] = [
       { key: 'need', prompt: 'What are you looking for? (study material, practice tests, or both)' }
     ],
     closingMessage: closing([
-      `*Prometric study material: ₹8,000*
-• Study material
-• 50 test series
-• 50 mock tests
-• 30+ practice resources[if profession ~ nurs]
-• Recorded lectures (nursing)[/if]`,
-      `Self-study package, not live coaching or a licensing package.`
+      `Thanks! Prometric study material is ₹8,000. It includes study material, 50 test series, 50 mock tests and 30+ practice resources[if profession ~ nurs], plus recorded lectures for nursing candidates[/if]. It's self-study, not live coaching or a licensing package.`
     ])
   },
   {
@@ -74,14 +69,12 @@ export const OWN_SERVICES: TemplateService[] = [
       { key: 'exam_status', prompt: 'Have you taken a licensing exam (e.g. DHA)? Status and result? ("no" if none)' }
     ),
     closingMessage: closing([
-      `*Complete licensing package*
-• Nursing, Pharmacist, Lab Technologist/Technician, Radiologist: ₹1,75,000
+      `Thanks for the details! Licensing packages:
+• Nursing, pharmacy, lab and radiology: ₹1,75,000
 • BAMS: about ₹1,75,000 (can vary by ₹2,000-4,000)
-• Other doctors: from ₹1,75,000, final quote after profile review`,
-      '---',
-      `*After you pass DHA or another Prometric exam*
-Licensing service fee: ₹40,000, payable only after a positive result. Covers DataFlow, eligibility, Letter of Qualification (where applicable) and licensing guidance.`,
-      `Exam, government and visa charges are separate. Approval rests with the regulator.`
+• Other doctors: from ₹1,75,000, final quote after we review your profile
+
+After you pass DHA or another Prometric exam, the licensing service fee is ₹40,000, payable only after a positive result. Exam, government and visa charges are separate.`
     ])
   },
   {
@@ -94,14 +87,9 @@ Licensing service fee: ₹40,000, payable only after a positive result. Covers D
       { key: 'existing_license', prompt: 'Do you hold a professional license? Which one? ("no" if none)' }
     ),
     closingMessage: closing([
-      `*International job assistance: ₹50,000*
-• ₹6,500 at enrollment
-• ₹43,500 after your offer letter
+      `Thanks for the details! International job assistance is ₹50,000 in total: ₹6,500 at enrollment and ₹43,500 after your offer letter. It includes CV preparation, interview preparation and a candidate portal with Gmail updates.
 
-Includes CV preparation, interview preparation and a candidate portal with Gmail updates.`,
-      '---',
-      `Offers can take 3 days to 3+ weeks, depending on your profile and the employer. No job is guaranteed.`,
-      `Enroll only on our official site:\n👉 ${JOBS}`
+Offers can take anywhere from 3 days to 3+ weeks depending on your profile and the employer, and no job is guaranteed. To enroll, please use our official site only: ${JOBS}`
     ])
   },
   {
@@ -114,10 +102,7 @@ Includes CV preparation, interview preparation and a candidate portal with Gmail
       { key: 'schedule', prompt: 'When would you like to start, and which time of day suits you best?' }
     ],
     closingMessage: closing([
-      `*German course: ₹70,000 for 4 months*
-• One-to-one training
-• 1-3 hours a day, 6 days a week`,
-      `Our team will confirm your schedule.`
+      `Thanks! The German course is ₹70,000 for 4 months: one-to-one training, 1-3 hours a day, 6 days a week. Our team will confirm your schedule.`
     ])
   },
   {
@@ -133,8 +118,7 @@ Includes CV preparation, interview preparation and a candidate portal with Gmail
       { key: 'license_exam', prompt: 'Any professional license or exam taken (IELTS, OET...)? Status? ("no" if none)' }
     ],
     closingMessage: closing([
-      `There is no fixed fee for study abroad, Malta, visa or PR. It depends on your profile.`,
-      `Our team will review your details and send a quote. No outcome can be guaranteed.`
+      `Thanks for the details! There's no fixed fee for study abroad, Malta, visa or PR, because it depends on your profile. Our team will review everything and send you a quote. No outcome can be guaranteed.`
     ])
   },
   {
@@ -148,13 +132,7 @@ Includes CV preparation, interview preparation and a candidate portal with Gmail
       { key: 'ready', prompt: 'Do you have your business Q&A ready, or do you need help preparing it?' }
     ],
     closingMessage: closing([
-      `*WAPPO: ₹499 per month*
-• Unlimited messages, no per-message charge
-• Automated replies from your own Q&A
-• Custom chatbot behaviour
-• CRM portal
-• Basic setup in about 5 minutes`,
-      `Get started:\n👉 ${WAPPO}`
+      `Thanks! WAPPO is ₹499 a month: unlimited messages with no per-message charge, automated replies from your own Q&A, custom chatbot behaviour and a CRM portal. Basic setup takes about 5 minutes. You can start here: ${WAPPO}`
     ])
   },
   {
@@ -168,12 +146,7 @@ Includes CV preparation, interview preparation and a candidate portal with Gmail
       { key: 'topics', prompt: 'What topics should the content cover, and how often would you like to post?' }
     ],
     closingMessage: closing([
-      `*ZEXY AI*
-1) Self-service AI video editing: ₹499
-2) Managed social media marketing: ₹14,500 for 2 months`,
-      '---',
-      `*Managed includes:* content planning, scripts, AI avatar (from your photo), voice, video editing, titles, tags, SEO and publishing. Video count and platforms are confirmed before work starts.`,
-      `Learn more:\n👉 ${ZEXY}`
+      `Thanks! ZEXY AI has two options: self-service AI video editing at ₹499, or managed social media marketing at ₹14,500 for 2 months (content planning, scripts, an AI avatar from your photo, voice, video editing, SEO and publishing; the number of videos and platforms is confirmed before work starts). More here: ${ZEXY}`
     ])
   },
   {
@@ -185,7 +158,7 @@ Includes CV preparation, interview preparation and a candidate portal with Gmail
       { key: 'contact_time', prompt: 'What is the best time for our team to reach you?' }
     ],
     closingMessage: closing([
-      `Our team will read your message and get back to you.`
+      `Thanks! Our team will read your message and get back to you.`
     ])
   }
 ];
@@ -253,12 +226,12 @@ export const OWN_PROFILE = {
   timezone: 'Asia/Kolkata',
   notifyPhone: TEAM_PHONE.replace(/\D/g, ''),
   languageStep: true,
-  welcomeIntro: 'Thank you for contacting us.',
-  languageWelcome: 'Hello! 👋 Welcome to MNS. Which language would you prefer?',
+  welcomeIntro: 'Thanks for getting in touch.',
+  languageWelcome: 'Hi, thanks for reaching out to MNS! Which language would you like to chat in?',
   followUpsEnabled: true,
   handoffEnabled: true,
   handoffMessage:
-    `Sure. Our team will take over this chat and reply shortly. You can also call or WhatsApp us on ${TEAM_PHONE}.`,
+    `Sure, I'll pass this to our team and someone will reply here shortly. You can also call or WhatsApp us on ${TEAM_PHONE}.`,
   industry: 'overseas-careers',
   knowledge: OWN_KNOWLEDGE
 };

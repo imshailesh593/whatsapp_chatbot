@@ -3,7 +3,8 @@ import path from 'path';
 import pino from 'pino';
 import qrcodeTerminal from 'qrcode-terminal';
 import { handleIncomingMessage } from './engine';
-import { setTransport, sendTextMessage } from './transport';
+import { logMessage, setTransport, sendTextMessage } from './transport';
+import { MessageBurst } from '../lib/burst';
 import { UNSUPPORTED_MEDIA_MESSAGE } from './botConfig';
 import os from 'os';
 import { prisma } from '../lib/prisma';
@@ -92,6 +93,14 @@ export class WaConnection {
   private readonly jids = new Map<string, string>();
   private readonly chains = new Map<string, Promise<void>>();
   private readonly seen = new Set<string>();
+  /** Messages a customer sent in quick succession are held for a moment and answered with ONE reply (WA_DEBOUNCE_MS=0 answers each at once) */
+  private readonly burst = new MessageBurst(
+    (key, items) => {
+      const name = items.map((i) => i.name).find(Boolean);
+      this.enqueue(key, () => handleIncomingMessage(this.workspaceId, key, name, items.map((i) => i.text).join('\n'), items[items.length - 1].id, true));
+    },
+    () => Number(process.env.WA_DEBOUNCE_MS ?? 2500)
+  );
 
   constructor(readonly workspaceId: string) {
     this.authDir = path.join(authBase(), workspaceId);
@@ -176,14 +185,15 @@ export class WaConnection {
     if (!this.sock || this.status !== 'ready') throw new Error('WhatsApp is not connected');
     const sock = this.sock;
     const jid = this.jids.get(to) ?? `${to}@s.whatsapp.net`;
-    // Short "typing…" pause: feels human and eases WhatsApp's anti-automation heuristics
+    // "typing…" for as long as a person would take to write it (about 22 ms a character, 1 to 5 seconds): feels human and eases
+    // WhatsApp's anti-automation heuristics. WA_TYPING=0 switches the pause off.
     try {
       await sock.presenceSubscribe(jid);
       await sock.sendPresenceUpdate('composing', jid);
     } catch {
       // cosmetic
     }
-    await sleep(600 + Math.random() * 900);
+    await sleep(process.env.WA_TYPING === '0' ? 0 : Math.min(4500, 900 + text.length * 22) + Math.random() * 700);
     await sock.sendMessage(jid, { text });
     try {
       await sock.sendPresenceUpdate('paused', jid);
@@ -242,7 +252,9 @@ export class WaConnection {
         }
         return;
       }
-      await handleIncomingMessage(wsId, key, name, text, id);
+      // Stored at once (so a redelivery is recognised and the inbox is complete), answered after a short pause
+      await logMessage(wsId, key, 'INBOUND', text, id);
+      this.burst.add(key, { text, id, name });
     });
   }
 

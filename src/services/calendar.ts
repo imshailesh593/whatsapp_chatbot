@@ -330,7 +330,6 @@ const ALREADY_RE = /already\s+booked|i\s+(have\s+)?booked|booking\s+done|booked\
 const CANCEL_RE = /\b(cancel|reschedule)\b.{0,30}\b(appointment|booking|slot|meeting|call|it)\b/i;
 const DAYS_PER_PAGE = 7;
 const TIMES_PER_PAGE = 8;
-const NUMBERS = ['1️⃣', '2️⃣', '3️⃣', '4️⃣', '5️⃣', '6️⃣', '7️⃣', '8️⃣', '9️⃣'];
 
 interface DayOffer {
   /** days: the customer is choosing a date; times: a time on days[day] */
@@ -379,7 +378,7 @@ const zoneName = (tz: string) => tz.replace(/_/g, ' ');
 function daysText(o: DayOffer, tz: string): string {
   const slice = o.days.slice(o.page * DAYS_PER_PAGE, (o.page + 1) * DAYS_PER_PAGE);
   const more = o.days.length > (o.page + 1) * DAYS_PER_PAGE;
-  return [`📅 *Choose a date* (${zoneName(tz)})`, ...slice.map((d, i) => `${NUMBERS[i]} ${d.label}`), '', `Reply with a number${more ? ', or MORE for later dates' : ''}.`].join('\n');
+  return [`Sure, here are the days we have open (times are in ${zoneName(tz)}):`, ...slice.map((d, i) => `${i + 1}. ${d.label}`), '', `Reply with a number${more ? ', or say MORE for later days' : ''}.`].join('\n');
 }
 
 function timesText(o: DayOffer, tz: string): string {
@@ -387,7 +386,7 @@ function timesText(o: DayOffer, tz: string): string {
   const tp = o.tpage ?? 0;
   const slice = day.slots.slice(tp * TIMES_PER_PAGE, (tp + 1) * TIMES_PER_PAGE);
   const more = day.slots.length > (tp + 1) * TIMES_PER_PAGE;
-  return [`🕒 *${day.label}*: choose a time (${zoneName(tz)})`, ...slice.map((t, i) => `${NUMBERS[i]} ${formatTime(new Date(t), tz)}`), '', `Reply with a number${more ? ', MORE for later times' : ''}, or BACK to change the date.`].join('\n');
+  return [`Here are the times on ${day.label} (${zoneName(tz)}):`, ...slice.map((t, k) => `${k + 1}. ${formatTime(new Date(t), tz)}`), '', `Reply with a number${more ? ', say MORE for later times' : ''}, or say BACK to pick another day.`].join('\n');
 }
 
 /** After a successful booking: the customer gets a confirmation on WhatsApp and the business gets an alert (WhatsApp and email). */
@@ -400,12 +399,9 @@ async function announceBooking(cfg: BotConfig, session: { id: string; phoneNumbe
   const mins = cal?.slotMinutes ?? 30;
   const what = cfg.ws.bookingLabel.trim() ? `your ${cfg.ws.bookingLabel.trim()}` : 'your appointment';
   const confirmation = [
-    `✅ *Booked!* ${what.charAt(0).toUpperCase() + what.slice(1)} with ${cfg.ws.businessName.split('|')[0].trim()}`,
-    `📅 ${when} (${zoneName(tz)})`,
-    `⏱ ${mins} minutes`,
-    '',
-    'We will remind you before it starts. Reply CANCEL APPOINTMENT if you cannot make it, or RESCHEDULE to pick another time.'
-  ].join('\n');
+    `You're all set: ${what} is booked for ${when} (${zoneName(tz)}), ${mins} minutes.`,
+    "We'll send you a reminder before it starts. If you need to change it, just say RESCHEDULE or CANCEL APPOINTMENT."
+  ].join('\n\n');
   await sendTextMessage(workspaceId, phone, await localize(cfg, confirmation, session.language, false));
   void markLeadBooked(workspaceId, phone, session.id, 'appointment booked');
   const lead = await prisma.lead.findFirst({ where: { workspaceId, phoneNumber: phone }, select: { id: true, serviceCategory: true } });
@@ -567,7 +563,7 @@ export async function reminderTick(now = Date.now()): Promise<number> {
     if (hours <= 0 || a.startsAt.getTime() - now > hours * 3600_000) continue;
     if (!transportReady(a.workspaceId)) continue;
     try {
-      await sendTextMessage(a.workspaceId, a.phoneNumber, `⏰ Reminder: your appointment with ${a.workspace.businessName} is at ${formatSlot(a.startsAt, a.workspace.timezone || 'UTC')}. Reply CANCEL APPOINTMENT if you cannot make it.`);
+      await sendTextMessage(a.workspaceId, a.phoneNumber, `Quick reminder: your appointment with ${a.workspace.businessName.split('|')[0].trim()} is at ${formatSlot(a.startsAt, a.workspace.timezone || 'UTC')}. Reply CANCEL APPOINTMENT if you can't make it.`);
       await prisma.appointment.update({ where: { id: a.id }, data: { reminderSent: true } });
       sent++;
     } catch (err) {

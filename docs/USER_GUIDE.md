@@ -384,3 +384,9 @@ Under **Settings → Business & bot → How the bot answers questions** you can 
 3. Press **Save** and try it in the Bot Simulator. Nothing changes for customers until you save.
 
 When you edit the menu and questions, a **Save changes** bar stays at the bottom of the screen until you save or discard.
+
+## How the bot sounds
+- **One reply per message.** However many things the bot has to say, a customer gets a single message back. If they send several messages in a row, the bot waits a couple of seconds and answers once.
+- **Natural and short.** Your closing messages and answers are sent as you write them, so keep them short and friendly, like something you would type yourself. A line with only `---` is just a paragraph break.
+- **Typing indicator.** The customer sees "typing…" for a moment, as with a person.
+- **Honest.** The bot does not announce that it is a bot, but if a customer asks whether they are talking to a person it says it is your virtual assistant and offers to bring in the team. It never pretends to be human.

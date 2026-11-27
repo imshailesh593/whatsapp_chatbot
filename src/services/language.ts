@@ -65,7 +65,6 @@ const LABELS: Record<string, string> = {
   Punjabi: 'ਪੰਜਾਬੀ (Punjabi)',
   Urdu: 'اردو (Urdu)'
 };
-const NUM = ['1️⃣', '2️⃣', '3️⃣', '4️⃣', '5️⃣', '6️⃣', '7️⃣', '8️⃣', '9️⃣'];
 
 /** The languages a business offers, from its "languages" setting ("English, Hindi, Hinglish, Tamil, Malayalam"), in that order. At least two, at most nine. */
 export function offeredLanguages(setting: string): string[] {
@@ -78,7 +77,7 @@ export function offeredLanguages(setting: string): string[] {
 }
 
 /** The numbered choice list shown with the language question. */
-export const languageOptionsText = (offered: string[]) => offered.map((l, i) => `${NUM[i]} ${LABELS[l] ?? l}`).join('\n');
+export const languageOptionsText = (offered: string[]) => offered.map((l, i) => `${i + 1}. ${LABELS[l] ?? l}`).join('\n');
 
 /**
  * Turns what the customer typed ("3", "hindi", "हिन्दी", "Tamil") into a language name, or null when it is not one of the
@@ -98,15 +97,15 @@ export function parseLanguage(input: string, offered?: string[]): string | null 
 /** The first message of a workspace that asks the language first: the greeting, then the numbered choices. */
 export function languagePrompt(cfg: BotConfig): string {
   const greeting = cfg.ws.languageWelcome.trim() || DEFAULT_LANGUAGE_WELCOME;
-  return `${greeting}\n\n${languageOptionsText(offeredLanguages(cfg.ws.languages))}\n\nPlease reply with the number, or type the language name.`;
+  return `${greeting}\n\n${languageOptionsText(offeredLanguages(cfg.ws.languages))}\n\nJust reply with the number or the language name.`;
 }
 
 /** Sent when the answer to the language question was not one of the languages offered. */
 export const languageHintMessage = (cfg: BotConfig) =>
-  `Sorry, I did not catch that. Please choose your language:\n\n${languageOptionsText(offeredLanguages(cfg.ws.languages))}\n\nReply with the number, or type the language name.`;
+  `Sorry, I didn't catch that. Which language would you like?\n\n${languageOptionsText(offeredLanguages(cfg.ws.languages))}\n\nJust reply with the number or the language name.`;
 
 /** After two misses the chat carries on in English instead of getting stuck. */
-export const languageFallbackMessage = () => 'No problem, we will continue in English. Type *LANGUAGE* at any time to change it.';
+export const languageFallbackMessage = () => "No worries, we'll continue in English. You can type LANGUAGE any time to change it.";
 
 const cache = new Map<string, string>();
 const CACHE_MAX = 800;

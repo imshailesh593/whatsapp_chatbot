@@ -56,10 +56,10 @@ async function main() {
       const phone = `9199${run}${i}`;
       const qs = svc.questions;
       await handleIncomingMessage(A.id, phone, 'Test', 'Hi');
-      assert(replies(A.id, phone)[0].includes('Welcome to Acme Careers'), `${svc.key}: welcome uses workspace name`);
+      assert(replies(A.id, phone)[0].includes('welcome to Acme Careers'), `${svc.key}: welcome uses workspace name`);
       assert(replies(A.id, phone)[0].includes('https://forms.example/acme'), `${svc.key}: welcome carries the form link`);
       await handleIncomingMessage(A.id, phone, 'Test', 'banana');
-      assert(/valid number/.test(replies(A.id, phone)[1]), `${svc.key}: invalid selection re-prompted`);
+      assert(/didn't quite catch/.test(replies(A.id, phone)[1]), `${svc.key}: invalid selection re-prompted`);
       await handleIncomingMessage(A.id, phone, 'Test', String(i + 1));
       assert(replies(A.id, phone)[2] === qs[0].prompt, `${svc.key}: first question sent`);
       for (let q = 0; q < qs.length; q++) {
@@ -67,7 +67,7 @@ async function main() {
         if (q < qs.length - 1) assert(replies(A.id, phone).at(-1) === qs[q + 1].prompt, `${svc.key}: Q${q + 2} follows answer ${q + 1}`);
       }
       const done = replies(A.id, phone).at(-1)!;
-      assert(done.includes('https://cal.example/acme') && done.includes('Acme Careers | Your partner'), `${svc.key}: completion with booking link and sign-off`);
+      assert(done.includes('https://cal.example/acme'), `${svc.key}: completion with the booking link`);
       const lead = await prisma.lead.findFirst({ where: { workspaceId: A.id, phoneNumber: phone } });
       assert(lead?.serviceCategory === svc.key, `${svc.key}: lead saved with the service key`);
       const data = lead!.collectedData as Record<string, string>;
@@ -80,18 +80,18 @@ async function main() {
       await handleIncomingMessage(A.id, phone, 'Test', 'I have already booked');
       assert((await prisma.lead.findFirst({ where: { workspaceId: A.id, phoneNumber: phone } }))?.stageKey === 'booked', `${svc.key}: booking moves the lead to the Booked stage`);
       await handleIncomingMessage(A.id, phone, 'Test', 'menu');
-      assert(replies(A.id, phone).at(-1)!.includes('Welcome to Acme Careers'), `${svc.key}: menu restarts the funnel`);
+      assert(replies(A.id, phone).at(-1)!.includes('welcome to Acme Careers'), `${svc.key}: menu restarts the funnel`);
     }
 
     console.log('\n[workspace B: no form, no booking link]');
     const pb = `9188${run}`;
     await handleIncomingMessage(B.id, pb, 'Test', 'hello');
     const welcomeB = replies(B.id, pb)[0];
-    assert(welcomeB.includes('Welcome to Bolt Plumbing') && !welcomeB.includes('http') && welcomeB.includes('1-3'), 'B welcome: own name, no links, 3 options');
+    assert(welcomeB.includes('welcome to Bolt Plumbing') && !welcomeB.includes('http') && welcomeB.includes('1-3'), 'B welcome: own name, no links, 3 options');
     await handleIncomingMessage(B.id, pb, 'Test', '3');
     await handleIncomingMessage(B.id, pb, 'Test', 'Please call me');
     const doneB = replies(B.id, pb).at(-1)!;
-    assert(!doneB.includes('http') && doneB.includes('Bolt Plumbing'), 'B completion has no booking block');
+    assert(!doneB.includes('http'), 'B completion has no booking block');
 
     console.log('\n[tenant isolation]');
     assert((await prisma.session.count({ where: { workspaceId: B.id } })) === 1, 'B sees only its own sessions');
@@ -188,7 +188,7 @@ async function main() {
     await handleIncomingMessage(A.id, hp, 'Ravi', '5');
     await handleIncomingMessage(A.id, hp, 'Ravi', 'I need help with my papers');
     await handleIncomingMessage(A.id, hp, 'Ravi', 'Can I speak to a real person please');
-    assert(replies(A.id, hp).at(-1)!.includes('our team to take over'), 'the customer is told a person will reply');
+    assert(replies(A.id, hp).at(-1)!.includes('our team'), 'the customer is told the team will take over');
     const hs = await prisma.session.findFirst({ where: { workspaceId: A.id, phoneNumber: hp } });
     assert(hs!.isAgentPaused && !!hs!.handoffAt, 'the bot is paused for that chat and the hand-off is recorded');
     await new Promise((r) => setTimeout(r, 600));
@@ -269,7 +269,7 @@ async function main() {
       const after = replies(A.id, sp).slice(before);
       const s1 = await prisma.session.findUnique({ where: { workspaceId_phoneNumber: { workspaceId: A.id, phoneNumber: sp } } });
       assert(s1!.currentStep === 0, 'side question did not consume the answer');
-      assert(after.length === 2 && after[1] === tplA.services[0].questions[0].prompt, `Gemini answered then re-asked Q1: "${after[0].slice(0, 60)}…"`);
+      assert(after.length === 1 && after[0].endsWith(tplA.services[0].questions[0].prompt), `Gemini answered and re-asked Q1 in ONE message: "${after[0].slice(0, 60)}…"`);
     } else {
       console.log('\n(no GEMINI_API_KEY: Gemini path skipped)');
     }
