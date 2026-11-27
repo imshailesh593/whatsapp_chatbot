@@ -92,7 +92,8 @@ export const formMessage = (cfg: BotConfig): string =>
  */
 export function contactFooter(cfg: BotConfig, opts: { skipLink?: boolean } = {}): string {
   const { ws } = cfg;
-  const phone = teamPhone(ws);
+  // an owner who tells the assistant never to give a phone number means the fixed lines too
+  const phone = /never (give|share|send) (a |any |the )?(phone|mobile|contact) number/i.test(ws.aiInstructions ?? '') ? '' : teamPhone(ws);
   const url = ws.bookingUrl.trim();
   const parts: string[] = [];
   if (phone) parts.push(`You can also WhatsApp or call our team directly on ${phone}.`);

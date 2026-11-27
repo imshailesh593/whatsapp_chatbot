@@ -82,6 +82,9 @@ async function outageAlreadySent(workspaceId: string, phone: string, capturing: 
   return rows.some((r) => (r.payload as { text?: string } | null)?.text === text);
 }
 
+/** A message that ends with the owner's own sign-off ("Anything else?") is complete: nothing is added under it. */
+export const isSignedOff = (text: string) => /anything else\s*\?[\s*_]*$/i.test(text.trim());
+
 export interface AiTurnArgs {
   cfg: BotConfig;
   workspaceId: string;
@@ -214,7 +217,9 @@ export async function handleAiTurn(a: AiTurnArgs): Promise<boolean> {
     const closing = completionMessage(cfg, applied.service.key, applied.answers);
     for (const part of closing.split(/\n\s*-{3,}\s*\n/)) if (part.trim()) await out(await fixed(part.trim()));
     const url = cfg.ws.bookingUrl.trim();
-    const footer = contactFooter(cfg, { skipLink: !!url && closing.includes(url) });
+    // the team's closing text that already gives the link, or signs off, gets nothing added under it
+    const complete = isSignedOff(closing) || (!!url && closing.includes(url));
+    const footer = complete ? '' : contactFooter(cfg);
     if (footer) await out(await fixed(footer));
     if (!capturing && leadId) {
       void notifyNewLead(workspaceId, session.id);
@@ -229,12 +234,14 @@ export async function handleAiTurn(a: AiTurnArgs): Promise<boolean> {
     const fresh = await prisma.session.findUnique({ where: key });
     if (fresh && (await handleBookingMessage(cfg, fresh, 'book an appointment', capturing))) return true;
   }
-  if ((turn.action === 'share_booking_link' || turn.action === 'book') && hasBooking && !reply.includes(cfg.ws.bookingUrl.trim())) {
+  // a reply that asks something (such as the time that suits them) or signs off is left as it is
+  const addLink = hasBooking && !reply.includes(cfg.ws.bookingUrl.trim()) && !isSignedOff(reply) && !(turn.action === 'book' && /\?\s*$/.test(reply));
+  if ((turn.action === 'share_booking_link' || turn.action === 'book') && addLink) {
     await out(await fixed(bookingReminderMessage(cfg)));
   } else if (turn.action === 'booked' && hasBooking && applied.completed) {
     const moved = await markLeadBooked(workspaceId, phone, session.id, 'customer confirmed', !capturing);
     if (!capturing && moved) void notifyBooked(workspaceId, phone);
-  } else if (turn.action === 'wrap_up' && !footerRecentlySent(cfg, [...before, ...(reply ? [{ who: 'You' as const, text: reply }] : [])])) {
+  } else if (turn.action === 'wrap_up' && !isSignedOff(reply) && !footerRecentlySent(cfg, [...before, ...(reply ? [{ who: 'You' as const, text: reply }] : [])])) {
     // the conversation is ending (even if the customer leaves before the last question): the team's number, and the priority 1:1 booking link
     const footer = contactFooter(cfg);
     if (footer) await out(await fixed(footer));

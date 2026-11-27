@@ -15,7 +15,9 @@ interface SimState {
   totalSteps: number;
 }
 
-const SIM_ID = 'console';
+// Each browser tab has its own test chat: with one shared id, a reset in another tab (or by a teammate) wiped this chat in
+// the middle of a conversation, and the bot greeted again.
+const SIM_ID = 'c' + Math.random().toString(36).slice(2, 12);
 const now = () => new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 let seq = 0;
 

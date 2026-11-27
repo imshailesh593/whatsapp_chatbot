@@ -23,7 +23,7 @@ const sent: string[] = [];
     await saveServices(W, getTemplate('clinic')!.services);
     invalidateConfig(W);
     const cfg = await loadConfig(W);
-    const say = async (phone: string, text: string) => { sent.length = 0; await handleIncomingMessage(W, phone, text); return [...sent]; };
+    const say = async (phone: string, text: string) => { sent.length = 0; await handleIncomingMessage(W, phone, 'Test', text); return [...sent]; };
     const where = (phone: string) => ({ workspaceId_phoneNumber: { workspaceId: W, phoneNumber: phone } });
     const finished = (phone: string) => prisma.session.create({ data: { workspaceId: W, phoneNumber: phone, stage: SessionStage.COMPLETED, selectedService: cfg.services[0].key, currentStep: 9 } });
 
