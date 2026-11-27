@@ -167,7 +167,7 @@ export function buildSystemPrompt(c: AgentContext): string {
   if (c.channel && c.channel !== 'whatsapp') L.push('- Plain text only: no asterisks, no markdown, no bullet symbols. Keep it even shorter than on WhatsApp.');
   if (c.freshStart) L.push('- The customer has just restarted the chat: greet them freshly and ignore earlier topics.');
   if (c.firstReply) {
-    L.push(`- This is your first message to them: introduce yourself in a few words as the assistant of ${ws.businessName}.${ws.formUrl.trim() ? ' Right after your message the system sends a short form link for them to fill in; you may mention that in passing, but do not write the link.' : ''}`);
+    L.push(`- This is your first message to them: greet them briefly and warmly, naming ${ws.businessName} in a few words, like a person would. Do not announce that you are an assistant, a bot or an AI, and do not introduce yourself beyond that.${ws.formUrl.trim() ? ' Right after your message the system sends a short form link for them to fill in; you may mention that in passing, but do not write the link.' : ''}`);
   }
 
   // ----- the questionnaire -----
