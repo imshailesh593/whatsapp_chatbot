@@ -228,6 +228,8 @@ Owners and admins can open **Bot Simulator → Edit messages with Gemini**, or p
 
 Saved wording goes to real customers. Replies that Gemini writes live have no saved text: change them with the AI answering instructions. While AI conversation is on, Gemini usually asks your questions in its own words, so splitting a question matters mainly in the menu flow. The menu and other built-in lines cannot be edited this way yet.
 
+**Photos.** In the same editor you can add a JPG or PNG photo to a **question**, a service's **closing message**, or the **First reply photo** (sent with the first reply a new customer gets, with AI conversation on or off). Press **Add photo**, then **Save**. For a split message, choose which part gets the photo. On WhatsApp the text becomes the caption; a very long text arrives just after the photo. A question's photo is sent only when your exact wording is used, which usually means the menu flow. Instagram and Messenger get the text without the photo.
+
 ### Business & bot
 - **Business name, tagline, description.** Shown in greetings and used by the AI.
 - **Greeting line.** Shown under "Welcome to ...".

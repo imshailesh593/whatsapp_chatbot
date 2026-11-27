@@ -3,6 +3,7 @@ import { prisma } from '../lib/prisma';
 import { joinParts, MAX_PARTS, SPLIT_MARK, splitMessage } from '../lib/split';
 import { callModel } from './agent';
 import { invalidateConfig, loadConfig, type BotConfig } from './botConfig';
+import { FIRST_REPLY, loadPhoto, parsePhotoRef, photoFor, photoMap, refString, type PhotoRef } from './messagePhotos';
 
 /**
  * The owner's saved customer-facing messages, editable one at a time with Gemini's help from the simulator.
@@ -20,6 +21,10 @@ export interface EditableMessage {
   multiline: boolean;
   /** How this text reaches customers when the AI conversation is on */
   aiNote: string;
+  /** False for an entry that is only a photo (the first-reply photo) */
+  textEditable: boolean;
+  photoAllowed: boolean;
+  photo: PhotoRef | null;
 }
 
 /** A refusal the owner can read; `status` becomes the HTTP status. */
@@ -41,17 +46,23 @@ const WS_MESSAGES = [
 ] as const;
 
 export function listMessages(cfg: BotConfig): EditableMessage[] {
-  const out: EditableMessage[] = [];
+  const out: EditableMessage[] = [
+    {
+      id: FIRST_REPLY, group: 'General', label: 'First reply photo', text: '', max: 0, splittable: false, multiline: false,
+      aiNote: 'Sent with the first reply a new customer gets, with AI conversation on or off. That reply\'s text becomes the caption.',
+      textEditable: false, photoAllowed: true, photo: photoFor(cfg, FIRST_REPLY)
+    }
+  ];
   for (const m of WS_MESSAGES) {
     const text = String(cfg.ws[m.field] ?? '').trim();
-    if (text) out.push({ id: `ws.${m.field}`, group: 'General', label: m.label, text, max: m.max, splittable: m.splittable, multiline: m.multiline, aiNote: m.aiNote });
+    if (text) out.push({ id: `ws.${m.field}`, group: 'General', label: m.label, text, max: m.max, splittable: m.splittable, multiline: m.multiline, aiNote: m.aiNote, textEditable: true, photoAllowed: false, photo: null });
   }
   for (const s of cfg.services) {
     s.questions.forEach((q, i) =>
-      out.push({ id: `question.${s.key}.${q.key}`, group: s.title, label: `Question ${i + 1}`, text: q.prompt, max: 500, splittable: true, multiline: false, aiNote: REWORDED })
+      out.push({ id: `question.${s.key}.${q.key}`, group: s.title, label: `Question ${i + 1}`, text: q.prompt, max: 500, splittable: true, multiline: false, aiNote: REWORDED, textEditable: true, photoAllowed: true, photo: photoFor(cfg, `question.${s.key}.${q.key}`) })
     );
     if (s.closingMessage.trim()) {
-      out.push({ id: `closing.${s.key}`, group: s.title, label: 'Closing message', text: s.closingMessage.trim(), max: 3000, splittable: true, multiline: true, aiNote: SENT_AS_WRITTEN });
+      out.push({ id: `closing.${s.key}`, group: s.title, label: 'Closing message', text: s.closingMessage.trim(), max: 3000, splittable: true, multiline: true, aiNote: SENT_AS_WRITTEN, textEditable: true, photoAllowed: true, photo: photoFor(cfg, `closing.${s.key}`) });
     }
   }
   return out;
@@ -102,8 +113,10 @@ const missingFrom = (from: string[], within: string[]) => {
 };
 
 /** Single-line fields keep no line breaks, the same as the bot builder saves them. */
-export const normalise = (m: Pick<EditableMessage, 'multiline'>, text: string) =>
-  m.multiline ? text.replace(/\r/g, '').trim() : text.replace(/\s+/g, ' ').trim();
+export const normalise = (m: Pick<EditableMessage, 'multiline'>, text: string) => {
+  const own = text.replace(/\[photo:[^\]\n]*\]/gi, '');
+  return m.multiline ? own.replace(/\r/g, '').trim() : own.replace(/\s+/g, ' ').trim();
+};
 
 export function checkEdit(m: EditableMessage, next: string): { errors: string[]; warnings: string[] } {
   const errors: string[] = [];
@@ -218,20 +231,48 @@ async function writeText(workspaceId: string, id: string, from: string, to: stri
   throw new EditError('Someone else changed this message. Reload it and try again.', 409);
 }
 
-/** Saves an edit. When links or numbers changed, nothing is saved until the owner confirms the warnings. */
+/** Stores which photo a message uses ('' removes it). */
+async function writePhoto(workspaceId: string, id: string, ref: string): Promise<void> {
+  const ws = await prisma.workspace.findUniqueOrThrow({ where: { id: workspaceId }, select: { messagePhotos: true } });
+  const map = { ...photoMap(ws.messagePhotos) };
+  if (ref) map[id] = ref;
+  else delete map[id];
+  await prisma.workspace.update({ where: { id: workspaceId }, data: { messagePhotos: map } });
+  invalidateConfig(workspaceId);
+}
+
+/** Saves an edit to a message's text, its photo or both. When links or numbers changed, nothing is saved until the owner confirms the warnings. */
 export async function saveMessage(
   workspaceId: string,
-  input: { id: string; base: string; text: string; confirm: boolean; by: string }
+  input: { id: string; base: string; text: string; basePhoto: string; photo: string; confirm: boolean; by: string }
 ): Promise<{ saved: boolean; warnings: string[] }> {
   const m = await freshMessage(workspaceId, input.id);
-  if (m.text !== input.base) throw new EditError('Someone else changed this message. Reload it and try again.', 409);
-  const text = normalise(m, input.text);
-  if (text === m.text) return { saved: true, warnings: [] };
-  const { errors, warnings } = checkEdit(m, text);
-  if (errors.length) throw new EditError(errors.join(' '));
-  if (warnings.length && !input.confirm) return { saved: false, warnings };
-  await writeText(workspaceId, m.id, m.text, text);
-  await prisma.messageRevision.create({ data: { workspaceId, messageId: m.id, before: m.text, after: text, createdBy: input.by } });
+  const oldPhoto = refString(m.photo);
+  if (m.text !== input.base || oldPhoto !== input.basePhoto) throw new EditError('Someone else changed this message. Reload it and try again.', 409);
+
+  const text = m.textEditable ? normalise(m, input.text) : m.text;
+  let photo = '';
+  if (input.photo) {
+    const ref = parsePhotoRef(input.photo);
+    if (!ref || !m.photoAllowed) throw new EditError('A photo cannot be added to this message.');
+    if (!(await loadPhoto(workspaceId, ref.id))) throw new EditError('That photo is no longer available. Please add it again.', 404);
+    // a photo never points past the last part
+    photo = refString({ id: ref.id, part: Math.min(ref.part, Math.max(0, splitMessage(text).length - 1)) });
+  }
+  if (text === m.text && photo === oldPhoto) return { saved: true, warnings: [] };
+
+  let warnings: string[] = [];
+  if (text !== m.text) {
+    const checked = checkEdit(m, text);
+    if (checked.errors.length) throw new EditError(checked.errors.join(' '));
+    warnings = checked.warnings;
+    if (warnings.length && !input.confirm) return { saved: false, warnings };
+    await writeText(workspaceId, m.id, m.text, text);
+  }
+  if (photo !== oldPhoto) await writePhoto(workspaceId, m.id, photo);
+  await prisma.messageRevision.create({
+    data: { workspaceId, messageId: m.id, before: m.text, after: text, beforePhoto: oldPhoto, afterPhoto: photo, createdBy: input.by }
+  });
   return { saved: true, warnings };
 }
 
@@ -239,8 +280,9 @@ export async function undoMessage(workspaceId: string, id: string): Promise<void
   const last = await prisma.messageRevision.findFirst({ where: { workspaceId, messageId: id }, orderBy: { createdAt: 'desc' } });
   if (!last) throw new EditError('There is nothing to undo for this message.', 404);
   const m = await freshMessage(workspaceId, id);
-  if (m.text !== last.after) throw new EditError('This message was changed somewhere else after your last save, so it was not undone.', 409);
-  await writeText(workspaceId, id, m.text, last.before);
+  if (m.text !== last.after || refString(m.photo) !== last.afterPhoto) throw new EditError('This message was changed somewhere else after your last save, so it was not undone.', 409);
+  if (last.before !== last.after) await writeText(workspaceId, id, m.text, last.before);
+  if (last.beforePhoto !== last.afterPhoto) await writePhoto(workspaceId, id, last.beforePhoto);
   await prisma.messageRevision.delete({ where: { id: last.id } });
 }
 
@@ -248,7 +290,15 @@ export async function undoMessage(workspaceId: string, id: string): Promise<void
 export async function messagesForEditor(workspaceId: string): Promise<(EditableMessage & { canUndo: boolean })[]> {
   invalidateConfig(workspaceId);
   const cfg = await loadConfig(workspaceId);
-  const latest = await prisma.messageRevision.findMany({ where: { workspaceId }, orderBy: { createdAt: 'desc' }, distinct: ['messageId'], select: { messageId: true, after: true } });
-  const after = new Map(latest.map((r) => [r.messageId, r.after]));
-  return listMessages(cfg).map((m) => ({ ...m, canUndo: after.get(m.id) === m.text }));
+  const latest = await prisma.messageRevision.findMany({
+    where: { workspaceId },
+    orderBy: { createdAt: 'desc' },
+    distinct: ['messageId'],
+    select: { messageId: true, after: true, afterPhoto: true }
+  });
+  const last = new Map(latest.map((r) => [r.messageId, r]));
+  return listMessages(cfg).map((m) => {
+    const r = last.get(m.id);
+    return { ...m, canUndo: !!r && r.after === m.text && r.afterPhoto === refString(m.photo) };
+  });
 }

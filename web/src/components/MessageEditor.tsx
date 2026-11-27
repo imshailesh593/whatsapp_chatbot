@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
-import { AlertTriangle, Plus, Send, Sparkles, Trash2, Undo2 } from 'lucide-react';
-import { api, type EditableMessage } from '../api';
+import { AlertTriangle, ImagePlus, Plus, Send, Sparkles, Trash2, Undo2 } from 'lucide-react';
+import { api, messagePhotoUrl, type EditableMessage } from '../api';
 
 const MAX_PARTS = 3;
 
@@ -9,6 +9,27 @@ const toParts = (text: string) => {
   return parts.length ? parts : [''];
 };
 const fromParts = (parts: string[], multiline: boolean) => parts.map((p) => p.trim()).filter(Boolean).join(multiline ? '\n[split]\n' : ' [split] ');
+const refString = (p: EditableMessage['photo']) => (p ? `${p.id}:${p.part}` : '');
+const MAX_SIDE = 1600;
+
+/** Any JPG or PNG becomes a modest JPEG before upload: quick to send on WhatsApp and small to store. */
+async function shrinkPhoto(file: File): Promise<string> {
+  if (!/^image\/(jpeg|png)$/.test(file.type)) throw new Error('Choose a JPG or PNG photo.');
+  const bitmap = await createImageBitmap(file).catch(() => {
+    throw new Error('That photo could not be opened.');
+  });
+  const scale = Math.min(1, MAX_SIDE / Math.max(bitmap.width, bitmap.height));
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.max(1, Math.round(bitmap.width * scale));
+  canvas.height = Math.max(1, Math.round(bitmap.height * scale));
+  const ctx = canvas.getContext('2d')!;
+  // JPEG has no transparency: a see-through PNG gets a white background instead of a black one
+  ctx.fillStyle = '#fff';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+  return canvas.toDataURL('image/jpeg', 0.85).split(',')[1];
+}
+
 const same = (a: string[], b: string[]) => a.map((x) => x.trim()).join('\u0000') === b.map((x) => x.trim()).join('\u0000');
 
 interface ChatLine {
@@ -46,7 +67,9 @@ export default function MessageEditor({
           {groups.map((g) => (
             <optgroup key={g} label={g}>
               {messages.filter((m) => m.group === g).map((m) => (
-                <option key={m.id} value={m.id}>{m.label}: {m.text.replace(/\s+/g, ' ').slice(0, 55)}</option>
+                <option key={m.id} value={m.id}>
+                  {m.photo ? '📷 ' : ''}{m.label}{m.textEditable ? `: ${m.text.replace(/\s+/g, ' ').slice(0, 55)}` : m.photo ? '' : ' (none yet)'}
+                </option>
               ))}
             </optgroup>
           ))}
@@ -68,7 +91,9 @@ function Editor({ message, onChanged, onTest }: { message: EditableMessage; onCh
   const [parts, setParts] = useState(() => toParts(message.text));
   const [chat, setChat] = useState<ChatLine[]>([]);
   const [ask, setAsk] = useState('');
-  const [busy, setBusy] = useState<'' | 'gemini' | 'save'>('');
+  const [busy, setBusy] = useState<'' | 'gemini' | 'save' | 'photo'>('');
+  const [photo, setPhoto] = useState(message.photo);
+  const savedPhoto = refString(message.photo);
   const [error, setError] = useState('');
   const [blocking, setBlocking] = useState<string[]>([]);
   const [warnings, setWarnings] = useState<string[]>([]);
@@ -80,17 +105,22 @@ function Editor({ message, onChanged, onTest }: { message: EditableMessage; onCh
   // a save, an undo or a change made elsewhere: start again from what is stored
   useEffect(() => {
     setParts(toParts(message.text));
+    setPhoto(message.photo);
     setBlocking([]);
     setWarnings([]);
     setMustConfirm(false);
-  }, [message.text]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [message.text, savedPhoto]);
 
   useEffect(() => {
     chatBox.current?.scrollTo({ top: chatBox.current.scrollHeight, behavior: 'smooth' });
   }, [chat, busy]);
 
-  const dirty = !same(parts, toParts(message.text));
-  const draft = fromParts(parts, message.multiline);
+  const filled = Math.max(1, parts.filter((p) => p.trim()).length);
+  const shownPhoto = photo ? { id: photo.id, part: Math.min(photo.part, filled - 1) } : null;
+  const textDirty = message.textEditable && !same(parts, toParts(message.text));
+  const dirty = textDirty || refString(shownPhoto) !== savedPhoto;
+  const draft = message.textEditable ? fromParts(parts, message.multiline) : '';
   const length = draft.length;
 
   const changeParts = (next: string[]) => {
@@ -125,11 +155,26 @@ function Editor({ message, onChanged, onTest }: { message: EditableMessage; onCh
     }
   }
 
+  async function addPhoto(file: File | undefined) {
+    if (!file || busy) return;
+    setBusy('photo');
+    setError('');
+    setDone('');
+    try {
+      const { id } = await api.uploadMessagePhoto(await shrinkPhoto(file));
+      setPhoto((p) => ({ id, part: p?.part ?? 0 }));
+    } catch (err) {
+      setError((err as Error).message);
+    } finally {
+      setBusy('');
+    }
+  }
+
   async function save(confirm: boolean) {
     setBusy('save');
     setError('');
     try {
-      const res = await api.saveMessage(message.id, message.text, draft, confirm);
+      const res = await api.saveMessage({ id: message.id, base: message.text, text: draft, basePhoto: savedPhoto, photo: refString(shownPhoto), confirm });
       if (!res.saved) {
         setWarnings(res.warnings);
         setMustConfirm(true);
@@ -137,7 +182,7 @@ function Editor({ message, onChanged, onTest }: { message: EditableMessage; onCh
         onChanged(res.messages);
         setMustConfirm(false);
         setWarnings([]);
-        setDone('Saved. Customers get this wording from now on.');
+        setDone('Saved. Customers get this from now on.');
       }
     } catch (err) {
       setError((err as Error).message);
@@ -151,7 +196,7 @@ function Editor({ message, onChanged, onTest }: { message: EditableMessage; onCh
     setError('');
     try {
       onChanged((await api.undoMessage(message.id)).messages);
-      setDone('Undone. The earlier wording is back.');
+      setDone('Undone. The earlier version is back.');
     } catch (err) {
       setError((err as Error).message);
     } finally {
@@ -163,6 +208,7 @@ function Editor({ message, onChanged, onTest }: { message: EditableMessage; onCh
     <div className="space-y-4">
       <p className="text-[12.5px] text-muted">{message.aiNote}</p>
 
+      {message.textEditable && (<>
       <div className="bg-sunken border border-line rounded-xl p-3 space-y-2">
         <div className="flex items-center gap-1.5 text-xs font-semibold text-fg">
           <Sparkles className="w-3.5 h-3.5 text-brand-text" /> Ask Gemini to change it
@@ -202,7 +248,10 @@ function Editor({ message, onChanged, onTest }: { message: EditableMessage; onCh
             {parts.length > 1 && (
               <div className="flex items-center justify-between mb-1">
                 <span className="text-[12px] text-muted">Message {i + 1} of {parts.length}</span>
-                <button onClick={() => changeParts(parts.filter((_, j) => j !== i))} className="flex items-center gap-1 text-[12px] text-muted hover:text-danger">
+                <button onClick={() => {
+                  setPhoto((p) => (p && p.part > i ? { ...p, part: p.part - 1 } : p));
+                  changeParts(parts.filter((_, j) => j !== i));
+                }} className="flex items-center gap-1 text-[12px] text-muted hover:text-danger">
                   <Trash2 className="w-3 h-3" /> Remove
                 </button>
               </div>
@@ -221,18 +270,54 @@ function Editor({ message, onChanged, onTest }: { message: EditableMessage; onCh
         {parts.length > 1 && <p className="text-[12px] text-muted">These arrive as separate WhatsApp messages, in this order, about a second apart.</p>}
         {/\[if /.test(draft) && <p className="text-[12px] text-muted">The [if …] … [/if] tags show that text only to matching customers. Keep them as they are.</p>}
       </div>
+      </>)}
+
+      {message.photoAllowed && (
+        <div className="space-y-2">
+          <span className="text-xs font-semibold text-fg block">Photo</span>
+          {shownPhoto && (
+            <img src={messagePhotoUrl(shownPhoto.id)} alt="Photo attached to this message" className="max-h-48 max-w-full rounded-xl border border-line" />
+          )}
+          <div className="flex flex-wrap items-center gap-2">
+            <label className={`flex items-center gap-1.5 px-3 py-2 rounded-lg border border-line text-xs font-semibold text-fg cursor-pointer focus-within:ring-1 focus-within:ring-brand ${busy ? 'opacity-50 pointer-events-none' : ''}`}>
+              <ImagePlus className="w-3.5 h-3.5 text-brand-text" />
+              {busy === 'photo' ? 'Uploading…' : shownPhoto ? 'Replace photo' : 'Add photo'}
+              <input type="file" accept="image/jpeg,image/png" className="sr-only" disabled={!!busy}
+                onChange={(e) => { addPhoto(e.target.files?.[0]); e.target.value = ''; }} />
+            </label>
+            {shownPhoto && (
+              <button onClick={() => { setPhoto(null); setDone(''); }} disabled={!!busy} className="flex items-center gap-1 text-[12px] text-muted hover:text-danger">
+                <Trash2 className="w-3 h-3" /> Remove photo
+              </button>
+            )}
+          </div>
+          {shownPhoto && filled > 1 && (
+            <label className="flex items-center gap-2 text-[12px] text-fg2">
+              Send the photo with
+              <select value={shownPhoto.part} onChange={(e) => { setPhoto({ id: shownPhoto.id, part: Number(e.target.value) }); setDone(''); }}
+                className="bg-sunken border border-line rounded-lg px-2 py-1 text-xs text-fg">
+                {Array.from({ length: filled }, (_, i) => <option key={i} value={i}>Message {i + 1}</option>)}
+              </select>
+            </label>
+          )}
+          <p className="text-[12px] text-muted">
+            {message.textEditable ? 'On WhatsApp the text becomes the photo’s caption. A very long text arrives just after the photo. ' : ''}
+            Instagram and Messenger get the text without the photo.
+          </p>
+        </div>
+      )}
 
       {blocking.length > 0 && <Notice tone="text-danger" title="This draft cannot be saved" items={blocking} />}
       {warnings.length > 0 && <Notice tone="text-warn" title="Check these details before saving" items={warnings} />}
       {error && <p className="text-xs text-danger" role="alert">{error}</p>}
 
       <div className="flex flex-wrap items-center gap-2">
-        <button onClick={() => save(mustConfirm)} disabled={!dirty || !!busy || !draft || length > message.max}
+        <button onClick={() => save(mustConfirm)} disabled={!dirty || !!busy || (message.textEditable && (!draft || length > message.max))}
           className="px-4 py-2 rounded-lg bg-brand text-slate-100 text-xs font-semibold disabled:opacity-40">
           {busy === 'save' ? 'Saving…' : mustConfirm ? 'Save anyway' : 'Save'}
         </button>
         {dirty && (
-          <button onClick={() => changeParts(toParts(message.text))} disabled={!!busy} className="px-3 py-2 rounded-lg border border-line text-xs font-semibold text-fg">Discard draft</button>
+          <button onClick={() => { setPhoto(message.photo); changeParts(toParts(message.text)); }} disabled={!!busy} className="px-3 py-2 rounded-lg border border-line text-xs font-semibold text-fg">Discard draft</button>
         )}
         {!dirty && message.canUndo && (
           <button onClick={undo} disabled={!!busy} className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-line text-xs font-semibold text-fg">
@@ -242,7 +327,7 @@ function Editor({ message, onChanged, onTest }: { message: EditableMessage; onCh
         {done && !dirty && <button onClick={onTest} className="px-3 py-2 rounded-lg border border-line text-xs font-semibold text-fg">Restart test chat</button>}
       </div>
       {done && !dirty && <p className="text-xs text-brand-text" role="status">{done}</p>}
-      {dirty && <p className="text-[12px] text-warn">Saving changes what real customers receive from then on.</p>}
+      {dirty && <p className="text-[12px] text-warn">Not saved yet. Saving changes what real customers receive from then on.</p>}
     </div>
   );
 }

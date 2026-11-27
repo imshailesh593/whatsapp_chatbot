@@ -9,6 +9,8 @@ import { localize } from './language';
 import { calendarConnected, handleBookingMessage, markLeadBooked } from './calendar';
 import { channelOf } from '../lib/channel';
 import { stripSplit } from '../lib/split';
+import { takePhotos } from '../lib/photoTag';
+import { questionText, withPhoto } from './messagePhotos';
 import { bookingReminderMessage, completionMessage, type BotConfig } from './botConfig';
 import {
   AgentError,
@@ -138,7 +140,7 @@ export async function handleAiTurn(a: AiTurnArgs): Promise<boolean> {
   const out = async (body: string) => {
     if (!body.trim()) return;
     await a.send(phone, body);
-    if (capturing) remember(workspaceId, phone, 'You', stripSplit(body));
+    if (capturing) remember(workspaceId, phone, 'You', takePhotos(stripSplit(takePhotos(body).text)).text);
   };
 
   let turn;
@@ -209,7 +211,7 @@ export async function handleAiTurn(a: AiTurnArgs): Promise<boolean> {
   // 1. the reply, in the AI's own words (never silent: fall back to the owner's wording of the next question)
   let reply = turn.reply;
   if (!reply && turn.action === 'none') {
-    reply = firstOpen >= 0 ? await fixed(questions[firstOpen].prompt) : 'Thanks for your message. Our team will follow up with you shortly.';
+    reply = firstOpen >= 0 ? await fixed(questionText(cfg, applied.service!, firstOpen)) : 'Thanks for your message. Our team will follow up with you shortly.';
   }
   await out(reply);
 
@@ -219,7 +221,9 @@ export async function handleAiTurn(a: AiTurnArgs): Promise<boolean> {
   if (justCompleted && applied.service) {
     // the team's own summary (fees, inclusions, next steps), then how to reach them
     const closing = completionMessage(cfg, applied.service.key, applied.answers);
-    for (const part of closing.split(/\n\s*-{3,}\s*\n/)) if (part.trim()) await out(await fixed(part.trim()));
+    // a closing message without its own text is the built-in one, which carries no photo
+    const sent = applied.service.closingMessage.trim() ? withPhoto(cfg, `closing.${applied.service.key}`, closing) : closing;
+    for (const part of sent.split(/\n\s*-{3,}\s*\n/)) if (part.trim()) await out(await fixed(part.trim()));
     const url = cfg.ws.bookingUrl.trim();
     // the team's closing text that already gives the link, or signs off, gets nothing added under it
     const complete = isSignedOff(closing) || (!!url && closing.includes(url));

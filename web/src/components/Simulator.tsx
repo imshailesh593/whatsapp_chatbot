@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { CheckCheck, MoreVertical, Pencil, Phone, RotateCcw, Send } from 'lucide-react';
-import { api, type EditableMessage } from '../api';
+import { api, messagePhotoUrl, type EditableMessage } from '../api';
 import MessageEditor from './MessageEditor';
 
 interface Msg {
@@ -10,6 +10,7 @@ interface Msg {
   time: string;
   /** Ids of the saved messages this bot reply contains word for word */
   sources?: string[];
+  photos?: string[];
 }
 interface SimState {
   stage: string;
@@ -77,7 +78,7 @@ export default function Simulator({ onActivity, services, canEdit }: { onActivit
     try {
       const res = await api.simulate(SIM_ID, name, value);
       await new Promise((r) => setTimeout(r, 350));
-      setMessages((m) => [...m, ...res.replies.map((t, i) => ({ id: ++seq, sender: 'bot' as const, text: t, time: now(), sources: res.sources?.[i] }))]);
+      setMessages((m) => [...m, ...res.replies.map((t, i) => ({ id: ++seq, sender: 'bot' as const, text: t, time: now(), sources: res.sources?.[i], photos: res.photos?.[i] }))]);
       setState(res.state);
       onActivity();
     } catch (err) {
@@ -124,7 +125,7 @@ export default function Simulator({ onActivity, services, canEdit }: { onActivit
           // kept mounted so an unsaved draft survives a look at the test controls
           <div className={`bg-card border border-line rounded-2xl p-5 shadow-lg ${panel === 'edit' ? '' : 'hidden'}`}>
             <h3 className="font-bold text-fg text-base">Edit messages</h3>
-            <p className="text-xs text-muted mb-4">Shorten, reword or split what the bot sends. Nothing changes until you press Save.</p>
+            <p className="text-xs text-muted mb-4">Shorten, reword or split what the bot sends, or add a photo. Nothing changes until you press Save.</p>
             {editorError && <p className="text-xs text-danger mb-3" role="alert">{editorError}</p>}
             <MessageEditor messages={editable} selectedId={editing} onSelect={setEditing}
               onChanged={(list) => { setEditable(list); onActivity(); }} onTest={restart} />
@@ -196,6 +197,10 @@ export default function Simulator({ onActivity, services, canEdit }: { onActivit
               <div key={m.id} className={`flex flex-col ${m.sender === 'user' ? 'items-end' : 'items-start'}`}>
                 <div className={`max-w-[85%] rounded-2xl px-3 py-2 leading-relaxed shadow-md whitespace-pre-wrap break-words ${
                   m.sender === 'user' ? 'bg-[#005c4b] text-white rounded-tr-none' : 'bg-[#202c33] text-slate-100 rounded-tl-none border border-white/10'}`}>
+                  {m.photos?.map((id) => (
+                    <img key={id} src={messagePhotoUrl(id)} alt="Photo the bot sends" className="rounded-lg mb-1.5 max-h-48 w-full object-cover"
+                      onLoad={() => scroller.current?.scrollTo({ top: scroller.current.scrollHeight })} />
+                  ))}
                   {m.text}
                   <div className="flex items-center justify-end space-x-1 mt-1 text-[11px] text-slate-400">
                     <span>{m.time}</span>

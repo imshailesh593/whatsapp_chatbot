@@ -4,8 +4,11 @@ import type { Workspace } from '@prisma/client';
 import type { BotConfig } from './botConfig';
 import { joinParts, splitMessage, stripSplit } from '../lib/split';
 import { buildSystemPrompt, guardReply } from './agent';
-import { batchReplies, captureReplies, sendTextMessage, setTransport } from './transport';
+import { batchReplies, captureReplies, leadWithPhoto, sendTextMessage, setTransport } from './transport';
 import { checkEdit, listMessages, matchSources, parseSuggestion, protectedDetails } from './messageEditor';
+import { photoTag, takePhotos } from '../lib/photoTag';
+import { parsePhotoRef, photoType, questionText, withPhoto } from './messagePhotos';
+import { localize } from './language';
 
 const closing = [
   'Thank you! Pro Nurse Placement: Total Rs 50,000.',
@@ -79,7 +82,7 @@ test('the AI never sees the marker and cannot use it', () => {
 });
 
 test('editable messages: the saved texts, and which of them a reply came from', () => {
-  assert.deepEqual(messages.map((m) => m.id), ['ws.welcomeIntro', 'ws.handoffMessage', 'ws.bookingNote', 'question.nurse.profession', 'closing.nurse']);
+  assert.deepEqual(messages.map((m) => m.id), ['firstReply', 'ws.welcomeIntro', 'ws.handoffMessage', 'ws.bookingNote', 'question.nurse.profession', 'closing.nurse']);
   assert.deepEqual(matchSources('Our team will take over from here.', messages), ['ws.handoffMessage']);
   assert.ok(matchSources('What is your profession?', messages).includes('question.nurse.profession'));
   assert.deepEqual(matchSources('Happy to help, what are you looking for today?', messages), []);
@@ -110,4 +113,42 @@ test('suggestions: cleaned, limited, and never split where that is not allowed',
   assert.equal(parseSuggestion('{"parts":["Fees","later."],"note":""}', byId('ws.bookingNote')).text, 'Fees later.');
   assert.throws(() => parseSuggestion('not json', byId('closing.nurse')));
   assert.throws(() => parseSuggestion('{"parts":[],"note":""}', byId('closing.nurse')));
+});
+
+const PHOTO = '0b6f1c2e-1111-4222-8333-123456789abc';
+const withPhotos = (map: Record<string, string>): BotConfig => ({ ...cfg, ws: { ...cfg.ws, messagePhotos: map } as Workspace });
+
+test('photos: the tag goes in front of the chosen part and never past the last one', () => {
+  const second = withPhotos({ 'question.nurse.profession': `${PHOTO}:1` });
+  assert.equal(questionText(second, second.services[0], 0), `What is your profession?\n[split]\n[photo:${PHOTO}] And how many years?`);
+  assert.equal(withPhoto(withPhotos({ x: `${PHOTO}:2` }), 'x', 'Only one part'), `[photo:${PHOTO}] Only one part`);
+  assert.equal(withPhoto(cfg, 'x', 'No photo [split] here'), 'No photo [split] here');
+  assert.deepEqual(takePhotos(`[photo:${PHOTO}] Hello`), { text: 'Hello', photos: [PHOTO] });
+  assert.deepEqual(takePhotos('Hello'), { text: 'Hello', photos: [] });
+});
+
+test('photos: the first-reply photo leads the reply, and only when the bot says something', async () => {
+  const sent = await captureReplies(() =>
+    batchReplies('w1', 'x', async () => {
+      leadWithPhoto(photoTag(PHOTO));
+      await sendTextMessage('w1', 'x', 'Welcome [split] What do you need?');
+    })
+  );
+  assert.deepEqual(sent, [`[photo:${PHOTO}] Welcome`, 'What do you need?']);
+  assert.deepEqual(await captureReplies(() => batchReplies('w1', 'x', async () => leadWithPhoto(photoTag(PHOTO)))), []);
+});
+
+test('photos: translation keeps the tag, and the AI cannot write one', async () => {
+  const hindi = { ...cfg, ws: { ...cfg.ws, languageStep: true } as Workspace };
+  const out = await localize(hindi, `[photo:${PHOTO}] Hello there`, 'Hindi', true);
+  assert.deepEqual(takePhotos(out).photos, [PHOTO]);
+  assert.ok(!guardReply(`Here you go [photo:${PHOTO}]`, cfg).text.includes('[photo'));
+});
+
+test('photos: only real JPG and PNG files, and only on messages that allow them', () => {
+  assert.equal(photoType(Buffer.from('ffd8ffe000104a46494600010100', 'hex')), 'image/jpeg');
+  assert.equal(photoType(Buffer.from('89504e470d0a1a0a0000000d49484452', 'hex')), 'image/png');
+  assert.equal(photoType(Buffer.from('<svg onload="alert(1)"></svg>')), null);
+  assert.equal(parsePhotoRef('nonsense'), null);
+  assert.deepEqual(messages.filter((m) => m.photoAllowed).map((m) => m.id), ['firstReply', 'question.nurse.profession', 'closing.nurse']);
 });

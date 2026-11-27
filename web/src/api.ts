@@ -13,7 +13,12 @@ export interface EditableMessage {
   multiline: boolean;
   aiNote: string;
   canUndo: boolean;
+  textEditable: boolean;
+  photoAllowed: boolean;
+  photo: { id: string; part: number } | null;
 }
+
+export const messagePhotoUrl = (id: string) => `/admin/api/messages/photo/${encodeURIComponent(id)}`;
 
 async function request<T>(url: string, init?: RequestInit): Promise<T> {
   const res = await fetch(url, {
@@ -139,7 +144,7 @@ export const api = {
   sendMedia: (phone: string, name: string, data: string, caption: string) => post<{ ok: true }>(`/admin/api/contacts/${encodeURIComponent(phone)}/send-media`, { name, data, caption }),
   send: (phone: string, text: string) => post<{ ok: true }>(`/admin/api/contacts/${encodeURIComponent(phone)}/send`, { text }),
   simulate: (id: string, name: string, text: string) =>
-    post<{ replies: string[]; sources?: string[][]; state: { stage: string; service: string | null; step: number; totalSteps: number } }>(
+    post<{ replies: string[]; photos?: string[][]; sources?: string[][]; state: { stage: string; service: string | null; step: number; totalSteps: number } }>(
       '/admin/api/simulate',
       { id, name, text }
     ),
@@ -147,7 +152,8 @@ export const api = {
   editableMessages: () => request<{ messages: EditableMessage[] }>('/admin/api/messages').then((r) => r.messages),
   suggestMessage: (id: string, draft: string, ask: string, earlier: string[]) =>
     post<{ text: string; note: string; errors: string[]; warnings: string[] }>('/admin/api/messages/suggest', { id, draft, request: ask, earlier }),
-  saveMessage: (id: string, base: string, text: string, confirm: boolean) =>
-    request<{ saved: boolean; warnings: string[]; messages: EditableMessage[] }>('/admin/api/messages', { method: 'PUT', body: JSON.stringify({ id, base, text, confirm }) }),
+  saveMessage: (body: { id: string; base: string; text: string; basePhoto: string; photo: string; confirm: boolean }) =>
+    request<{ saved: boolean; warnings: string[]; messages: EditableMessage[] }>('/admin/api/messages', { method: 'PUT', body: JSON.stringify(body) }),
+  uploadMessagePhoto: (data: string) => post<{ id: string }>('/admin/api/messages/photo', { data }),
   undoMessage: (id: string) => post<{ messages: EditableMessage[] }>('/admin/api/messages/undo', { id })
 };

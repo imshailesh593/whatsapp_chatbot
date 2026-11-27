@@ -2,6 +2,8 @@ import { AsyncLocalStorage } from 'async_hooks';
 import { prisma } from '../lib/prisma';
 import { isSocial } from '../lib/channel';
 import { splitMessage } from '../lib/split';
+import { takePhotos } from '../lib/photoTag';
+import { loadPhoto } from './messagePhotos';
 import { saveMedia } from './mediaStore';
 
 /** Thin seam between the conversation engine and whatever actually delivers messages (a WhatsApp link per workspace, or a fake in tests). */
@@ -89,6 +91,8 @@ interface Batch {
   to: string;
   parts: string[];
   open: boolean;
+  /** A photo tag that goes in front of this reply, if there is a reply at all */
+  lead?: string;
 }
 const batches = new AsyncLocalStorage<Batch>();
 
@@ -107,19 +111,57 @@ async function deliver(workspaceId: string, to: string, text: string): Promise<v
 async function deliverOne(workspaceId: string, to: string, text: string): Promise<void> {
   const buf = capture.getStore();
   if (buf) {
+    // the simulator keeps the photo tags and turns them into pictures
     buf.push(text);
     return;
   }
+  const { text: words, photos } = takePhotos(text);
   if (isSocial(to)) {
+    // Instagram / Facebook get the text only: attachments are not supported there yet
     if (!social) throw new Error('Instagram / Facebook is not set up on this server');
-    await social(workspaceId, to, text);
-    await logMessage(workspaceId, to, 'OUTBOUND', text);
+    await social(workspaceId, to, words);
+    await logMessage(workspaceId, to, 'OUTBOUND', words);
     return;
   }
   const t = transports.get(workspaceId);
   if (!t) throw new Error('WhatsApp is not connected for this workspace');
-  await t.sendText(to, text);
-  await logMessage(workspaceId, to, 'OUTBOUND', text);
+  let unsent = words;
+  for (const id of t.sendMedia ? photos : []) {
+    const caption = unsent && unsent.length <= MAX_CAPTION ? unsent : '';
+    if (await sendPhoto(workspaceId, t, to, id, caption)) unsent = caption ? '' : unsent;
+  }
+  // no photo, a photo that failed, or text too long for a caption: the words always go out
+  if (unsent) {
+    await t.sendText(to, unsent);
+    await logMessage(workspaceId, to, 'OUTBOUND', unsent);
+  }
+}
+
+/** WhatsApp cuts longer captions short, so a longer text follows the photo as its own message. */
+const MAX_CAPTION = 1000;
+
+/** Sends one saved photo; false when it could not be sent (the reply then goes out without it). */
+async function sendPhoto(workspaceId: string, t: Transport, to: string, id: string, caption: string): Promise<boolean> {
+  let photo: Awaited<ReturnType<typeof loadPhoto>>;
+  const fileName = 'photo';
+  try {
+    photo = await loadPhoto(workspaceId, id);
+    if (!photo) return false;
+    await t.sendMedia!(to, { kind: 'image', buffer: photo.data, mime: photo.mime, fileName, caption: caption || undefined });
+  } catch (err) {
+    console.error('[photo] could not send, sending the text without it:', (err as Error).message);
+    return false;
+  }
+  // the caption is logged as the message text, so chat history reads the same with or without a photo
+  const name = fileName + (photo.mime === 'image/png' ? '.png' : '.jpg');
+  try {
+    const stored = saveMedia(workspaceId, photo.data, { kind: 'image', mime: photo.mime, name, caption: caption || undefined });
+    await logMessage(workspaceId, to, 'OUTBOUND', caption || `📷 ${name}`, undefined, { media: stored });
+  } catch (err) {
+    console.error('[log] failed to store attachment:', (err as Error).message);
+    await logMessage(workspaceId, to, 'OUTBOUND', caption || `📷 ${name}`);
+  }
+  return true;
 }
 
 /**
@@ -133,8 +175,17 @@ export async function batchReplies<T>(workspaceId: string, to: string, fn: () =>
     return await batches.run(batch, fn);
   } finally {
     batch.open = false;
-    if (batch.parts.length) await deliver(workspaceId, to, batch.parts.join('\n\n'));
+    if (batch.parts.length) {
+      const reply = batch.parts.join('\n\n');
+      await deliver(workspaceId, to, batch.lead ? `${batch.lead} ${reply}` : reply);
+    }
   }
+}
+
+/** Puts a photo in front of the reply being built for this message; nothing is sent if the bot ends up saying nothing. */
+export function leadWithPhoto(tag: string): void {
+  const batch = batches.getStore();
+  if (batch && batch.open) batch.lead = tag;
 }
 
 export async function sendTextMessage(workspaceId: string, to: string, text: string): Promise<void> {

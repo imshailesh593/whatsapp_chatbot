@@ -396,6 +396,7 @@ export function guardReply(reply: string, cfg: BotConfig, customerText = ''): Gu
     .replace(/\r/g, '')
     // only the owner's saved texts may be split into several messages, never the model's own reply
     .replace(/[ \t]*\[split\][ \t]*/gi, ' ')
+    .replace(/\[photo:[^\]\n]*\]/gi, '')
     .replace(/```[\s\S]*?```/g, ' ')
     .replace(/`/g, '')
     .replace(/\*\*(.+?)\*\*/g, '*$1*')

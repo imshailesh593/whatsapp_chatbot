@@ -78,6 +78,9 @@ model Workspace {
   leads             Lead[]
   logs              WebhookLog[]
   messageRevisions  MessageRevision[]
+  messagePhotoFiles MessagePhoto[]
+  /// Which saved message uses which photo: { messageId: "photoId:part" }
+  messagePhotos     Json              @default("{}") @map("message_photos")
   adminUsers        AdminUser[]
   usage             Usage[]
   stages            Stage[]
@@ -134,6 +137,19 @@ model Question {
   @@map("saas_questions")
 }
 
+/// A photo attached to a saved message
+model MessagePhoto {
+  id          String    @id @default(uuid())
+  workspaceId String    @map("workspace_id")
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  mime        String
+  data        Bytes
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  @@index([workspaceId])
+  @@map("saas_message_photos")
+}
+
 /// One save made with the message editor (before and after), so it can be undone
 model MessageRevision {
   id          String    @id @default(uuid())
@@ -142,6 +158,8 @@ model MessageRevision {
   messageId   String    @map("message_id")
   before      String
   after       String
+  beforePhoto String    @default("") @map("before_photo")
+  afterPhoto  String    @default("") @map("after_photo")
   createdBy   String    @default("") @map("created_by")
   createdAt   DateTime  @default(now()) @map("created_at")
 

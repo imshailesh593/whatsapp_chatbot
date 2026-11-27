@@ -1,6 +1,8 @@
 import { SessionStage } from '@prisma/client';
 import { prisma } from '../lib/prisma';
-import { batchReplies, sendTextMessage, logMessage, isCapturing } from './transport';
+import { batchReplies, sendTextMessage, logMessage, isCapturing, leadWithPhoto } from './transport';
+import { photoTag } from '../lib/photoTag';
+import { FIRST_REPLY, photoFor, questionText, withPhoto } from './messagePhotos';
 import { answerFreeform } from './gemini';
 import { aiModeOn, handleAiTurn } from './aiChat';
 import { accessState } from '../plans';
@@ -111,6 +113,7 @@ async function processIncoming(
 
   // 1. Fetch or create session
   let session = await prisma.session.findUnique({ where: key });
+  const newChat = !session;
   if (!session) {
     // Not paid yet / subscription lapsed, or this month's conversation allowance is used: do not start new chats
     if (!isCapturing() && (!accessState(cfg.ws).active || !(await admitConversation(cfg.ws)))) return;
@@ -126,6 +129,12 @@ async function processIncoming(
   if (!cfg.ws.botEnabled && !isCapturing()) return;
   if (!isCapturing() && !accessState(cfg.ws).active) return;
   if (cfg.services.length === 0) return;
+  // The first-reply photo goes with the first thing we ever send this chat (a burst of first messages is still the first reply)
+  const welcomePhoto = photoFor(cfg, FIRST_REPLY);
+  if (welcomePhoto && !OPT_OUT_COMMANDS.includes(lower)) {
+    const first = isCapturing() ? newChat : !(await prisma.webhookLog.findFirst({ where: { workspaceId, phoneNumber, direction: 'OUTBOUND' }, select: { id: true } }));
+    if (first) leadWithPhoto(photoTag(welcomePhoto.id));
+  }
   // The whole conversation is written by the AI around the business's questions; without it (switched off, no key, plan allowance used) the fixed menu flow below answers
   const aiOn = aiModeOn(cfg);
 
@@ -246,7 +255,7 @@ async function processIncoming(
         where: key,
         data: { stage: SessionStage.IN_QUESTIONNAIRE, selectedService: serviceKey, currentStep: 0, answers: {} }
       });
-      await speak(cfg.services.find((s) => s.key === serviceKey)!.questions[0].prompt);
+      await speak(questionText(cfg, cfg.services.find((s) => s.key === serviceKey)!, 0));
       break;
     }
 
@@ -267,7 +276,7 @@ async function processIncoming(
 
       // A side question mid-flow: answer it, then repeat the pending question (answer not consumed)
       if (looksLikeQuestion(text) && (await tryAnswer(text))) {
-        await speak(questions[step].prompt);
+        await speak(questionText(cfg, service, step));
         return;
       }
 
@@ -276,7 +285,7 @@ async function processIncoming(
 
       if (nextStep < questions.length) {
         await prisma.session.update({ where: key, data: { currentStep: nextStep, answers: updatedAnswers } });
-        await speak(questions[nextStep].prompt);
+        await speak(questionText(cfg, service, nextStep));
       } else {
         const [, newLead] = await prisma.$transaction([
           prisma.session.update({
@@ -296,7 +305,7 @@ async function processIncoming(
           })
         ]);
         if (!isCapturing()) void logLeadEvent(newLead.id, workspaceId, 'created', service.title, 'bot');
-        await speak(completionMessage(cfg, service.key, updatedAnswers));
+        await speak(withPhoto(cfg, `closing.${service.key}`, completionMessage(cfg, service.key, updatedAnswers)));
         if (!isCapturing()) {
           void notifyNewLead(workspaceId, session.id);
           void dispatchEvent(workspaceId, 'lead.created', session.id);
@@ -329,7 +338,7 @@ async function processIncoming(
         // They are asking for something on the menu: take them into it
         const serviceKey = resolveService(cfg, text)!;
         await prisma.session.update({ where: key, data: { stage: SessionStage.IN_QUESTIONNAIRE, selectedService: serviceKey, currentStep: 0, answers: {} } });
-        await speak(cfg.services.find((s) => s.key === serviceKey)!.questions[0].prompt);
+        await speak(questionText(cfg, cfg.services.find((s) => s.key === serviceKey)!, 0));
       } else {
         const ack = await localize(cfg, postCompletionMessage(), session.language, isCapturing());
         if (!(await lastReplyWas(workspaceId, phoneNumber, ack))) await send(phoneNumber, ack);

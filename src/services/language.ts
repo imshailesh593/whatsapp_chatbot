@@ -1,6 +1,7 @@
 import { DEFAULT_LANGUAGE_WELCOME, type BotConfig } from './botConfig';
 import { translateText } from './gemini';
 import { joinParts, splitMessage } from '../lib/split';
+import { photoTag, takePhotos } from '../lib/photoTag';
 import { admitAiReply } from './usage';
 
 // Languages a customer can ask for, by the names people actually type (English names and their own script).
@@ -123,6 +124,8 @@ export async function localize(cfg: BotConfig, body: string, language: string | 
     for (const p of splitMessage(body)) parts.push(await localize(cfg, p, language, capturing));
     return joinParts(parts);
   }
+  const tagged = takePhotos(body);
+  if (tagged.photos.length) return `${tagged.photos.map(photoTag).join(' ')} ${await localize(cfg, tagged.text, language, capturing)}`;
   const key = `${language}\u0000${body}`;
   const hit = cache.get(key);
   if (hit) return hit;

@@ -45,6 +45,8 @@ import { authUrl, cancelAppointment, cleanRules, completeConnection, disconnect 
 import { admitAiReply, getUsage } from './services/usage';
 import { suggestInstructions } from './services/gemini';
 import { EditError, checkEdit, listMessages, matchSources, messagesForEditor, saveMessage, suggestMessage, undoMessage } from './services/messageEditor';
+import { MAX_PHOTO_BYTES, loadPhoto, photoType, storePhoto } from './services/messagePhotos';
+import { takePhotos } from './lib/photoTag';
 import { checkRazorpay, createPlans as createRazorpayPlans, planEnvName as razorpayPlanEnv } from './services/razorpaySetup';
 import { checkPaypal, createPaypalPlans, paypalPlanEnv } from './services/paypal';
 import { describeRuntimeConfig, newWebhookSecret, saveRuntimeConfig } from './services/runtimeConfig';
@@ -853,6 +855,7 @@ export function registerAdmin(app: FastifyInstance, opts: { getQr: (workspaceId:
     const cfg = await loadConfig(wsId(req));
     const message = listMessages(cfg).find((m) => m.id === String(b.id ?? ''));
     if (!message) return reply.status(404).send({ error: 'That message no longer exists. Reload the page.' });
+    if (!message.textEditable) return reply.status(400).send({ error: 'This entry has no text to rewrite.' });
     if (!(await admitAiReply(cfg.ws))) return reply.status(429).send({ error: "This month's AI allowance is used up." });
     const draft = String(b.draft ?? '').slice(0, message.max + 200);
     const earlier = (Array.isArray(b.earlier) ? b.earlier : []).slice(-6).map((x) => String(x).slice(0, 600));
@@ -867,12 +870,14 @@ export function registerAdmin(app: FastifyInstance, opts: { getQr: (workspaceId:
   });
 
   app.put('/admin/api/messages', { preHandler: manager }, async (req, reply) => {
-    const b = (req.body ?? {}) as { id?: unknown; base?: unknown; text?: unknown; confirm?: unknown };
+    const b = (req.body ?? {}) as { id?: unknown; base?: unknown; text?: unknown; basePhoto?: unknown; photo?: unknown; confirm?: unknown };
     try {
       const out = await saveMessage(wsId(req), {
         id: String(b.id ?? ''),
         base: String(b.base ?? ''),
         text: String(b.text ?? '').slice(0, 6000),
+        basePhoto: String(b.basePhoto ?? ''),
+        photo: String(b.photo ?? ''),
         confirm: b.confirm === true,
         by: me(req).email
       });
@@ -880,6 +885,26 @@ export function registerAdmin(app: FastifyInstance, opts: { getQr: (workspaceId:
     } catch (err) {
       return editFailed(reply, err);
     }
+  });
+
+  // Only stores the picture: customers get it once a message is saved with it
+  app.post('/admin/api/messages/photo', { preHandler: manager, bodyLimit: 3 * 1024 * 1024 }, async (req, reply) => {
+    const buffer = Buffer.from(String((req.body as { data?: unknown } | null)?.data ?? ''), 'base64');
+    if (!buffer.length) return reply.status(400).send({ error: 'No photo received' });
+    if (buffer.length > MAX_PHOTO_BYTES) return reply.status(413).send({ error: 'The photo is larger than 2 MB' });
+    const mime = photoType(buffer);
+    if (!mime) return reply.status(400).send({ error: 'Only JPG and PNG photos can be used' });
+    if (throttled(attempts, `photo:${wsId(req)}`, 60)) return reply.status(429).send({ error: 'Too many uploads, please wait a few minutes' });
+    bump(attempts, `photo:${wsId(req)}`, 60 * 60_000);
+    return { id: await storePhoto(wsId(req), buffer, mime) };
+  });
+
+  // Signed-in members of the workspace only (agents too: the simulator shows the pictures)
+  app.get('/admin/api/messages/photo/:id', { preHandler: guard }, async (req, reply) => {
+    const photo = await loadPhoto(wsId(req), String((req.params as { id: string }).id));
+    if (!photo) return reply.status(404).send({ error: 'Photo not found' });
+    return reply.header('Content-Type', photo.mime).header('X-Content-Type-Options', 'nosniff').header('Content-Security-Policy', "sandbox; default-src 'none'; img-src 'self'")
+      .header('Cache-Control', 'private, max-age=86400').send(photo.data);
   });
 
   app.post('/admin/api/messages/undo', { preHandler: manager }, async (req, reply) => {
@@ -1306,10 +1331,13 @@ export function registerAdmin(app: FastifyInstance, opts: { getQr: (workspaceId:
       const own = found.filter((id) => !id.startsWith('ws.') && id.split('.')[1] === s?.selectedService);
       return own.length ? found.filter((id) => id.startsWith('ws.') || own.includes(id)) : found;
     };
+    const shown = replies.map(takePhotos);
     return {
-      replies,
-      // for each reply, the saved messages it contains word for word (none: Gemini wrote it live, or translated it)
-      sources: replies.map(sourcesOf),
+      replies: shown.map((r) => r.text),
+      photos: shown.map((r) => r.photos),
+      // for each reply, the saved messages it contains word for word (none: Gemini wrote it live, or translated it),
+      // plus any whose photo it carries
+      sources: shown.map((r) => [...new Set([...sourcesOf(r.text), ...editable.filter((m) => m.photo && r.photos.includes(m.photo.id)).map((m) => m.id)])]),
       state: {
         stage: s?.stage ?? SessionStage.WELCOME,
         service: s?.selectedService ?? null,
